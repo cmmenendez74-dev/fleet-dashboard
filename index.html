@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fleet Dashboard v3 — Bridgestone</title>
+<title>First Stop Fleet Dashboard</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -127,6 +127,13 @@ tr:hover td{background:var(--lg)}
 .yoy-var{font-size:12px;font-weight:600;margin-top:.35rem}
 .yoy-var.up{color:var(--gr)}.yoy-var.dn{color:var(--red)}
 
+
+.obj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.65rem;margin-bottom:.85rem}
+.obj-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;border-left:4px solid var(--border)}
+.obj-card.ok{border-left-color:var(--gr)}.obj-card.warn{border-left-color:var(--am)}.obj-card.bad{border-left-color:var(--red)}
+.obj-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:.25rem}
+.obj-val{font-size:17px;font-weight:700}.obj-sub{font-size:11px;color:var(--muted);margin-top:.25rem;line-height:1.45}
+
 /* VIEWS */
 .view{display:none}.view.active{display:block}
 
@@ -147,9 +154,9 @@ tr:hover td{background:var(--lg)}
 <div id="config-overlay">
   <div class="config-card">
     <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.25rem">
-      <div style="width:32px;height:32px;background:#E2001A;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">B</div>
+      <div style="width:32px;height:32px;background:#E2001A;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">FS</div>
       <div>
-        <div style="font-size:15px;font-weight:600">Fleet Dashboard</div>
+        <div style="font-size:15px;font-weight:600">First Stop Fleet Dashboard</div>
         <div style="font-size:11px;color:#888">Configuración Supabase</div>
       </div>
     </div>
@@ -177,8 +184,8 @@ tr:hover td{background:var(--lg)}
 
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <div class="logo-b">B</div>
-    <div class="logo-text">BRIDGESTONE<span>Fleet Dashboard</span></div>
+    <div class="logo-b">FS</div>
+    <div class="logo-text">FIRST STOP<span>Fleet Dashboard</span></div>
   </div>
   <div class="nav-section">Vistas</div>
   <div class="nav-item active" onclick="nav('resumen',this)">
@@ -266,11 +273,18 @@ tr:hover td{background:var(--lg)}
         <div class="chip-group" id="mo-chips"></div>
       </div>
       <div class="kpi-row" id="kpis-r"></div>
+      <div class="obj-grid" id="objective-cards"></div>
       <div class="g2">
         <div class="card"><div class="card-hd">NS€ mensual EQ+VC</div>
           <div class="card-bd"><div class="chart-box"><canvas id="ch-monthly"></canvas></div></div></div>
         <div class="card"><div class="card-hd">GM% por canal</div>
           <div class="card-bd"><div class="chart-box"><canvas id="ch-gmpct"></canvas></div></div></div>
+      </div>
+      <div class="g2">
+        <div class="card"><div class="card-hd">Top subidas — vs año anterior</div>
+          <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th class="r">Actual</th><th class="r">Anterior</th><th class="r">Var.</th></tr></thead><tbody id="top-up-tb"></tbody></table></div></div></div>
+        <div class="card"><div class="card-hd">Top caídas — vs año anterior</div>
+          <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th class="r">Actual</th><th class="r">Anterior</th><th class="r">Var.</th></tr></thead><tbody id="top-down-tb"></tbody></table></div></div></div>
       </div>
       <div class="card"><div class="card-hd">Top flotas — NS YTD</div>
       <div class="card-bd"><div class="tbl-wrap">
@@ -305,7 +319,7 @@ tr:hover td{background:var(--lg)}
           <table><thead><tr>
             <th>Flota</th><th>Canal</th>
             <th class="r">2024 FY</th><th class="r">2025 FY</th><th class="r">2026 YTD</th>
-            <th class="r">Proy 2026</th><th class="r">Var 26vs25</th><th class="r">GM%</th><th></th>
+            <th class="r">Proy último año</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado</th>
           </tr></thead><tbody id="fleet-tb"></tbody></table>
         </div></div>
       </div>
@@ -487,7 +501,13 @@ const MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic
 const MMAP={enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,
   junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sep:9,sept:9,
   octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12};
-const OB=12510000;
+const OBJ26={
+  EQ:{ns:5846405, gm:2706942, pct:.463, monthly:[477297,510235,539549,484929,551072,540714,535685,407425,475973,479591,468306,375629]},
+  VC:{ns:6863172, gm:1098107, pct:.160, monthly:[528416,531065,541505,571165,617140,618798,654733,556791,533621,597447,595403,517088]}
+};
+const OB_TOTAL=OBJ26.EQ.ns+OBJ26.VC.ns;
+const OB=OB_TOTAL; // compatibilidad con cálculos antiguos
+
 const YCOL={'2024':'#888','2025':'#444','2026':'#E2001A','2027':'#1565C0'};
 const NORM_MAP={
   'ARVAL SERVICE LEASE':'Arval','AYVENS SPAIN MOBILITY':'Ayvens',
@@ -518,7 +538,18 @@ function normName(n){
 function fmt(n){return Math.round(n).toLocaleString('es-ES')}
 function fmtM(n){return n>=1e6?(n/1e6).toFixed(2)+'M€':n>=1000?(n/1000).toFixed(0)+'k€':Math.round(n)+'€'}
 function fmtP(n){return(!n||!isFinite(n))?'—':(n*100).toFixed(1)+'%'}
-function sem(c){return c>=1?'🟢':c>=0.9?'🟡':'🔴'}
+function sem(c){return c>=1?'🟢':c>=0.95?'🟡':'🔴'}
+function objAnnual(canal){return canal==='EQ'?OBJ26.EQ.ns:canal==='VC'?OBJ26.VC.ns:OB_TOTAL}
+function objYTD(months,canal=null){
+  const m=[...months].sort((a,b)=>a-b);
+  const sum=(arr)=>m.reduce((s,mo)=>s+(arr[mo-1]||0),0);
+  if(canal==='EQ') return sum(OBJ26.EQ.monthly);
+  if(canal==='VC') return sum(OBJ26.VC.monthly);
+  return sum(OBJ26.EQ.monthly)+sum(OBJ26.VC.monthly);
+}
+function statusClass(c){return c>=1?'ok':c>=.95?'warn':'bad'}
+function pp(v){return (!isFinite(v))?'—':(v*100).toFixed(1)+' pp'}
+
 function varStr(v){if(!v||!isFinite(v))return'—';return(v>0?'+':'')+(v*100).toFixed(1)+'%'}
 function varCls(v){return v>0.01?'up':v<-0.01?'dn':''}
 
@@ -614,53 +645,79 @@ async function fetchData(years,months){
 // ══════════════════════════════════════════════════════════════════════════════
 async function refreshResumen(){
   if(!S.summary.length) return;
-  const rows=await fetchData([...S.years],[...S.months]);
+  const selectedYears=[...S.years].sort((a,b)=>a-b);
+  const selectedMonths=[...S.months].sort((a,b)=>a-b);
+  const rows=await fetchData(selectedYears,selectedMonths);
   if(!rows?.length) return;
 
-  // Aggregations
-  const monthly={}, byFleet={};
-  let totNS=0,totGM=0,eqNS=0,eqGM=0,vcNS=0,vcGM=0;
+  // Gráficos: usan todos los años seleccionados. KPIs: solo el último año seleccionado para evitar sumar 2025+2026.
+  const kpiYear=Math.max(...selectedYears);
+  const kpiRows=rows.filter(r=>r.year===kpiYear);
 
-  for(const r of rows){
-    totNS+=r.ns; totGM+=r.gm;
-    if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;}
-    else{vcNS+=r.ns;vcGM+=r.gm;}
-    const mk=`${r.year}_${r.month}_${r.canal}`;
-    if(!monthly[mk]) monthly[mk]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
-    monthly[mk].ns+=r.ns; monthly[mk].gm+=r.gm;
-    const fk=r.fleet_norm;
-    if(!byFleet[fk]) byFleet[fk]={name:fk,ns:0,gm:0,canals:new Set()};
-    byFleet[fk].ns+=r.ns; byFleet[fk].gm+=r.gm; byFleet[fk].canals.add(r.canal);
+  function aggregate(baseRows){
+    const monthly={}, byFleet={};
+    let totNS=0,totGM=0,eqNS=0,eqGM=0,vcNS=0,vcGM=0;
+    for(const r of baseRows){
+      totNS+=r.ns; totGM+=r.gm;
+      if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;} else {vcNS+=r.ns;vcGM+=r.gm;}
+      const mk=`${r.year}_${r.month}_${r.canal}`;
+      if(!monthly[mk]) monthly[mk]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
+      monthly[mk].ns+=r.ns; monthly[mk].gm+=r.gm;
+      const fk=r.fleet_norm;
+      if(!byFleet[fk]) byFleet[fk]={name:fk,ns:0,gm:0,canals:new Set()};
+      byFleet[fk].ns+=r.ns; byFleet[fk].gm+=r.gm; byFleet[fk].canals.add(r.canal);
+    }
+    return {monthly,byFleet,totNS,totGM,eqNS,eqGM,vcNS,vcGM};
   }
 
-  const nM=[...S.months].length||1;
-  const proy=totNS/nM*12;
-  const cob=proy/OB;
-  const obP=OB/12*nM;
+  const allAgg=aggregate(rows);
+  const A=aggregate(kpiRows);
+  const nM=selectedMonths.length||1;
+  const obYTD=objYTD(selectedMonths);
+  const obEqYTD=objYTD(selectedMonths,'EQ');
+  const obVcYTD=objYTD(selectedMonths,'VC');
+  const proy=A.totNS/nM*12;
+  const eqProy=A.eqNS/nM*12;
+  const vcProy=A.vcNS/nM*12;
+  const cob=proy/OB_TOTAL;
+  const latestMonth=Math.max(...selectedMonths);
+  const mtdRows=kpiRows.filter(r=>r.month===latestMonth);
+  const mtdNS=mtdRows.reduce((s,r)=>s+r.ns,0);
+  const mtdGM=mtdRows.reduce((s,r)=>s+r.gm,0);
 
-  // KPIs
+  // KPIs ejecutivos, solo año KPI.
   document.getElementById('kpis-r').innerHTML=[
-    {cls:'k-tot',l:`NS Total YTD (${nM}m)`,v:fmtM(totNS),s:`vs OB prorate: ${totNS>=obP?'+':''}${fmtM(totNS-obP)}`,sc:totNS>=obP?'up':'dn'},
-    {cls:'k-gm', l:'GM Total YTD',v:fmtM(totGM),s:`GM% ${fmtP(totGM/totNS)}`,sc:''},
-    {cls:'k-eq', l:'EQ NS YTD',v:fmtM(eqNS),s:`GM% ${fmtP(eqGM/eqNS)}`,sc:''},
-    {cls:'k-vc', l:'VC NS YTD',v:fmtM(vcNS),s:`GM% ${fmtP(vcGM/vcNS)}`,sc:''},
-    {cls:'k-py', l:'Proyección FY',v:fmtM(proy),s:`${sem(cob)} Cobertura ${fmtP(cob)}`,sc:cob>=1?'up':'dn'},
-    {cls:'k-tot',l:'Gap vs OB',v:(proy>=OB?'+':'')+fmtM(proy-OB),s:`OB ${fmtM(OB)}`,sc:proy>=OB?'up':'dn'},
+    {cls:'k-tot',l:`NS YTD ${kpiYear} (${nM}m)`,v:fmtM(A.totNS),s:`vs objetivo YTD: ${(A.totNS-obYTD)>=0?'+':''}${fmtM(A.totNS-obYTD)}`,sc:A.totNS>=obYTD?'up':'dn'},
+    {cls:'k-gm', l:`GM YTD ${kpiYear}`,v:fmtM(A.totGM),s:`GM% ${fmtP(A.totGM/A.totNS)}`,sc:''},
+    {cls:'k-eq', l:'EQ NS YTD',v:fmtM(A.eqNS),s:`Obj. ${fmtM(obEqYTD)} · ${sem(A.eqNS/obEqYTD)} ${fmtP(A.eqNS/obEqYTD)}`,sc:A.eqNS>=obEqYTD?'up':'dn'},
+    {cls:'k-vc', l:'VC NS YTD',v:fmtM(A.vcNS),s:`Obj. ${fmtM(obVcYTD)} · ${sem(A.vcNS/obVcYTD)} ${fmtP(A.vcNS/obVcYTD)}`,sc:A.vcNS>=obVcYTD?'up':'dn'},
+    {cls:'k-py', l:'Proyección FY',v:fmtM(proy),s:`${sem(cob)} Cobertura ${fmtP(cob)} vs OB26`,sc:cob>=1?'up':'dn'},
+    {cls:'k-tot',l:`MTD ${MN[latestMonth-1]} ${kpiYear}`,v:fmtM(mtdNS),s:`GM ${fmtM(mtdGM)} · ${fmtP(mtdGM/mtdNS)}`,sc:''},
   ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
     <div class="kpi-val">${k.v}</div><div class="kpi-sub ${k.sc}">${k.s}</div></div>`).join('');
 
-  const mv=Object.values(monthly);
-  const mos=[...S.months].sort((a,b)=>a-b);
-  const yrs=[...S.years].sort();
+  document.getElementById('objective-cards').innerHTML=[
+    {l:'Total vs OB26',real:A.totNS,obj:obYTD,proy,fy:OB_TOTAL},
+    {l:'Equity vs OB26',real:A.eqNS,obj:obEqYTD,proy:eqProy,fy:OBJ26.EQ.ns},
+    {l:'VC vs OB26',real:A.vcNS,obj:obVcYTD,proy:vcProy,fy:OBJ26.VC.ns},
+  ].map(x=>{
+    const cov=x.real/x.obj, fycov=x.proy/x.fy;
+    return `<div class="obj-card ${statusClass(fycov)}"><div class="obj-lbl">${x.l}</div>
+      <div class="obj-val">${sem(fycov)} ${fmtP(fycov)}</div>
+      <div class="obj-sub">YTD: ${fmtM(x.real)} / ${fmtM(x.obj)}<br>Proy: ${fmtM(x.proy)} · Gap FY ${(x.proy-x.fy)>=0?'+':''}${fmtM(x.proy-x.fy)}</div></div>`;
+  }).join('');
 
-  // Monthly NS chart
+  const mv=Object.values(allAgg.monthly);
+  const mos=selectedMonths;
+  const yrs=selectedYears;
+
+  // Monthly NS chart: mantiene comparativa multi-año.
   const nsDs=yrs.flatMap(yr=>[
     {label:`EQ ${yr}`,data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal==='EQ');return r?Math.round(r.ns):null}),backgroundColor:YCOL[yr]||'#999',stack:String(yr)},
     {label:`VC ${yr}`,data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal==='VC');return r?Math.round(r.ns):null}),backgroundColor:(YCOL[yr]||'#999')+'77',stack:String(yr)},
   ]);
   makeChart('ch-monthly','bar',mos.map(m=>MN[m-1]),nsDs,{stacked:true});
 
-  // GM% chart
   const gmDs=yrs.flatMap(yr=>['EQ','VC'].map(c=>({
     label:`${c} ${yr}`,
     data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal===c);return r&&r.ns>0?+(r.gm/r.ns*100).toFixed(1):null}),
@@ -669,21 +726,39 @@ async function refreshResumen(){
   })));
   makeChart('ch-gmpct','line',mos.map(m=>MN[m-1]),gmDs,{pct:true});
 
-  // Top fleets
-  const top=Object.values(byFleet).filter(f=>f.ns>0).sort((a,b)=>b.ns-a.ns).slice(0,20);
+  // Variaciones por flota contra el año anterior, usando mismos meses seleccionados.
+  const prevYear=yrs[yrs.indexOf(kpiYear)-1];
+  const varRows=[];
+  if(prevYear){
+    const curBy=aggregate(rows.filter(r=>r.year===kpiYear)).byFleet;
+    const prevBy=aggregate(rows.filter(r=>r.year===prevYear)).byFleet;
+    const names=new Set([...Object.keys(curBy),...Object.keys(prevBy)]);
+    for(const name of names){
+      const cur=curBy[name]?.ns||0, prev=prevBy[name]?.ns||0;
+      if(prev>0 && cur>0) varRows.push({name,cur,prev,varV:(cur-prev)/prev});
+    }
+  }
+  const up=varRows.filter(x=>x.cur>=5000).sort((a,b)=>b.varV-a.varV).slice(0,10);
+  const down=varRows.filter(x=>x.cur>=5000 || x.prev>=5000).sort((a,b)=>a.varV-b.varV).slice(0,10);
+  const movHtml=arr=>arr.length?arr.map(x=>`<tr class="tr-link" onclick="openFleetFromResumen('${x.name.replace(/'/g,"\\'")}')"><td>${x.name}</td><td class="r">${fmtM(x.cur)}</td><td class="r">${fmtM(x.prev)}</td><td class="r ${varCls(x.varV)}">${varStr(x.varV)}</td></tr>`).join(''):'<tr><td colspan="4" class="no-data">Selecciona dos años para comparar.</td></tr>';
+  document.getElementById('top-up-tb').innerHTML=movHtml(up);
+  document.getElementById('top-down-tb').innerHTML=movHtml(down);
+
+  // Top fleets del año KPI, no suma años.
+  const top=Object.values(A.byFleet).filter(f=>f.ns>0).sort((a,b)=>b.ns-a.ns).slice(0,20);
   document.getElementById('top-tb').innerHTML=top.map(f=>{
     const c=[...f.canals].sort().join('+');
     const p=f.ns>0?f.gm/f.ns:0;
     const pr=f.ns/nM*12;
-    const bw=Math.min(100,Math.round(pr/OB*100));
-    const bc=bw>=8?'ok':bw>=4?'warn':'bad';
+    const bw=Math.min(100,Math.round(pr/OB_TOTAL*100));
+    const bc=statusClass(pr/OB_TOTAL);
     return`<tr class="tr-link" onclick="openFleetFromResumen('${f.name.replace(/'/g,"\\'")}')">
       <td>${f.name}</td>
       <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
       <td class="r">${fmtM(f.ns)}</td><td class="r">${fmtM(f.gm)}</td>
       <td class="r">${fmtP(p)}</td><td class="r">${fmtM(pr)}</td>
-      <td style="min-width:60px"><div class="bar"><div class="bar-f ${bc}" style="width:${bw}%"></div></div></td>
-      <td>${sem(pr/OB)}</td></tr>`;
+      <td style="min-width:60px"><div class="bar"><div class="bar-f ${bc==='ok'?'ok':bc==='warn'?'warn':'bad'}" style="width:${bw}%"></div></div></td>
+      <td>${sem(pr/OB_TOTAL)}</td></tr>`;
   }).join('');
 }
 
@@ -805,7 +880,7 @@ function renderFlotasTb(){
       <td class="r">${proy>0?fmtM(proy):'—'}</td>
       <td class="r ${varCls(varV)}">${varStr(varV)}</td>
       <td class="r">${fmtP(gp)}</td>
-      <td>${proy>0?sem(proy/OB):''}</td>
+      <td>${proy>0?sem(proy/OB_TOTAL):''}</td>
     </tr>`;
   }).join('');
 }
@@ -842,30 +917,40 @@ async function openFleetFromResumen(fleet){
 // CANAL
 // ══════════════════════════════════════════════════════════════════════════════
 async function refreshCanal(){
-  const rows=await fetchData([...S.years],[...S.months]);
+  const selectedYears=[...S.years].sort((a,b)=>a-b);
+  const selectedMonths=[...S.months].sort((a,b)=>a-b);
+  const rows=await fetchData(selectedYears,selectedMonths);
   if(!rows?.length) return;
+  const kpiYear=Math.max(...selectedYears);
+  const kpiRows=rows.filter(r=>r.year===kpiYear);
   const monthly={};
   let eqNS=0,eqGM=0,vcNS=0,vcGM=0;
+  for(const r of kpiRows){
+    if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;} else {vcNS+=r.ns;vcGM+=r.gm;}
+  }
   for(const r of rows){
-    if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;}
-    else{vcNS+=r.ns;vcGM+=r.gm;}
     const mk=`${r.year}_${r.month}_${r.canal}`;
     if(!monthly[mk]) monthly[mk]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
     monthly[mk].ns+=r.ns; monthly[mk].gm+=r.gm;
   }
   const mv=Object.values(monthly);
-  const nM=[...S.months].length||1;
-  const yrs=[...S.years].sort();
-  const mos=[...S.months].sort((a,b)=>a-b);
+  const nM=selectedMonths.length||1;
+  const yrs=selectedYears;
+  const mos=selectedMonths;
 
-  function kpiHtml(ns,gm,nm){
+  function kpiHtml(ns,gm,nm,canal){
+    const annual=objAnnual(canal);
+    const ytdObj=objYTD(mos,canal);
+    const proy=ns/nm*12;
     return[
-      {l:'NS YTD',v:fmtM(ns)},{l:'GM YTD',v:fmtM(gm)},
-      {l:'GM%',v:fmtP(ns>0?gm/ns:0)},{l:'Proy FY',v:fmtM(ns/nm*12)},
-    ].map(k=>`<div class="kpi"><div class="kpi-lbl">${k.l}</div><div class="kpi-val" style="font-size:16px">${k.v}</div></div>`).join('');
+      {l:`NS YTD ${kpiYear}`,v:fmtM(ns),s:`Obj YTD ${fmtM(ytdObj)} · ${sem(ns/ytdObj)} ${fmtP(ns/ytdObj)}`},
+      {l:'GM YTD',v:fmtM(gm),s:`GM% ${fmtP(ns>0?gm/ns:0)}`},
+      {l:'Proy FY',v:fmtM(proy),s:`OB26 ${fmtM(annual)} · ${fmtP(proy/annual)}`},
+      {l:'Gap FY',v:(proy-annual>=0?'+':'')+fmtM(proy-annual),s:sem(proy/annual)},
+    ].map(k=>`<div class="kpi"><div class="kpi-lbl">${k.l}</div><div class="kpi-val" style="font-size:16px">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`).join('');
   }
-  document.getElementById('kpis-eq').innerHTML=kpiHtml(eqNS,eqGM,nM);
-  document.getElementById('kpis-vc').innerHTML=kpiHtml(vcNS,vcGM,nM);
+  document.getElementById('kpis-eq').innerHTML=kpiHtml(eqNS,eqGM,nM,'EQ');
+  document.getElementById('kpis-vc').innerHTML=kpiHtml(vcNS,vcGM,nM,'VC');
 
   function canalDs(canal,yrList){
     return yrList.map(yr=>({
@@ -878,10 +963,10 @@ async function refreshCanal(){
   makeChart('ch-vc','line',mos.map(m=>MN[m-1]),canalDs('VC',yrs),{});
 
   const compDs=[
-    {label:'EQ',data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const rs=mv.filter(x=>x.canal==='EQ'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
-    {label:'VC',data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const rs=mv.filter(x=>x.canal==='VC'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(21,101,192,0.8)',borderRadius:3},
+    {label:'EQ',data:mos.map(m=>{const rs=mv.filter(x=>x.year===kpiYear&&x.canal==='EQ'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
+    {label:'VC',data:mos.map(m=>{const rs=mv.filter(x=>x.year===kpiYear&&x.canal==='VC'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(21,101,192,0.8)',borderRadius:3},
   ];
-  makeChart('ch-canal','bar',MN,compDs,{stacked:false});
+  makeChart('ch-canal','bar',mos.map(m=>MN[m-1]),compDs,{stacked:false});
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

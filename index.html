@@ -319,7 +319,7 @@ tr:hover td{background:var(--lg)}
           <table><thead><tr>
             <th>Flota</th><th>Canal</th>
             <th class="r">2024 FY</th><th class="r">2025 FY</th><th class="r">2026 YTD</th>
-            <th class="r">Proy último año</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado</th>
+            <th class="r">Proy FY</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado vs PY</th>
           </tr></thead><tbody id="fleet-tb"></tbody></table>
         </div></div>
       </div>
@@ -539,6 +539,8 @@ function fmt(n){return Math.round(n).toLocaleString('es-ES')}
 function fmtM(n){return n>=1e6?(n/1e6).toFixed(2)+'M€':n>=1000?(n/1000).toFixed(0)+'k€':Math.round(n)+'€'}
 function fmtP(n){return(!n||!isFinite(n))?'—':(n*100).toFixed(1)+'%'}
 function sem(c){return c>=1?'🟢':c>=0.95?'🟡':'🔴'}
+function growthSem(v){if(v===null||v===undefined||!isFinite(v))return '—';return v>=0.05?'🟢':v>=-0.05?'🟡':'🔴'}
+function growthLabel(v){if(v===null||v===undefined||!isFinite(v))return 'Sin PY';return v>=0.05?'Crece':v>=-0.05?'Estable':'Cae'}
 function objAnnual(canal){return canal==='EQ'?OBJ26.EQ.ns:canal==='VC'?OBJ26.VC.ns:OB_TOTAL}
 function objYTD(months,canal=null){
   const m=[...months].sort((a,b)=>a-b);
@@ -880,7 +882,7 @@ function renderFlotasTb(){
       <td class="r">${proy>0?fmtM(proy):'—'}</td>
       <td class="r ${varCls(varV)}">${varStr(varV)}</td>
       <td class="r">${fmtP(gp)}</td>
-      <td>${proy>0?sem(proy/OB_TOTAL):''}</td>
+      <td title="${growthLabel(varV)}">${growthSem(varV)}</td>
     </tr>`;
   }).join('');
 }

@@ -400,6 +400,22 @@ async function sb(path,opts={}){
   return r.json();
 }
 async function sbSelect(table,params=''){return sb(`${table}?${params}`)}
+
+async function sbSelectAll(table,params='',pageSize=1000){
+  // Supabase/PostgREST suele limitar resultados; paginamos para no perder años recientes como 2026.
+  let all=[];
+  let offset=0;
+  while(true){
+    const sep=params ? '&' : '';
+    const page=await sbSelect(table,`${params}${sep}limit=${pageSize}&offset=${offset}`);
+    all=all.concat(page||[]);
+    if(!page || page.length<pageSize) break;
+    offset+=pageSize;
+    if(offset>500000) throw new Error('Demasiadas filas: revisa filtros o paginación');
+  }
+  return all;
+}
+
 async function sbUpsert(table,rows){
   // Try upsert first, fall back to delete+insert if duplicate key error
   try {
@@ -529,8 +545,8 @@ function setConn(ok,msg){
 }
 
 async function loadSummary(){
-  const rows=await sbSelect('fleet_data',
-    'select=year,month,canal&order=year,month&limit=10000');
+  const rows=await sbSelectAll('fleet_data',
+    'select=year,month,canal&order=year.asc,month.asc');
   S.summary=rows||[];
   const years=new Set(S.summary.map(r=>r.year));
   const months=new Set(S.summary.map(r=>r.month));
@@ -586,10 +602,10 @@ function nav(id,el){
 // DATA FETCH
 // ══════════════════════════════════════════════════════════════════════════════
 async function fetchData(years,months){
-  let params='select=year,month,canal,fleet_norm,ns,gm&order=year,month&limit=100000';
+  let params='select=year,month,canal,fleet_norm,ns,gm&order=year.asc,month.asc';
   if(years.length) params+=`&year=in.(${years.join(',')})`;
   if(months.length) params+=`&month=in.(${months.join(',')})`;
-  return sbSelect('fleet_data',params);
+  return sbSelectAll('fleet_data',params);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -752,10 +768,10 @@ async function refreshFlotas(){
     byFleet[k].years[r.year].months.add(r.month);
     byFleet[k].canals.add(r.canal);
   }
+  const latestYear=Math.max(...years.map(Number));
   fleetRows=Object.values(byFleet).sort((a,b)=>{
-    const latY=Math.max(...Object.keys(b.years).map(Number));
-    const ay=a.years[latY]?.ns||0;
-    const by=b.years[latY]?.ns||0;
+    const ay=a.years[latestYear]?.ns||0;
+    const by=b.years[latestYear]?.ns||0;
     return by-ay;
   });
   renderFlotasTb();
@@ -871,8 +887,8 @@ async function refreshCanal(){
 // PERÍODOS
 // ══════════════════════════════════════════════════════════════════════════════
 async function refreshPeriodos(){
-  const rows=await sbSelect('fleet_data',
-    'select=year,month,canal&order=year,month&limit=10000');
+  const rows=await sbSelectAll('fleet_data',
+    'select=year,month,canal&order=year.asc,month.asc');
   const uniq={};
   for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
   const items=Object.values(uniq).sort((a,b)=>a.year!==b.year?a.year-b.year:a.month-b.month);
@@ -911,9 +927,22 @@ function detectMeta(fname){
   // 4-digit year first
   for(const y of['2024','2025','2026','2027']) if(n.includes(y)){year=+y;break}
   // 2-digit year fallback: match any 24/25/26/27 anywhere in filename
-  if(!year){const m2=n.match(/(2[4-7])/);if(m2)year=2000+parseInt(m2[1]);}
+  if(!year){const m2=n.match(/(?:^|[^0-9])(2[4-7])(?:[^0-9]|$)/);if(m2)year=2000+parseInt(m2[1]);}
   if(!year) year=2026;
   return{canal,month,year};
+}
+
+function toNumber(v){
+  if(typeof v==='number') return v;
+  if(v===null || v===undefined) return 0;
+  let s=String(v).trim();
+  if(!s) return 0;
+  s=s.replace(/\s/g,'').replace(/€/g,'');
+  // Formato español: 1.234,56 -> 1234.56
+  if(s.includes(',') && s.includes('.')) s=s.replace(/\./g,'').replace(',', '.');
+  else if(s.includes(',') && !s.includes('.')) s=s.replace(',', '.');
+  const n=Number(s);
+  return Number.isFinite(n)?n:0;
 }
 
 function parseXLSX(buffer,canal){
@@ -926,8 +955,8 @@ function parseXLSX(buffer,canal){
     const ns=String(name).trim();
     if(!ns||['total','subtotal'].includes(ns.toLowerCase())||ns.startsWith('Filtros')) continue;
     let nsv=0,gmv=0;
-    if(canal==='EQ'){nsv=+row['NS€']||0;gmv=+row['GM€']||0;}
-    else{const vc=Object.keys(row).find(k=>k.includes('VENTA'))||'TOTAL_VENTA';nsv=+row[vc]||0;gmv=+row['GM_FST']||0;}
+    if(canal==='EQ'){nsv=toNumber(row['NS€']);gmv=toNumber(row['GM€']);}
+    else{const vc=Object.keys(row).find(k=>k.includes('VENTA'))||'TOTAL_VENTA';nsv=toNumber(row[vc]);gmv=toNumber(row['GM_FST']);}
     if(nsv===0&&gmv===0) continue;
     out.push({raw:ns,norm:normName(ns),ns:Math.round(nsv*100)/100,gm:Math.round(gmv*100)/100});
   }
@@ -1019,3 +1048,4 @@ loadConfig();
 </script>
 </body>
 </html>
+

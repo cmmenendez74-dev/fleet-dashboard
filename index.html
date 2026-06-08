@@ -396,8 +396,9 @@ function saveConfig(){
 async function sb(path,opts={}){
   const headers={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json',...(opts.headers||{})};
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{...opts,headers});
-  if(!r.ok&&r.status!==200){const t=await r.text();throw new Error(t)}
-  return r.json();
+  const t=await r.text();
+  if(!r.ok&&r.status!==200){throw new Error(t||('HTTP '+r.status))}
+  return t ? JSON.parse(t) : null;
 }
 async function sbSelect(table,params=''){return sb(`${table}?${params}`)}
 
@@ -963,6 +964,35 @@ function parseXLSX(buffer,canal){
   return out;
 }
 
+
+async function restJson(path, options={}){
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`,{
+    ...options,
+    headers:{
+      'apikey':SB_KEY,
+      'Authorization':`Bearer ${SB_KEY}`,
+      'Content-Type':'application/json',
+      'Accept':'application/json',
+      ...(options.headers||{})
+    }
+  });
+  const txt = await r.text();
+  let body = null;
+  if(txt && txt.trim()!==''){
+    try{ body = JSON.parse(txt); }catch(e){ body = txt; }
+  }
+  if(!r.ok){
+    const msg = typeof body==='string' ? body : (body?.message || body?.error || JSON.stringify(body));
+    throw new Error(`HTTP ${r.status}: ${msg}`);
+  }
+  return body;
+}
+
+async function verifySavedPeriod(year,month,canal){
+  const rows = await restJson(`fleet_data?select=year,month,canal&year=eq.${year}&month=eq.${month}&canal=eq.${canal}&limit=1`,{method:'GET'});
+  return Array.isArray(rows) && rows.length>0;
+}
+
 async function handleFiles(files){
   const log=document.getElementById('upload-log');
   log.style.display='block';
@@ -970,56 +1000,71 @@ async function handleFiles(files){
   
   for(const file of files){
     const {canal,month,year}=detectMeta(file.name);
-    // Show processing status immediately
     const rowId='log_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${file.name}</b> — Procesando ${canal||'?'} ${month?MN[month-1]:''} ${year}...</div>`;
     log.scrollTop=log.scrollHeight;
 
     if(!canal||!month){
-      document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — No se detectó mes o canal (nombre debe empezar por EQ o VC y contener el mes)`;
+      document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — No se detectó mes o canal. El nombre debe empezar por EQ o VC y contener el mes.`;
       continue;
     }
+
     try{
       const buf=await file.arrayBuffer();
       const fleets=parseXLSX(new Uint8Array(buf),canal);
       if(!fleets.length){
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Sin datos válidos en la hoja`;
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Sin datos válidos. Revisa nombres de columnas: EQ=NOMBRE/NS€/GM€; VC=CLI_RAZON/TOTAL_VENTA/GM_FST.`;
         continue;
       }
-      // Step 1: delete existing period
-      document.getElementById(rowId).innerHTML+=` → Borrando período existente...`;
-      await fetch(`${SB_URL}/rest/v1/fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
+
+      const rows=fleets.map(f=>({
+        year:Number(year),
+        month:Number(month),
+        canal:String(canal),
+        fleet_raw:String(f.raw||'').slice(0,200),
+        fleet_norm:String(f.norm||'').slice(0,100),
+        ns:Number(f.ns)||0,
+        gm:Number(f.gm)||0
+      }));
+
+      document.getElementById(rowId).innerHTML=`<span class="log-warn">↻</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: borrando datos anteriores...`;
+
+      await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
         method:'DELETE',
-        headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Accept':'application/json'}
+        headers:{'Prefer':'return=minimal'}
       });
-      // Step 2: insert in small batches of 100
-      const rows=fleets.map(f=>({year,month,canal,fleet_raw:f.raw.slice(0,200),fleet_norm:f.norm,ns:f.ns,gm:f.gm}));
+
       let inserted=0;
       for(let i=0;i<rows.length;i+=50){
         const batch=rows.slice(i,i+50);
-        const r=await fetch(`${SB_URL}/rest/v1/fleet_data`,{
+        await restJson('fleet_data',{
           method:'POST',
           body:JSON.stringify(batch),
-          headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'return=minimal','Accept':'application/json'}
+          headers:{'Prefer':'return=minimal'}
         });
-        if(!r.ok){
-          const txt=await r.text();
-          if(txt&&txt.trim()!==''){
-            let errMsg=txt;
-            try{const j=JSON.parse(txt);errMsg=j.message||j.error||txt;}catch(e){}
-            throw new Error(errMsg);
-          }
-        }
         inserted+=batch.length;
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: ${inserted}/${rows.length} flotas...`;
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: ${inserted}/${rows.length} filas enviadas...`;
       }
-      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal} · ${fleets.length} flotas guardadas`;
+
+      const ok = await verifySavedPeriod(year,month,canal);
+      if(!ok){
+        throw new Error('Supabase aceptó la petición, pero al verificar no devuelve filas. Revisa políticas RLS de SELECT/INSERT o permisos de la anon key.');
+      }
+
+      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · ${fleets.length} flotas.`;
     }catch(e){
-      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${file.name}</b> — Error: ${e.message?.slice(0,150)||'desconocido'}`;
+      const msg=(e.message||'Error desconocido').replace(/[<>]/g,'').slice(0,400);
+      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${file.name}</b> — NO guardado: ${msg}`;
+      console.error('Error guardando archivo', file.name, e);
     }
   }
-  await loadSummary();
-  refreshResumen();
+
+  try{
+    await loadSummary();
+    refreshResumen();
+  }catch(e){
+    log.innerHTML+=`<div class="log-row"><span class="log-err">✗</span>Datos enviados, pero no se pudo refrescar el resumen: ${(e.message||e).toString().slice(0,300)}</div>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1048,4 +1093,3 @@ loadConfig();
 </script>
 </body>
 </html>
-

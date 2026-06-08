@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fleet Dashboard v3 — Bridgestone</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#E2001A;--dg:#1A1A1A;--mg:#4A4A4A;--lg:#F4F4F4;--xg:#DCDCDC;
+  --bl:#1565C0;--gr:#1B5E20;--am:#E65100;
+  --lred:#FFEBEE;--lblu:#E3F2FD;--lgre:#E8F5E9;--lyel:#FFF9C4;
+  --text:#1A1A1A;--muted:#666;--border:#DCDCDC;--bg:#fff;--bg2:#F8F8F8;
+}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:var(--text);background:#EFEFEF;min-height:100vh}
+
+/* CONFIG OVERLAY */
+#config-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center}
+.config-card{background:#fff;border-radius:12px;padding:2rem;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.config-card h2{font-size:16px;margin-bottom:.5rem}
+.config-card p{font-size:12px;color:var(--muted);margin-bottom:1.25rem;line-height:1.7}
+.config-field{margin-bottom:1rem}
+.config-field label{display:block;font-size:11px;font-weight:600;color:var(--mg);margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.3px}
+.config-field input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace}
+.config-field input:focus{outline:none;border-color:var(--bl)}
+.btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px;font-weight:500;transition:all .15s}
+.btn:hover{background:var(--lg)}
+.btn.primary{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.primary:hover{background:#c0001a}
+.btn.sm{padding:4px 12px;font-size:12px}
+
+/* APP LAYOUT */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:230px;background:var(--dg);color:#fff;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar-logo{padding:1.1rem 1rem;border-bottom:1px solid #333;display:flex;align-items:center;gap:.6rem;flex-shrink:0}
+.logo-b{width:30px;height:30px;background:var(--red);border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;flex-shrink:0}
+.logo-text{font-size:11px;font-weight:600;letter-spacing:.4px;line-height:1.4}
+.logo-text span{font-weight:300;font-size:10px;color:#999;display:block}
+.nav-section{padding:.6rem 1rem .2rem;font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px}
+.nav-item{display:flex;align-items:center;gap:.5rem;padding:.5rem 1rem;cursor:pointer;color:#bbb;font-size:12px;border-left:3px solid transparent;transition:all .12s}
+.nav-item:hover{background:#252525;color:#fff}
+.nav-item.active{background:#252525;color:#fff;border-left-color:var(--red)}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:.6}
+.nav-item.active svg{opacity:1}
+.sidebar-foot{margin-top:auto;padding:.75rem 1rem;border-top:1px solid #333;font-size:10px;color:#666;flex-shrink:0}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:#666;display:inline-block;margin-right:4px}
+.conn-dot.ok{background:#4CAF50}.conn-dot.err{background:var(--red)}
+
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;min-width:0}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:.65rem 1.25rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:14px;font-weight:600}
+.topbar-pills{display:flex;gap:.5rem;align-items:center}
+.pill{font-size:11px;padding:2px 9px;border-radius:10px;background:var(--lg);border:1px solid var(--border);color:var(--mg)}
+.pill.r{background:var(--lred);border-color:#F5A5A5;color:var(--red)}
+.pill.b{background:var(--lblu);border-color:#90CAF9;color:var(--bl)}
+.content{padding:1rem 1.25rem;flex:1}
+
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:2rem;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:1rem;background:#fff}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--red);background:var(--lred)}
+.upload-zone input{display:none}
+.upload-zone h3{font-size:14px;margin:.5rem 0 .25rem}
+.upload-zone p{font-size:12px;color:var(--muted)}
+.upload-log{background:#fff;border:1px solid var(--border);border-radius:8px;padding:.75rem;max-height:200px;overflow-y:auto;font-size:12px;display:none;margin-bottom:1rem}
+.log-row{padding:3px 0;border-bottom:1px solid var(--lg);display:flex;gap:.5rem;align-items:flex-start}
+.log-row:last-child{border:none}
+.log-ok{color:var(--gr)}.log-err{color:var(--red)}.log-warn{color:var(--am)}
+
+/* FILTERS */
+.filter-bar{background:#fff;border:1px solid var(--border);border-radius:8px;padding:.65rem 1rem;margin-bottom:.85rem;display:flex;align-items:center;gap:.85rem;flex-wrap:wrap}
+.filter-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.chip-group{display:flex;flex-wrap:wrap;gap:4px}
+.chip{padding:2px 9px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:11px;transition:all .12s}
+.chip:hover{border-color:var(--mg)}
+.chip.on{background:var(--dg);color:#fff;border-color:var(--dg)}
+
+/* KPIs */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem;margin-bottom:.85rem}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;border-top:3px solid var(--border)}
+.kpi.k-tot{border-top-color:var(--dg)}.kpi.k-eq{border-top-color:var(--red)}.kpi.k-vc{border-top-color:var(--bl)}.kpi.k-gm{border-top-color:var(--gr)}.kpi.k-py{border-top-color:var(--am)}
+.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:.25rem}
+.kpi-val{font-size:20px;font-weight:600;line-height:1}
+.kpi-sub{font-size:11px;margin-top:.3rem;color:var(--muted)}
+.kpi-sub.up{color:var(--gr)}.kpi-sub.dn{color:var(--red)}
+
+/* CARDS */
+.card{background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:.85rem;overflow:hidden}
+.card-hd{padding:.6rem 1rem;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.card-bd{padding:.85rem}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem}
+@media(max-width:860px){.g2,.g3{grid-template-columns:1fr}}
+.chart-box{position:relative;height:200px}
+.chart-box.tall{height:260px}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);padding:5px 8px;border-bottom:2px solid var(--border);text-align:left;white-space:nowrap;background:var(--bg2)}
+th.r{text-align:right}
+td{padding:5px 8px;border-bottom:1px solid var(--lg)}
+td.r{text-align:right;font-variant-numeric:tabular-nums}
+tr:hover td{background:var(--lg)}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.badge.EQ{background:var(--lred);color:var(--red)}
+.badge.VC{background:var(--lblu);color:var(--bl)}
+.badge.both{background:var(--lyel);color:var(--am)}
+.bar{height:5px;background:var(--lg);border-radius:3px;min-width:50px;overflow:hidden}
+.bar-f{height:100%;border-radius:3px}
+.bar-f.ok{background:var(--gr)}.bar-f.warn{background:var(--am)}.bar-f.bad{background:var(--red)}
+.tr-link{cursor:pointer}
+.tr-link:hover td{background:#EEF5FF;color:var(--bl)}
+
+/* PERIOD GRID */
+.period-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.5rem}
+.period-item{background:#fff;border:1px solid var(--border);border-radius:6px;padding:.45rem .75rem;font-size:11px;display:flex;align-items:center;justify-content:space-between}
+.del-btn{color:var(--red);cursor:pointer;opacity:.5;font-size:12px;padding:0 2px}
+.del-btn:hover{opacity:1}
+
+/* YoY CARDS */
+.yoy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.65rem;margin-bottom:.85rem}
+.yoy-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:.85rem;border-left:4px solid var(--border)}
+.yoy-card.y2024{border-left-color:#888}.yoy-card.y2025{border-left-color:#444}.yoy-card.y2026{border-left-color:var(--red)}
+.yoy-yr{font-size:22px;font-weight:700;margin-bottom:.25rem}
+.yoy-ns{font-size:13px;color:var(--text);margin-bottom:.15rem}
+.yoy-gm{font-size:11px;color:var(--muted)}
+.yoy-var{font-size:12px;font-weight:600;margin-top:.35rem}
+.yoy-var.up{color:var(--gr)}.yoy-var.dn{color:var(--red)}
+
+/* VIEWS */
+.view{display:none}.view.active{display:block}
+
+/* SEARCH */
+.search{border:1px solid var(--border);border-radius:6px;padding:4px 9px;font-size:12px;width:180px}
+.search:focus{outline:none;border-color:var(--bl)}
+
+/* LOADING */
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{display:flex;align-items:center;justify-content:center;padding:2rem;color:var(--muted);font-size:13px}
+.no-data{text-align:center;padding:2.5rem;color:var(--muted);font-size:13px;background:var(--bg2);border-radius:8px}
+</style>
+</head>
+<body>
+
+<!-- CONFIG OVERLAY -->
+<div id="config-overlay">
+  <div class="config-card">
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.25rem">
+      <div style="width:32px;height:32px;background:#E2001A;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">B</div>
+      <div>
+        <div style="font-size:15px;font-weight:600">Fleet Dashboard</div>
+        <div style="font-size:11px;color:#888">Configuración Supabase</div>
+      </div>
+    </div>
+    <p>Introduce las credenciales de tu proyecto Supabase.<br>
+    Las encuentras en <b>Settings → API</b> de tu proyecto.<br>
+    Se guardan en el navegador — no se comparten con nadie.</p>
+    <div class="config-field">
+      <label>Supabase URL</label>
+      <input id="cfg-url" placeholder="https://xxxxxxxxxxxx.supabase.co" autocomplete="off">
+    </div>
+    <div class="config-field">
+      <label>Anon Key (public)</label>
+      <input id="cfg-key" placeholder="eyJhbGci..." type="password" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+      <button class="btn sm" onclick="testConnection()">Probar conexión</button>
+      <button class="btn primary sm" onclick="saveConfig()">Guardar y continuar</button>
+    </div>
+    <div id="cfg-msg" style="font-size:12px;margin-top:.75rem;color:var(--muted)"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app" style="display:none">
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-b">B</div>
+    <div class="logo-text">BRIDGESTONE<span>Fleet Dashboard</span></div>
+  </div>
+  <div class="nav-section">Vistas</div>
+  <div class="nav-item active" onclick="nav('resumen',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    Resumen global
+  </div>
+  <div class="nav-item" onclick="nav('historico',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Año vs año
+  </div>
+  <div class="nav-item" onclick="nav('flotas',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Por flota
+  </div>
+  <div class="nav-item" onclick="nav('canal',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    EQ vs VC
+  </div>
+  <div class="nav-section">Datos</div>
+  <div class="nav-item" onclick="nav('upload',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Cargar archivos
+  </div>
+  <div class="nav-item" onclick="nav('periodos',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    Períodos
+  </div>
+  <div class="sidebar-foot">
+    <span class="conn-dot" id="conn-dot"></span>
+    <span id="conn-label">Conectando...</span><br>
+    <span style="font-size:10px;margin-top:2px;display:block">
+      <span style="cursor:pointer;text-decoration:underline" onclick="showConfig()">Cambiar credenciales</span>
+    </span>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">Resumen global</div>
+    <div class="topbar-pills">
+      <span class="pill" id="pill-period">—</span>
+      <span class="pill r" id="pill-eq">EQ</span>
+      <span class="pill b" id="pill-vc">VC</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- UPLOAD -->
+    <div class="view" id="view-upload">
+      <div class="card"><div class="card-hd">Cargar archivos Navision</div>
+      <div class="card-bd">
+        <label class="upload-zone" id="drop-zone">
+          <input type="file" id="file-input" multiple accept=".xlsx,.xls">
+          <svg style="width:36px;height:36px;color:#ccc;margin-bottom:.5rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <h3>Arrastra archivos EQ y VC aquí</h3>
+          <p style="margin-top:.3rem">Detecta año, mes y canal por el nombre · Múltiples meses a la vez</p>
+          <p style="margin-top:.25rem;font-size:11px;color:#aaa">EQ_Enero2026.xlsx · VC_Mayo26.xlsx · EQ_2025.xlsx</p>
+        </label>
+        <div id="upload-log" class="upload-log"></div>
+        <button class="btn primary" onclick="document.getElementById('file-input').click()">Seleccionar archivos</button>
+      </div></div>
+      <div class="card"><div class="card-hd">Formato de archivos</div>
+      <div class="card-bd" style="font-size:12px;color:var(--muted);line-height:1.9">
+        <b style="color:var(--text)">Nombre:</b> Debe empezar por EQ o VC · Contener mes en español (Enero, Feb, Marzo...) · Año (2024, 2025, 2026)<br>
+        <b style="color:var(--text)">EQ:</b> Hoja Export · Columnas NOMBRE, NS€, GM€<br>
+        <b style="color:var(--text)">VC:</b> Columnas CLI_RAZON, TOTAL_VENTA, GM_FST<br>
+        <b style="color:var(--text)">Flotas nuevas:</b> Se incorporan solas al subir el archivo<br>
+        <b style="color:var(--text)">Resubir un mes:</b> Sobreescribe los datos de ese período
+      </div></div>
+    </div>
+
+    <!-- PERIODOS -->
+    <div class="view" id="view-periodos">
+      <div class="card"><div class="card-hd">Períodos en base de datos <span id="period-count" style="font-weight:400;color:var(--muted)"></span></div>
+      <div class="card-bd"><div id="period-grid" class="period-grid"><div class="no-data">Sin datos</div></div></div></div>
+    </div>
+
+    <!-- RESUMEN -->
+    <div class="view active" id="view-resumen">
+      <div class="filter-bar">
+        <span class="filter-label">Año</span>
+        <div class="chip-group" id="yr-chips"></div>
+        <span class="filter-label">Mes</span>
+        <div class="chip-group" id="mo-chips"></div>
+      </div>
+      <div class="kpi-row" id="kpis-r"></div>
+      <div class="g2">
+        <div class="card"><div class="card-hd">NS€ mensual EQ+VC</div>
+          <div class="card-bd"><div class="chart-box"><canvas id="ch-monthly"></canvas></div></div></div>
+        <div class="card"><div class="card-hd">GM% por canal</div>
+          <div class="card-bd"><div class="chart-box"><canvas id="ch-gmpct"></canvas></div></div></div>
+      </div>
+      <div class="card"><div class="card-hd">Top flotas — NS YTD</div>
+      <div class="card-bd"><div class="tbl-wrap">
+        <table><thead><tr>
+          <th>Flota</th><th>Canal</th><th class="r">NS YTD</th><th class="r">GM YTD</th>
+          <th class="r">GM%</th><th class="r">Proy FY</th><th>Prog.</th><th></th>
+        </tr></thead><tbody id="top-tb"></tbody></table>
+      </div></div></div>
+    </div>
+
+    <!-- HISTORICO -->
+    <div class="view" id="view-historico">
+      <div class="yoy-grid" id="yoy-cards"></div>
+      <div class="g2">
+        <div class="card"><div class="card-hd">NS€ anual — evolución mensual</div>
+          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-ns"></canvas></div></div></div>
+        <div class="card"><div class="card-hd">GM% por año y canal</div>
+          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-gm"></canvas></div></div></div>
+      </div>
+      <div class="card"><div class="card-hd">Comparativa mensual apilada</div>
+      <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-bar"></canvas></div></div></div>
+    </div>
+
+    <!-- FLOTAS -->
+    <div class="view" id="view-flotas">
+      <div class="card">
+        <div class="card-hd">
+          Detalle por flota
+          <input class="search" id="fleet-q" placeholder="Buscar..." oninput="renderFlotasTb()">
+        </div>
+        <div class="card-bd"><div class="tbl-wrap">
+          <table><thead><tr>
+            <th>Flota</th><th>Canal</th>
+            <th class="r">2024 FY</th><th class="r">2025 FY</th><th class="r">2026 YTD</th>
+            <th class="r">Proy 2026</th><th class="r">Var 26vs25</th><th class="r">GM%</th><th></th>
+          </tr></thead><tbody id="fleet-tb"></tbody></table>
+        </div></div>
+      </div>
+      <div class="card" id="fleet-hist-card" style="display:none">
+        <div class="card-hd" id="fleet-hist-title">Histórico flota</div>
+        <div class="card-bd"><div class="chart-box tall"><canvas id="ch-fleet"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- CANAL -->
+    <div class="view" id="view-canal">
+      <div class="g2">
+        <div class="card" style="border-top:3px solid var(--red)">
+          <div class="card-hd" style="color:var(--red)">EQ — Equity</div>
+          <div class="card-bd">
+            <div class="kpi-row" id="kpis-eq" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
+            <div class="chart-box"><canvas id="ch-eq"></canvas></div>
+          </div>
+        </div>
+        <div class="card" style="border-top:3px solid var(--bl)">
+          <div class="card-hd" style="color:var(--bl)">VC — Partners</div>
+          <div class="card-bd">
+            <div class="kpi-row" id="kpis-vc" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
+            <div class="chart-box"><canvas id="ch-vc"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="card"><div class="card-hd">EQ vs VC — comparativa mensual</div>
+      <div class="card-bd"><div class="chart-box tall"><canvas id="ch-canal"></canvas></div></div></div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIG & SUPABASE
+// ══════════════════════════════════════════════════════════════════════════════
+const LS_URL='fleet_sb_url', LS_KEY='fleet_sb_key';
+let SB_URL='', SB_KEY='';
+
+function loadConfig(){
+  SB_URL=localStorage.getItem(LS_URL)||'';
+  SB_KEY=localStorage.getItem(LS_KEY)||'';
+  if(SB_URL&&SB_KEY){
+    document.getElementById('config-overlay').style.display='none';
+    document.getElementById('app').style.display='flex';
+    initApp();
+  } else {
+    document.getElementById('cfg-url').value=SB_URL;
+    document.getElementById('cfg-key').value=SB_KEY;
+  }
+}
+
+function showConfig(){
+  document.getElementById('cfg-url').value=SB_URL;
+  document.getElementById('cfg-key').value=SB_KEY;
+  document.getElementById('config-overlay').style.display='flex';
+}
+
+async function testConnection(){
+  const url=document.getElementById('cfg-url').value.trim();
+  const key=document.getElementById('cfg-key').value.trim();
+  const msg=document.getElementById('cfg-msg');
+  msg.textContent='Probando...';
+  try{
+    const r=await fetch(`${url}/rest/v1/fleet_data?limit=1`,{headers:{'apikey':key,'Authorization':`Bearer ${key}`}});
+    if(r.ok||r.status===406){msg.textContent='✅ Conexión OK';msg.style.color='var(--gr)'}
+    else throw new Error(r.status);
+  }catch(e){msg.textContent='❌ Error de conexión. Revisa la URL y la clave.';msg.style.color='var(--red)'}
+}
+
+function saveConfig(){
+  SB_URL=document.getElementById('cfg-url').value.trim().replace(/\/$/,'');
+  SB_KEY=document.getElementById('cfg-key').value.trim();
+  if(!SB_URL||!SB_KEY){document.getElementById('cfg-msg').textContent='Rellena los dos campos.';return}
+  localStorage.setItem(LS_URL,SB_URL);
+  localStorage.setItem(LS_KEY,SB_KEY);
+  document.getElementById('config-overlay').style.display='none';
+  document.getElementById('app').style.display='flex';
+  initApp();
+}
+
+// Supabase REST helpers
+async function sb(path,opts={}){
+  const headers={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json',...(opts.headers||{})};
+  const r=await fetch(`${SB_URL}/rest/v1/${path}`,{...opts,headers});
+  if(!r.ok&&r.status!==200){const t=await r.text();throw new Error(t)}
+  return r.json();
+}
+async function sbSelect(table,params=''){return sb(`${table}?${params}`)}
+async function sbUpsert(table,rows){
+  // Try upsert first, fall back to delete+insert if duplicate key error
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`,{
+      method:'POST',
+      body:JSON.stringify(rows),
+      headers:{
+        'apikey':SB_KEY,
+        'Authorization':`Bearer ${SB_KEY}`,
+        'Content-Type':'application/json',
+        'Prefer':'resolution=merge-duplicates,return=minimal',
+        'Accept':'application/json'
+      }
+    });
+    if(r.ok || r.status===201 || r.status===204) return;
+    const txt = await r.text();
+    if(!txt || txt.trim()==='') return; // empty = success with some key configs
+    const err = JSON.parse(txt);
+    if(err.code==='23505'){
+      // Duplicate key — delete existing rows then re-insert
+      await sbDeleteRows(table, rows);
+      await sbInsert(table, rows);
+    } else {
+      throw new Error(err.message||JSON.stringify(err));
+    }
+  } catch(e) {
+    if(e.message?.includes('23505')||e.message?.includes('duplicate')){
+      await sbDeleteRows(table, rows);
+      await sbInsert(table, rows);
+    } else {
+      throw e;
+    }
+  }
+}
+
+async function sbDeleteRows(table, rows){
+  // Group by year+month+canal and delete those periods
+  const periods = {};
+  for(const r of rows) periods[`${r.year}_${r.month}_${r.canal}`]={year:r.year,month:r.month,canal:r.canal};
+  for(const p of Object.values(periods)){
+    await fetch(`${SB_URL}/rest/v1/${table}?year=eq.${p.year}&month=eq.${p.month}&canal=eq.${p.canal}`,{
+      method:'DELETE',
+      headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Accept':'application/json'}
+    });
+  }
+}
+
+async function sbInsert(table, rows){
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`,{
+    method:'POST',
+    body:JSON.stringify(rows),
+    headers:{
+      'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,
+      'Content-Type':'application/json','Prefer':'return=minimal','Accept':'application/json'
+    }
+  });
+  if(!r.ok && r.status!==201 && r.status!==204){
+    const txt=await r.text();
+    if(txt && txt.trim()!=='') throw new Error(txt);
+  }
+}
+async function sbDelete(table,params){return sb(`${table}?${params}`,{method:'DELETE'})}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════════════════════════════════════════════════
+const MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const MMAP={enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,
+  junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sep:9,sept:9,
+  octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12};
+const OB=12510000;
+const YCOL={'2024':'#888','2025':'#444','2026':'#E2001A','2027':'#1565C0'};
+const NORM_MAP={
+  'ARVAL SERVICE LEASE':'Arval','AYVENS SPAIN MOBILITY':'Ayvens',
+  'BANCO SANTANDER S.A.':'Santander','SANTANDER LEASING':'Santander Leasing',
+  'EUROPCAR':'Europcar','DIGI SPAIN TELECOM':'Digi Spain',
+  'ALQUIBER QUALITY':'Alquiber','COVEY ALQUILER':'Covey',
+  'GOODYEAR TIRES':'Goodyear','FLEXICAR INTERNACIONAL':'Flexicar',
+  'RECORD GO':'Record Go','CENTAURO RENT':'Centauro',
+  'ANDACAR':'Andacar','SOLUCIONES DE RENTING':'Soluc.Renting',
+  'ALVEMACO':'Alvemaco','AGC AUTORENTING':'AGC Autorenting',
+  'ELECNOR SERVICIOS':'Elecnor','OK MOBILITY':'OK Mobility',
+  'MALCO DIGITAL':'Malco Digital','MOBIUS GESTION':'Mobius',
+  'CAFES CANDELAS':'Cafes Candelas','CAFENTO':'Cafento',
+  'TRANSTEL':'Transtel','AMBULANCIAS RODRIGO':'Amb.Rodrigo',
+  'AMBUIBERICA':'Ambuibérica','MAPFRE':'Mapfre',
+  'TALRENT':'Talrent','SIXT RENT':'Sixt',
+  'AB SERVICIOS SELECTA':'AB Servicios','GLOOBAL MOVINGRENT':'Gloobal',
+  'CASTILLO RUIZ':'Castillo Ruiz','EIFFAGE ENERGIA':'Eiffage',
+  'EZSA SANIDAD':'Ezsa San.','EZ SANIDAD AMBIENTAL':'Ezsa San.',
+  'AUTOS IGLESIAS':'Autos Iglesias',
+};
+
+function normName(n){
+  const u=n.toUpperCase().trim();
+  for(const[k,v] of Object.entries(NORM_MAP)) if(u.includes(k)) return v;
+  return n.trim().slice(0,50);
+}
+function fmt(n){return Math.round(n).toLocaleString('es-ES')}
+function fmtM(n){return n>=1e6?(n/1e6).toFixed(2)+'M€':n>=1000?(n/1000).toFixed(0)+'k€':Math.round(n)+'€'}
+function fmtP(n){return(!n||!isFinite(n))?'—':(n*100).toFixed(1)+'%'}
+function sem(c){return c>=1?'🟢':c>=0.9?'🟡':'🔴'}
+function varStr(v){if(!v||!isFinite(v))return'—';return(v>0?'+':'')+(v*100).toFixed(1)+'%'}
+function varCls(v){return v>0.01?'up':v<-0.01?'dn':''}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
+let S={years:new Set(),months:new Set(),summary:[],fleetRows:[]};
+let charts={};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════════════════
+async function initApp(){
+  setConn(null,'Conectando...');
+  try{
+    await loadSummary();
+    setConn(true,'Conectado');
+  }catch(e){setConn(false,'Sin conexión')}
+}
+
+function setConn(ok,msg){
+  const dot=document.getElementById('conn-dot');
+  dot.className='conn-dot'+(ok===true?' ok':ok===false?' err':'');
+  document.getElementById('conn-label').textContent=msg;
+}
+
+async function loadSummary(){
+  const rows=await sbSelect('fleet_data',
+    'select=year,month,canal&order=year,month&limit=10000');
+  S.summary=rows||[];
+  const years=new Set(S.summary.map(r=>r.year));
+  const months=new Set(S.summary.map(r=>r.month));
+  // Default: all years, all months
+  S.years=years; S.months=months;
+  buildChips();
+  updatePills();
+}
+
+function buildChips(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort();
+  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
+  document.getElementById('yr-chips').innerHTML=
+    years.map(y=>`<span class="chip on" data-y="${y}" onclick="toggleChip(this,'y')">${y}</span>`).join('');
+  document.getElementById('mo-chips').innerHTML=
+    months.map(m=>`<span class="chip on" data-m="${m}" onclick="toggleChip(this,'m')">${MN[m-1]}</span>`).join('');
+}
+
+function toggleChip(el,t){
+  el.classList.toggle('on');
+  if(t==='y') S.years=new Set([...document.querySelectorAll('#yr-chips .chip.on')].map(c=>+c.dataset.y));
+  else S.months=new Set([...document.querySelectorAll('#mo-chips .chip.on')].map(c=>+c.dataset.m));
+  refreshResumen();
+}
+
+function updatePills(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort();
+  const mc=[...new Set(S.summary.map(r=>r.month))].length;
+  document.getElementById('pill-period').textContent=years.length?`${years.join('/')} · ${mc}m`:'Sin datos';
+  document.getElementById('pill-eq').textContent=`EQ ${S.summary.filter(r=>r.canal==='EQ').length}m`;
+  document.getElementById('pill-vc').textContent=`VC ${S.summary.filter(r=>r.canal==='VC').length}m`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',
+               canal:'EQ vs VC',upload:'Cargar archivos',periodos:'Períodos'};
+function nav(id,el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');
+  el.classList.add('active');
+  document.getElementById('topbar-title').textContent=TITLES[id]||id;
+  if(id==='resumen') refreshResumen();
+  else if(id==='historico') refreshHistorico();
+  else if(id==='flotas') refreshFlotas();
+  else if(id==='canal') refreshCanal();
+  else if(id==='periodos') refreshPeriodos();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DATA FETCH
+// ══════════════════════════════════════════════════════════════════════════════
+async function fetchData(years,months){
+  let params='select=year,month,canal,fleet_norm,ns,gm&order=year,month&limit=100000';
+  if(years.length) params+=`&year=in.(${years.join(',')})`;
+  if(months.length) params+=`&month=in.(${months.join(',')})`;
+  return sbSelect('fleet_data',params);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RESUMEN
+// ══════════════════════════════════════════════════════════════════════════════
+async function refreshResumen(){
+  if(!S.summary.length) return;
+  const rows=await fetchData([...S.years],[...S.months]);
+  if(!rows?.length) return;
+
+  // Aggregations
+  const monthly={}, byFleet={};
+  let totNS=0,totGM=0,eqNS=0,eqGM=0,vcNS=0,vcGM=0;
+
+  for(const r of rows){
+    totNS+=r.ns; totGM+=r.gm;
+    if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;}
+    else{vcNS+=r.ns;vcGM+=r.gm;}
+    const mk=`${r.year}_${r.month}_${r.canal}`;
+    if(!monthly[mk]) monthly[mk]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
+    monthly[mk].ns+=r.ns; monthly[mk].gm+=r.gm;
+    const fk=r.fleet_norm;
+    if(!byFleet[fk]) byFleet[fk]={name:fk,ns:0,gm:0,canals:new Set()};
+    byFleet[fk].ns+=r.ns; byFleet[fk].gm+=r.gm; byFleet[fk].canals.add(r.canal);
+  }
+
+  const nM=[...S.months].length||1;
+  const proy=totNS/nM*12;
+  const cob=proy/OB;
+  const obP=OB/12*nM;
+
+  // KPIs
+  document.getElementById('kpis-r').innerHTML=[
+    {cls:'k-tot',l:`NS Total YTD (${nM}m)`,v:fmtM(totNS),s:`vs OB prorate: ${totNS>=obP?'+':''}${fmtM(totNS-obP)}`,sc:totNS>=obP?'up':'dn'},
+    {cls:'k-gm', l:'GM Total YTD',v:fmtM(totGM),s:`GM% ${fmtP(totGM/totNS)}`,sc:''},
+    {cls:'k-eq', l:'EQ NS YTD',v:fmtM(eqNS),s:`GM% ${fmtP(eqGM/eqNS)}`,sc:''},
+    {cls:'k-vc', l:'VC NS YTD',v:fmtM(vcNS),s:`GM% ${fmtP(vcGM/vcNS)}`,sc:''},
+    {cls:'k-py', l:'Proyección FY',v:fmtM(proy),s:`${sem(cob)} Cobertura ${fmtP(cob)}`,sc:cob>=1?'up':'dn'},
+    {cls:'k-tot',l:'Gap vs OB',v:(proy>=OB?'+':'')+fmtM(proy-OB),s:`OB ${fmtM(OB)}`,sc:proy>=OB?'up':'dn'},
+  ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
+    <div class="kpi-val">${k.v}</div><div class="kpi-sub ${k.sc}">${k.s}</div></div>`).join('');
+
+  const mv=Object.values(monthly);
+  const mos=[...S.months].sort((a,b)=>a-b);
+  const yrs=[...S.years].sort();
+
+  // Monthly NS chart
+  const nsDs=yrs.flatMap(yr=>[
+    {label:`EQ ${yr}`,data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal==='EQ');return r?Math.round(r.ns):null}),backgroundColor:YCOL[yr]||'#999',stack:String(yr)},
+    {label:`VC ${yr}`,data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal==='VC');return r?Math.round(r.ns):null}),backgroundColor:(YCOL[yr]||'#999')+'77',stack:String(yr)},
+  ]);
+  makeChart('ch-monthly','bar',mos.map(m=>MN[m-1]),nsDs,{stacked:true});
+
+  // GM% chart
+  const gmDs=yrs.flatMap(yr=>['EQ','VC'].map(c=>({
+    label:`${c} ${yr}`,
+    data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal===c);return r&&r.ns>0?+(r.gm/r.ns*100).toFixed(1):null}),
+    borderColor:c==='EQ'?(YCOL[yr]||'#999'):(YCOL[yr]||'#999')+'99',
+    backgroundColor:'transparent',tension:.3,borderDash:c==='VC'?[4,2]:[],spanGaps:false,type:'line'
+  })));
+  makeChart('ch-gmpct','line',mos.map(m=>MN[m-1]),gmDs,{pct:true});
+
+  // Top fleets
+  const top=Object.values(byFleet).filter(f=>f.ns>0).sort((a,b)=>b.ns-a.ns).slice(0,20);
+  document.getElementById('top-tb').innerHTML=top.map(f=>{
+    const c=[...f.canals].sort().join('+');
+    const p=f.ns>0?f.gm/f.ns:0;
+    const pr=f.ns/nM*12;
+    const bw=Math.min(100,Math.round(pr/OB*100));
+    const bc=bw>=8?'ok':bw>=4?'warn':'bad';
+    return`<tr class="tr-link" onclick="openFleetFromResumen('${f.name.replace(/'/g,"\\'")}')">
+      <td>${f.name}</td>
+      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      <td class="r">${fmtM(f.ns)}</td><td class="r">${fmtM(f.gm)}</td>
+      <td class="r">${fmtP(p)}</td><td class="r">${fmtM(pr)}</td>
+      <td style="min-width:60px"><div class="bar"><div class="bar-f ${bc}" style="width:${bw}%"></div></div></td>
+      <td>${sem(pr/OB)}</td></tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HISTÓRICO
+// ══════════════════════════════════════════════════════════════════════════════
+async function refreshHistorico(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort();
+  const rows=await fetchData(years,[1,2,3,4,5,6,7,8,9,10,11,12]);
+  if(!rows?.length) return;
+
+  const monthly={}, byYear={};
+  for(const r of rows){
+    const mk=`${r.year}_${r.month}_${r.canal}`;
+    if(!monthly[mk]) monthly[mk]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
+    monthly[mk].ns+=r.ns; monthly[mk].gm+=r.gm;
+    if(!byYear[r.year]) byYear[r.year]={ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0,months:new Set()};
+    byYear[r.year].ns+=r.ns; byYear[r.year].gm+=r.gm; byYear[r.year].months.add(r.month);
+    if(r.canal==='EQ'){byYear[r.year].eqns+=r.ns;byYear[r.year].eqgm+=r.gm;}
+    else{byYear[r.year].vcns+=r.ns;byYear[r.year].vcgm+=r.gm;}
+  }
+
+  const mv=Object.values(monthly);
+  const sortedYrs=years;
+  const prevMap={};
+  sortedYrs.forEach((y,i)=>{if(i>0) prevMap[y]=sortedYrs[i-1]});
+
+  // YoY cards
+  document.getElementById('yoy-cards').innerHTML=sortedYrs.map(yr=>{
+    const d=byYear[yr]; if(!d) return '';
+    const nm=d.months.size;
+    const isP=nm<12;
+    const proy=isP?d.ns/nm*12:d.ns;
+    const prev=prevMap[yr]?byYear[prevMap[yr]]:null;
+    const prevProy=prev?prev.ns/prev.months.size*12:null;
+    const varV=prevProy?(proy-prevProy)/prevProy:null;
+    return`<div class="yoy-card y${yr}">
+      <div class="yoy-yr">${yr}</div>
+      <div class="yoy-ns">${isP?`YTD ${nm}m: ${fmtM(d.ns)}<br>Proy: <b>${fmtM(proy)}</b>`:`FY: <b>${fmtM(d.ns)}</b>`}</div>
+      <div class="yoy-gm">GM: ${fmtM(d.gm)} · ${fmtP(d.ns>0?d.gm/d.ns:0)}</div>
+      ${varV!==null?`<div class="yoy-var ${varCls(varV)}">${varStr(varV)} vs ${prevMap[yr]}</div>`:''}
+    </div>`;
+  }).join('');
+
+  const mos=[1,2,3,4,5,6,7,8,9,10,11,12];
+  const nsDs=sortedYrs.map(yr=>({
+    label:String(yr),
+    data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m);return r?Math.round(r.ns):null}),
+    borderColor:YCOL[yr]||'#999',backgroundColor:'transparent',tension:.3,spanGaps:false
+  }));
+  makeChart('ch-yoy-ns','line',MN,nsDs,{});
+
+  const gmDs=sortedYrs.flatMap(yr=>['EQ','VC'].map(c=>({
+    label:`${c} ${yr}`,
+    data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal===c);return r&&r.ns>0?+(r.gm/r.ns*100).toFixed(1):null}),
+    borderColor:c==='EQ'?(YCOL[yr]||'#999'):(YCOL[yr]||'#999')+'99',
+    backgroundColor:'transparent',tension:.3,borderDash:c==='VC'?[4,2]:[],spanGaps:false
+  })));
+  makeChart('ch-yoy-gm','line',MN,gmDs,{pct:true});
+
+  const barDs=sortedYrs.flatMap(yr=>[
+    {label:`EQ ${yr}`,data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal==='EQ');return r?Math.round(r.ns):null}),backgroundColor:YCOL[yr]||'#999',stack:String(yr)},
+    {label:`VC ${yr}`,data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal==='VC');return r?Math.round(r.ns):null}),backgroundColor:(YCOL[yr]||'#999')+'66',stack:String(yr)},
+  ]);
+  makeChart('ch-yoy-bar','bar',MN,barDs,{stacked:true});
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FLOTAS
+// ══════════════════════════════════════════════════════════════════════════════
+let fleetRows=[];
+async function refreshFlotas(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort();
+  const rows=await fetchData(years,[1,2,3,4,5,6,7,8,9,10,11,12]);
+  if(!rows) return;
+  const byFleet={};
+  for(const r of rows){
+    const k=r.fleet_norm;
+    if(!byFleet[k]) byFleet[k]={name:k,years:{},canals:new Set()};
+    if(!byFleet[k].years[r.year]) byFleet[k].years[r.year]={ns:0,gm:0,months:new Set()};
+    byFleet[k].years[r.year].ns+=r.ns;
+    byFleet[k].years[r.year].gm+=r.gm;
+    byFleet[k].years[r.year].months.add(r.month);
+    byFleet[k].canals.add(r.canal);
+  }
+  fleetRows=Object.values(byFleet).sort((a,b)=>{
+    const latY=Math.max(...Object.keys(b.years).map(Number));
+    const ay=a.years[latY]?.ns||0;
+    const by=b.years[latY]?.ns||0;
+    return by-ay;
+  });
+  renderFlotasTb();
+}
+
+function renderFlotasTb(){
+  const q=(document.getElementById('fleet-q')?.value||'').toLowerCase();
+  const years=[...new Set(S.summary.map(r=>r.year))].sort();
+  const latY=Math.max(...years);
+  const prevY=years[years.indexOf(latY)-1];
+  const filtered=fleetRows.filter(f=>!q||f.name.toLowerCase().includes(q));
+
+  document.getElementById('fleet-tb').innerHTML=filtered.map(f=>{
+    const c=[...f.canals].sort().join('+');
+    const d24=f.years[2024]||{ns:0,gm:0,months:new Set([1])};
+    const d25=f.years[2025]||{ns:0,gm:0,months:new Set([1])};
+    const d26=f.years[2026]||{ns:0,gm:0,months:new Set([1])};
+    const latest=f.years[latY]||{ns:0,gm:0,months:new Set([1])};
+    const prev=f.years[prevY]||{ns:0,gm:0};
+    const nm=latest.months.size||1;
+    const proy=latest.ns/nm*12;
+    const varV=prev.ns>0?(proy-(prev.ns/Math.max(prev.months?.size||1,1)*12))/(prev.ns/Math.max(prev.months?.size||1,1)*12):null;
+    const gp=latest.ns>0?latest.gm/latest.ns:0;
+    return`<tr class="tr-link" onclick="showFleetHist('${f.name.replace(/'/g,"\\'")}')">
+      <td style="color:var(--bl)">${f.name}</td>
+      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      <td class="r">${d24.ns>0?fmtM(d24.ns):'—'}</td>
+      <td class="r">${d25.ns>0?fmtM(d25.ns):'—'}</td>
+      <td class="r">${d26.ns>0?fmtM(d26.ns):'—'}</td>
+      <td class="r">${proy>0?fmtM(proy):'—'}</td>
+      <td class="r ${varCls(varV)}">${varStr(varV)}</td>
+      <td class="r">${fmtP(gp)}</td>
+      <td>${proy>0?sem(proy/OB):''}</td>
+    </tr>`;
+  }).join('');
+}
+
+let fleetHistChart=null;
+async function showFleetHist(fleet){
+  const rows=await sbSelect('fleet_data',
+    `select=year,month,canal,ns,gm&fleet_norm=eq.${encodeURIComponent(fleet)}&order=year,month&limit=10000`);
+  const card=document.getElementById('fleet-hist-card');
+  card.style.display='block';
+  document.getElementById('fleet-hist-title').textContent=`Histórico: ${fleet}`;
+  card.scrollIntoView({behavior:'smooth'});
+  const years=[...new Set(rows.map(r=>r.year))].sort();
+  const ds=years.map(yr=>({
+    label:String(yr),
+    data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{
+      const rs=rows.filter(x=>x.year===yr&&x.month===m);
+      const n=rs.reduce((s,r)=>s+r.ns,0);
+      return n>0?Math.round(n):null;
+    }),
+    borderColor:YCOL[yr]||'#999',backgroundColor:'transparent',tension:.3,spanGaps:false
+  }));
+  if(fleetHistChart) fleetHistChart.destroy();
+  const ctx=document.getElementById('ch-fleet').getContext('2d');
+  fleetHistChart=new Chart(ctx,{type:'line',data:{labels:MN,datasets:ds},options:chartOpts({})});
+}
+
+async function openFleetFromResumen(fleet){
+  document.querySelector('.nav-item[onclick*="flotas"]').click();
+  setTimeout(()=>showFleetHist(fleet),300);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CANAL
+// ══════════════════════════════════════════════════════════════════════════════
+async function refreshCanal(){
+  const rows=await fetchData([...S.years],[...S.months]);
+  if(!rows?.length) return;
+  const monthly={};
+  let eqNS=0,eqGM=0,vcNS=0,vcGM=0;
+  for(const r of rows){
+    if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;}
+    else{vcNS+=r.ns;vcGM+=r.gm;}
+    const mk=`${r.year}_${r.month}_${r.canal}`;
+    if(!monthly[mk]) monthly[mk]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
+    monthly[mk].ns+=r.ns; monthly[mk].gm+=r.gm;
+  }
+  const mv=Object.values(monthly);
+  const nM=[...S.months].length||1;
+  const yrs=[...S.years].sort();
+  const mos=[...S.months].sort((a,b)=>a-b);
+
+  function kpiHtml(ns,gm,nm){
+    return[
+      {l:'NS YTD',v:fmtM(ns)},{l:'GM YTD',v:fmtM(gm)},
+      {l:'GM%',v:fmtP(ns>0?gm/ns:0)},{l:'Proy FY',v:fmtM(ns/nm*12)},
+    ].map(k=>`<div class="kpi"><div class="kpi-lbl">${k.l}</div><div class="kpi-val" style="font-size:16px">${k.v}</div></div>`).join('');
+  }
+  document.getElementById('kpis-eq').innerHTML=kpiHtml(eqNS,eqGM,nM);
+  document.getElementById('kpis-vc').innerHTML=kpiHtml(vcNS,vcGM,nM);
+
+  function canalDs(canal,yrList){
+    return yrList.map(yr=>({
+      label:String(yr),
+      data:mos.map(m=>{const r=mv.find(x=>x.year===yr&&x.month===m&&x.canal===canal);return r?Math.round(r.ns):null}),
+      borderColor:YCOL[yr]||'#999',backgroundColor:'transparent',tension:.3,spanGaps:false
+    }));
+  }
+  makeChart('ch-eq','line',mos.map(m=>MN[m-1]),canalDs('EQ',yrs),{});
+  makeChart('ch-vc','line',mos.map(m=>MN[m-1]),canalDs('VC',yrs),{});
+
+  const compDs=[
+    {label:'EQ',data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const rs=mv.filter(x=>x.canal==='EQ'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
+    {label:'VC',data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const rs=mv.filter(x=>x.canal==='VC'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(21,101,192,0.8)',borderRadius:3},
+  ];
+  makeChart('ch-canal','bar',MN,compDs,{stacked:false});
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PERÍODOS
+// ══════════════════════════════════════════════════════════════════════════════
+async function refreshPeriodos(){
+  const rows=await sbSelect('fleet_data',
+    'select=year,month,canal&order=year,month&limit=10000');
+  const uniq={};
+  for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
+  const items=Object.values(uniq).sort((a,b)=>a.year!==b.year?a.year-b.year:a.month-b.month);
+  document.getElementById('period-count').textContent=`(${items.length} períodos)`;
+  document.getElementById('period-grid').innerHTML=items.length?items.map(p=>
+    `<div class="period-item">
+      <span>${MN[p.month-1]} ${p.year} <span class="badge ${p.canal}">${p.canal}</span></span>
+      <span class="del-btn" onclick="delPeriod(${p.year},${p.month},'${p.canal}')">✕</span>
+    </div>`).join(''):
+    '<div class="no-data">Sin datos cargados.</div>';
+}
+
+async function delPeriod(year,month,canal){
+  if(!confirm(`¿Eliminar ${MN[month-1]} ${year} ${canal}?`)) return;
+  await sbDelete('fleet_data',`year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+  await loadSummary();
+  refreshPeriodos();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UPLOAD
+// ══════════════════════════════════════════════════════════════════════════════
+const dropZone=document.getElementById('drop-zone');
+const fileInput=document.getElementById('file-input');
+fileInput.onchange=e=>handleFiles([...e.target.files]);
+dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag')};
+dropZone.ondragleave=()=>dropZone.classList.remove('drag');
+dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag');handleFiles([...e.dataTransfer.files])};
+
+function detectMeta(fname){
+  const n=fname.toLowerCase();
+  const canal=n.startsWith('eq')?'EQ':n.startsWith('vc')?'VC':null;
+  let month=null;
+  for(const[k,v] of Object.entries(MMAP)) if(n.includes(k)){month=v;break}
+  let year=null;
+  // 4-digit year first
+  for(const y of['2024','2025','2026','2027']) if(n.includes(y)){year=+y;break}
+  // 2-digit year fallback: match any 24/25/26/27 anywhere in filename
+  if(!year){const m2=n.match(/(2[4-7])/);if(m2)year=2000+parseInt(m2[1]);}
+  if(!year) year=2026;
+  return{canal,month,year};
+}
+
+function parseXLSX(buffer,canal){
+  const wb=XLSX.read(buffer,{type:'array'});
+  const sn=canal==='EQ'&&wb.SheetNames.includes('Export')?'Export':wb.SheetNames[0];
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});
+  const out=[];
+  for(const row of rows){
+    const name=(canal==='EQ'?row['NOMBRE']:row['CLI_RAZON']||row['NOMBRE']||'')||'';
+    const ns=String(name).trim();
+    if(!ns||['total','subtotal'].includes(ns.toLowerCase())||ns.startsWith('Filtros')) continue;
+    let nsv=0,gmv=0;
+    if(canal==='EQ'){nsv=+row['NS€']||0;gmv=+row['GM€']||0;}
+    else{const vc=Object.keys(row).find(k=>k.includes('VENTA'))||'TOTAL_VENTA';nsv=+row[vc]||0;gmv=+row['GM_FST']||0;}
+    if(nsv===0&&gmv===0) continue;
+    out.push({raw:ns,norm:normName(ns),ns:Math.round(nsv*100)/100,gm:Math.round(gmv*100)/100});
+  }
+  return out;
+}
+
+async function handleFiles(files){
+  const log=document.getElementById('upload-log');
+  log.style.display='block';
+  log.innerHTML='';
+  
+  for(const file of files){
+    const {canal,month,year}=detectMeta(file.name);
+    // Show processing status immediately
+    const rowId='log_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${file.name}</b> — Procesando ${canal||'?'} ${month?MN[month-1]:''} ${year}...</div>`;
+    log.scrollTop=log.scrollHeight;
+
+    if(!canal||!month){
+      document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — No se detectó mes o canal (nombre debe empezar por EQ o VC y contener el mes)`;
+      continue;
+    }
+    try{
+      const buf=await file.arrayBuffer();
+      const fleets=parseXLSX(new Uint8Array(buf),canal);
+      if(!fleets.length){
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Sin datos válidos en la hoja`;
+        continue;
+      }
+      // Step 1: delete existing period
+      document.getElementById(rowId).innerHTML+=` → Borrando período existente...`;
+      await fetch(`${SB_URL}/rest/v1/fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
+        method:'DELETE',
+        headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Accept':'application/json'}
+      });
+      // Step 2: insert in small batches of 100
+      const rows=fleets.map(f=>({year,month,canal,fleet_raw:f.raw.slice(0,200),fleet_norm:f.norm,ns:f.ns,gm:f.gm}));
+      let inserted=0;
+      for(let i=0;i<rows.length;i+=50){
+        const batch=rows.slice(i,i+50);
+        const r=await fetch(`${SB_URL}/rest/v1/fleet_data`,{
+          method:'POST',
+          body:JSON.stringify(batch),
+          headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'return=minimal','Accept':'application/json'}
+        });
+        if(!r.ok){
+          const txt=await r.text();
+          if(txt&&txt.trim()!==''){
+            let errMsg=txt;
+            try{const j=JSON.parse(txt);errMsg=j.message||j.error||txt;}catch(e){}
+            throw new Error(errMsg);
+          }
+        }
+        inserted+=batch.length;
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: ${inserted}/${rows.length} flotas...`;
+      }
+      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal} · ${fleets.length} flotas guardadas`;
+    }catch(e){
+      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${file.name}</b> — Error: ${e.message?.slice(0,150)||'desconocido'}`;
+    }
+  }
+  await loadSummary();
+  refreshResumen();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════════════════════════════════════════
+function chartOpts(cfg){
+  return{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}}},
+    scales:{
+      x:{stacked:cfg.stacked||false,grid:{display:false},ticks:{font:{size:10}}},
+      y:{stacked:cfg.stacked||false,grid:{color:'rgba(0,0,0,0.04)'},
+         ticks:{font:{size:10},callback:v=>cfg.pct?v+'%':fmtM(v)}}
+    }};
+}
+function makeChart(id,type,labels,datasets,cfg){
+  if(charts[id]) charts[id].destroy();
+  const ctx=document.getElementById(id)?.getContext('2d');
+  if(!ctx) return;
+  charts[id]=new Chart(ctx,{type,data:{labels,datasets},options:chartOpts(cfg)});
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════════════════
+loadConfig();
+</script>
+</body>
+</html>

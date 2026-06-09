@@ -869,6 +869,7 @@ async function initApp(){
   try{
     await loadSummary();
     setConn(true,'Conectado');
+    if(S.summary.length) await refreshResumen();
   }catch(e){setConn(false,'Sin conexión')}
 }
 

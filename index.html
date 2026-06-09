@@ -146,9 +146,45 @@ tr:hover td{background:var(--lg)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-msg{display:flex;align-items:center;justify-content:center;padding:2rem;color:var(--muted);font-size:13px}
 .no-data{text-align:center;padding:2.5rem;color:var(--muted);font-size:13px;background:var(--bg2);border-radius:8px}
+
+/* ACCESS CONTROL */
+#access-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#111,#252525);z-index:1200;display:flex;align-items:center;justify-content:center}
+.access-card{background:#fff;border-radius:12px;padding:2rem;width:420px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.access-logo{width:42px;height:42px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px}
+.access-title{font-size:17px;font-weight:700}.access-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.access-msg{font-size:12px;margin-top:.75rem;color:var(--muted)}
+.role-pill{font-size:10px;padding:2px 7px;border-radius:10px;background:#333;color:#fff;display:inline-block;margin-top:4px}
+.hidden-by-role{display:none!important}
+
 </style>
 </head>
 <body>
+<!-- ACCESS OVERLAY -->
+<div id="access-overlay">
+  <div class="access-card">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+      <div class="access-logo">FS</div>
+      <div>
+        <div class="access-title">First Stop Fleet Dashboard</div>
+        <div class="access-sub">Acceso por usuario</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce tu usuario y código de acceso. Solo el usuario administrador puede cargar archivos, borrar períodos o cambiar credenciales.</p>
+    <div class="config-field">
+      <label>Usuario</label>
+      <input id="access-user" placeholder="carlos" autocomplete="username">
+    </div>
+    <div class="config-field">
+      <label>Código de acceso</label>
+      <input id="access-code" placeholder="Código" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAccess()">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+      <button class="btn primary sm" onclick="loginAccess()">Entrar</button>
+    </div>
+    <div id="access-msg" class="access-msg"></div>
+  </div>
+</div>
+
 
 <!-- CONFIG OVERLAY -->
 <div id="config-overlay">
@@ -205,19 +241,20 @@ tr:hover td{background:var(--lg)}
     EQ vs VC
   </div>
   <div class="nav-section">Datos</div>
-  <div class="nav-item" onclick="nav('upload',this)">
+  <div class="nav-item admin-only" id="nav-upload" onclick="nav('upload',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     Cargar archivos
   </div>
-  <div class="nav-item" onclick="nav('periodos',this)">
+  <div class="nav-item admin-only" id="nav-periodos" onclick="nav('periodos',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     Períodos
   </div>
   <div class="sidebar-foot">
     <span class="conn-dot" id="conn-dot"></span>
     <span id="conn-label">Conectando...</span><br>
+    <span id="user-label" style="font-size:10px;margin-top:2px;display:block"></span>
     <span style="font-size:10px;margin-top:2px;display:block">
-      <span style="cursor:pointer;text-decoration:underline" onclick="showConfig()">Cambiar credenciales</span>
+      <span class="admin-only" style="cursor:pointer;text-decoration:underline" onclick="showConfig()">Cambiar credenciales</span><span style="cursor:pointer;text-decoration:underline;margin-left:8px" onclick="logoutAccess()">Salir</span>
     </span>
   </div>
 </nav>
@@ -290,7 +327,7 @@ tr:hover td{background:var(--lg)}
       <div class="card-bd"><div class="tbl-wrap">
         <table><thead><tr>
           <th>Flota</th><th>Canal</th><th class="r">NS YTD</th><th class="r">GM YTD</th>
-          <th class="r">GM%</th><th class="r">Proy FY</th><th>Prog.</th><th></th>
+          <th class="r">GM%</th><th class="r">Proy FY</th><th>Var vs PY</th><th>Estado</th>
         </tr></thead><tbody id="top-tb"></tbody></table>
       </div></div></div>
     </div>
@@ -362,9 +399,57 @@ tr:hover td{background:var(--lg)}
 // CONFIG & SUPABASE
 // ══════════════════════════════════════════════════════════════════════════════
 const LS_URL='fleet_sb_url', LS_KEY='fleet_sb_key';
+const LS_ACCESS='fleet_access_session';
 let SB_URL='', SB_KEY='';
+let CURRENT_USER=null;
+
+// Usuarios locales de la app. Para cambiar códigos, sustituir los hashes SHA-256.
+// Código admin inicial: FIRSTSTOP2026! · Código consulta inicial: CONSULTA2026
+const APP_USERS=[
+  {user:'carlos',name:'Carlos',role:'admin',hash:'eccf7ebafe2f3881e97b877b1035ebded10de92e0cf0e94bae183ffca258384f'},
+  {user:'consulta',name:'Consulta',role:'viewer',hash:'27ee69e4ce606303b7cab2d7db6084629098566f1513ada96c6df63b19adc4fb'}
+];
+
+async function sha256(txt){
+  const enc=new TextEncoder().encode(txt);
+  const buf=await crypto.subtle.digest('SHA-256',enc);
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function isAdmin(){return CURRENT_USER?.role==='admin'}
+function applyRole(){
+  document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden-by-role',!isAdmin()));
+  const ul=document.getElementById('user-label');
+  if(ul&&CURRENT_USER) ul.innerHTML=`Usuario: ${CURRENT_USER.name} <span class="role-pill">${isAdmin()?'ADMIN':'LECTURA'}</span>`;
+}
+async function loginAccess(){
+  const u=(document.getElementById('access-user').value||'').trim().toLowerCase();
+  const c=document.getElementById('access-code').value||'';
+  const msg=document.getElementById('access-msg');
+  const h=await sha256(c);
+  const found=APP_USERS.find(x=>x.user===u&&x.hash===h);
+  if(!found){msg.textContent='Acceso no válido.';msg.style.color='var(--red)';return}
+  CURRENT_USER={user:found.user,name:found.name,role:found.role};
+  sessionStorage.setItem(LS_ACCESS,JSON.stringify(CURRENT_USER));
+  document.getElementById('access-overlay').style.display='none';
+  applyRole();
+  loadConfig();
+}
+function logoutAccess(){
+  sessionStorage.removeItem(LS_ACCESS);
+  CURRENT_USER=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('config-overlay').style.display='none';
+  document.getElementById('access-overlay').style.display='flex';
+  document.getElementById('access-code').value='';
+}
+function bootAccess(){
+  try{CURRENT_USER=JSON.parse(sessionStorage.getItem(LS_ACCESS)||'null')}catch(e){CURRENT_USER=null}
+  if(CURRENT_USER){document.getElementById('access-overlay').style.display='none';applyRole();loadConfig();}
+}
+
 
 function loadConfig(){
+  if(!CURRENT_USER) return;
   SB_URL=localStorage.getItem(LS_URL)||'';
   SB_KEY=localStorage.getItem(LS_KEY)||'';
   if(SB_URL&&SB_KEY){
@@ -372,18 +457,27 @@ function loadConfig(){
     document.getElementById('app').style.display='flex';
     initApp();
   } else {
+    if(!isAdmin()){
+      document.getElementById('access-overlay').style.display='flex';
+      document.getElementById('access-msg').textContent='Faltan credenciales de Supabase en este navegador. Debe configurarlas un usuario administrador.';
+      document.getElementById('access-msg').style.color='var(--red)';
+      return;
+    }
     document.getElementById('cfg-url').value=SB_URL;
     document.getElementById('cfg-key').value=SB_KEY;
+    document.getElementById('config-overlay').style.display='flex';
   }
 }
 
 function showConfig(){
+  if(!isAdmin()){alert('Solo el usuario administrador puede cambiar credenciales.');return;}
   document.getElementById('cfg-url').value=SB_URL;
   document.getElementById('cfg-key').value=SB_KEY;
   document.getElementById('config-overlay').style.display='flex';
 }
 
 async function testConnection(){
+  if(!isAdmin()){alert('Solo el usuario administrador puede probar la conexión.');return;}
   const url=document.getElementById('cfg-url').value.trim();
   const key=document.getElementById('cfg-key').value.trim();
   const msg=document.getElementById('cfg-msg');
@@ -396,6 +490,7 @@ async function testConnection(){
 }
 
 function saveConfig(){
+  if(!isAdmin()){alert('Solo el usuario administrador puede guardar credenciales.');return;}
   SB_URL=document.getElementById('cfg-url').value.trim().replace(/\/$/,'');
   SB_KEY=document.getElementById('cfg-key').value.trim();
   if(!SB_URL||!SB_KEY){document.getElementById('cfg-msg').textContent='Rellena los dos campos.';return}
@@ -620,6 +715,7 @@ function updatePills(){
 const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',
                canal:'EQ vs VC',upload:'Cargar archivos',periodos:'Períodos'};
 function nav(id,el){
+  if((id==='upload'||id==='periodos')&&!isAdmin()){alert('Solo el usuario administrador puede acceder a esta sección.');return;}
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('view-'+id).classList.add('active');
@@ -730,13 +826,13 @@ async function refreshResumen(){
 
   // Variaciones por flota contra el año anterior, usando mismos meses seleccionados.
   const prevYear=yrs[yrs.indexOf(kpiYear)-1];
+  const curByKpi=aggregate(rows.filter(r=>r.year===kpiYear)).byFleet;
+  const prevByKpi=prevYear ? aggregate(rows.filter(r=>r.year===prevYear)).byFleet : {};
   const varRows=[];
   if(prevYear){
-    const curBy=aggregate(rows.filter(r=>r.year===kpiYear)).byFleet;
-    const prevBy=aggregate(rows.filter(r=>r.year===prevYear)).byFleet;
-    const names=new Set([...Object.keys(curBy),...Object.keys(prevBy)]);
+    const names=new Set([...Object.keys(curByKpi),...Object.keys(prevByKpi)]);
     for(const name of names){
-      const cur=curBy[name]?.ns||0, prev=prevBy[name]?.ns||0;
+      const cur=curByKpi[name]?.ns||0, prev=prevByKpi[name]?.ns||0;
       if(prev>0 && cur>0) varRows.push({name,cur,prev,varV:(cur-prev)/prev});
     }
   }
@@ -747,20 +843,29 @@ async function refreshResumen(){
   document.getElementById('top-down-tb').innerHTML=movHtml(down);
 
   // Top fleets del año KPI, no suma años.
+  // Estado y barra por crecimiento vs año anterior. No se compara cada flota contra el objetivo total del negocio.
   const top=Object.values(A.byFleet).filter(f=>f.ns>0).sort((a,b)=>b.ns-a.ns).slice(0,20);
+  const growthState=(v, hasPrev)=>{
+    if(!hasPrev) return {cls:'warn', dot:'🟡', txt:'Sin PY'};
+    if(v>0.05) return {cls:'ok', dot:'🟢', txt:'Crece'};
+    if(v>=-0.05) return {cls:'warn', dot:'🟡', txt:'Estable'};
+    return {cls:'bad', dot:'🔴', txt:'Cae'};
+  };
   document.getElementById('top-tb').innerHTML=top.map(f=>{
     const c=[...f.canals].sort().join('+');
     const p=f.ns>0?f.gm/f.ns:0;
     const pr=f.ns/nM*12;
-    const bw=Math.min(100,Math.round(pr/OB_TOTAL*100));
-    const bc=statusClass(pr/OB_TOTAL);
-    return`<tr class="tr-link" onclick="openFleetFromResumen('${f.name.replace(/'/g,"\\'")}')">
+    const prevNs=prevByKpi[f.name]?.ns||0;
+    const varV=prevNs>0?(f.ns-prevNs)/prevNs:null;
+    const st=growthState(varV, prevNs>0);
+    const bw=varV===null?50:Math.max(4,Math.min(100,Math.round((varV+0.50)*100)));
+    return`<tr class="tr-link" onclick="openFleetFromResumen('${f.name.replace(/'/g,"\'")}')">
       <td>${f.name}</td>
       <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
       <td class="r">${fmtM(f.ns)}</td><td class="r">${fmtM(f.gm)}</td>
       <td class="r">${fmtP(p)}</td><td class="r">${fmtM(pr)}</td>
-      <td style="min-width:60px"><div class="bar"><div class="bar-f ${bc==='ok'?'ok':bc==='warn'?'warn':'bad'}" style="width:${bw}%"></div></div></td>
-      <td>${sem(pr/OB_TOTAL)}</td></tr>`;
+      <td style="min-width:110px"><div style="display:flex;align-items:center;gap:6px"><span class="${varCls(varV)}" style="width:50px;text-align:right">${varV===null?'—':varStr(varV)}</span><div class="bar" style="flex:1"><div class="bar-f ${st.cls}" style="width:${bw}%"></div></div></div></td>
+      <td title="${st.txt}">${st.dot}</td></tr>`;
   }).join('');
 }
 
@@ -990,6 +1095,7 @@ async function refreshPeriodos(){
 }
 
 async function delPeriod(year,month,canal){
+  if(!isAdmin()){alert('Solo el usuario administrador puede eliminar períodos.');return;}
   if(!confirm(`¿Eliminar ${MN[month-1]} ${year} ${canal}?`)) return;
   await sbDelete('fleet_data',`year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
   await loadSummary();
@@ -1081,6 +1187,7 @@ async function verifySavedPeriod(year,month,canal){
 }
 
 async function handleFiles(files){
+  if(!isAdmin()){alert('Solo el usuario administrador puede subir archivos.');return;}
   const log=document.getElementById('upload-log');
   log.style.display='block';
   log.innerHTML='';
@@ -1176,7 +1283,7 @@ function makeChart(id,type,labels,datasets,cfg){
 // ══════════════════════════════════════════════════════════════════════════════
 // START
 // ══════════════════════════════════════════════════════════════════════════════
-loadConfig();
+bootAccess();
 </script>
 </body>
 </html>

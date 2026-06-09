@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>First Stop Fleet Dashboard</title>
+<title>First Stop Fleet Dashboard — Supabase Auth limpio</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -169,7 +169,7 @@ tr:hover td{background:var(--lg)}
         <div class="access-sub">Acceso por usuario</div>
       </div>
     </div>
-    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce tu email y contraseña de Supabase. Solo el perfil administrador puede cargar archivos, borrar períodos o cambiar credenciales.</p>
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce tu email y contraseña de Supabase. Solo el perfil administrador puede cargar archivos y borrar períodos.</p>
     <div class="config-field">
       <label>Email</label>
       <input id="access-user" placeholder="carlos.menendez@me.com" type="email" autocomplete="username">
@@ -214,7 +214,7 @@ tr:hover td{background:var(--lg)}
 
 
 <!-- CONFIG OVERLAY -->
-<div id="config-overlay">
+<div id="config-overlay" style="display:none">
   <div class="config-card">
     <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.25rem">
       <div style="width:32px;height:32px;background:#E2001A;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">FS</div>
@@ -281,7 +281,7 @@ tr:hover td{background:var(--lg)}
     <span id="conn-label">Conectando...</span><br>
     <span id="user-label" style="font-size:10px;margin-top:2px;display:block"></span>
     <span style="font-size:10px;margin-top:2px;display:block">
-      <span class="admin-only" style="cursor:pointer;text-decoration:underline" onclick="showConfig()">Cambiar credenciales</span><span style="cursor:pointer;text-decoration:underline;margin-left:8px" onclick="logoutAccess()">Salir</span>
+      <span style="cursor:pointer;text-decoration:underline" onclick="logoutAccess()">Salir</span>
     </span>
   </div>
 </nav>
@@ -425,15 +425,19 @@ tr:hover td{background:var(--lg)}
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG & SUPABASE
 // ══════════════════════════════════════════════════════════════════════════════
-const LS_URL='fleet_sb_url', LS_KEY='fleet_sb_key';
+// Configuración fija del proyecto Supabase.
+// IMPORTANTE: sustituye SUPABASE_ANON_KEY por la anon public key de Settings → API.
+const SUPABASE_URL='https://bdqnzofrdvhqzofwnubd.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkcW56b2ZyZHZocXpvZndudWJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MDMzNDIsImV4cCI6MjA5NjQ3OTM0Mn0.wN4P_--EkUr0Vxk-CnUQ50OcklaxmyTJHjJyiS2yalw';
 const LS_AUTH='fleet_supabase_auth_session';
-let SB_URL='', SB_KEY='';
+let SB_URL=SUPABASE_URL.replace(/\/$/,'');
+let SB_KEY=SUPABASE_ANON_KEY;
 let CURRENT_USER=null;
 let CURRENT_SESSION=null;
 let RECOVERY_SESSION=null;
 
 function normalizeUrl(url){return (url||'').trim().replace(/\/$/,'')}
-function authToken(){return CURRENT_SESSION?.access_token || SB_KEY}
+function authToken(){return CURRENT_SESSION?.access_token || ''}
 function authHeaders(extra={}){
   return {
     'apikey': SB_KEY,
@@ -488,12 +492,11 @@ async function loginAccess(){
   msg.textContent='Entrando...';
   msg.style.color='var(--muted)';
 
-  SB_URL=normalizeUrl(localStorage.getItem(LS_URL)||'');
-  SB_KEY=localStorage.getItem(LS_KEY)||'';
-  if(!SB_URL||!SB_KEY){
-    msg.textContent='Antes debes guardar la URL y la anon key de Supabase en este navegador.';
+  SB_URL=normalizeUrl(SUPABASE_URL);
+  SB_KEY=SUPABASE_ANON_KEY;
+  if(!SB_URL || !SB_KEY || SB_KEY.includes('PEGAR_AQUI')){
+    msg.textContent='Falta configurar SUPABASE_ANON_KEY en el HTML.';
     msg.style.color='var(--red)';
-    document.getElementById('config-overlay').style.display='flex';
     return;
   }
   if(!email||!password){
@@ -585,21 +588,31 @@ async function completePasswordReset(){
 }
 
 async function bootAccess(){
-  SB_URL=normalizeUrl(localStorage.getItem(LS_URL)||'');
-  SB_KEY=localStorage.getItem(LS_KEY)||'';
-  if(!SB_URL||!SB_KEY){
-    document.getElementById('access-overlay').style.display='none';
-    document.getElementById('config-overlay').style.display='flex';
-    return;
-  }
+  SB_URL=normalizeUrl(SUPABASE_URL);
+  SB_KEY=SUPABASE_ANON_KEY;
+  const missingKey=!SB_URL || !SB_KEY || SB_KEY.includes('PEGAR_AQUI');
 
+  // Primero se procesa el enlace de recuperación (#access_token=...), porque si no la app vuelve al login.
   if(hasRecoveryToken()){
+    if(missingKey){
+      document.getElementById('access-overlay').style.display='flex';
+      document.getElementById('access-msg').textContent='Falta configurar SUPABASE_ANON_KEY en el HTML para completar el cambio de contraseña.';
+      document.getElementById('access-msg').style.color='var(--red)';
+      return;
+    }
     const p=parseHashParams();
     RECOVERY_SESSION={access_token:p.access_token,refresh_token:p.refresh_token||null,expires_in:p.expires_in||null,token_type:p.token_type||'bearer'};
     document.getElementById('config-overlay').style.display='none';
     document.getElementById('access-overlay').style.display='none';
     document.getElementById('app').style.display='none';
     document.getElementById('reset-overlay').style.display='flex';
+    return;
+  }
+
+  if(missingKey){
+    document.getElementById('access-overlay').style.display='flex';
+    document.getElementById('access-msg').textContent='Falta configurar SUPABASE_ANON_KEY en el HTML.';
+    document.getElementById('access-msg').style.color='var(--red)';
     return;
   }
 

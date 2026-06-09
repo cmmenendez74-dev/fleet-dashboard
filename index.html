@@ -172,13 +172,14 @@ tr:hover td{background:var(--lg)}
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce tu email y contraseña de Supabase. Solo el perfil administrador puede cargar archivos y borrar períodos.</p>
     <div class="config-field">
       <label>Email</label>
-      <input id="access-user" placeholder="carlos.menendez@me.com" type="email" autocomplete="username">
+      <input id="access-user" placeholder="carlos.menendez@me.com" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
     </div>
     <div class="config-field">
       <label>Contraseña</label>
-      <input id="access-code" placeholder="Contraseña" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAccess()">
+      <input id="access-code" placeholder="Contraseña" type="password" autocomplete="off" onkeydown="if(event.key==='Enter')loginAccess()">
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+      <button class="btn sm" type="button" onclick="clearLoginFields()">Limpiar</button>
       <button class="btn primary sm" onclick="loginAccess()">Entrar</button>
     </div>
     <div id="access-msg" class="access-msg"></div>
@@ -479,15 +480,32 @@ async function loadProfile(user){
   const rows=await authFetch(`/rest/v1/profiles?select=id,email,role&id=eq.${encodeURIComponent(user.id)}&limit=1`,{method:'GET'});
   const profile=Array.isArray(rows)&&rows.length?rows[0]:null;
   if(!profile){
-    throw new Error('Usuario autenticado, pero no tiene perfil en public.profiles. Asigna role admin o viewer.');
+    throw new Error('Usuario autenticado, pero falta su registro en public.profiles. Ejecuta el SQL para asignar role admin o viewer.');
   }
   CURRENT_USER={id:user.id,email:user.email||profile.email,role:profile.role||'viewer'};
   applyRole();
 }
 
+function clearLoginFields(){
+  const emailEl=document.getElementById('access-user');
+  const passEl=document.getElementById('access-code');
+  [emailEl,passEl].forEach(el=>{if(!el)return; el.removeAttribute('readonly'); el.removeAttribute('disabled'); el.value='';});
+  const msg=document.getElementById('access-msg');
+  if(msg){msg.textContent='Campos limpiados. Escribe email y contraseña manualmente.';msg.style.color='var(--muted)';}
+  setTimeout(()=>emailEl?.focus(),50);
+}
+
+function normalizeLoginFields(){
+  const emailEl=document.getElementById('access-user');
+  const passEl=document.getElementById('access-code');
+  [emailEl,passEl].forEach(el=>{if(!el)return; el.removeAttribute('readonly'); el.removeAttribute('disabled'); el.style.pointerEvents='auto';});
+}
+
 async function loginAccess(){
-  const email=(document.getElementById('access-user').value||'').trim().toLowerCase();
-  const password=document.getElementById('access-code').value||'';
+  const emailEl=document.getElementById('access-user') || document.querySelector('#access-overlay input[type="email"]');
+  const passEl=document.getElementById('access-code') || document.querySelector('#access-overlay input[type="password"]');
+  const email=((emailEl && emailEl.value) ? emailEl.value : '').trim().toLowerCase();
+  const password=(passEl && passEl.value) ? passEl.value : '';
   const msg=document.getElementById('access-msg');
   msg.textContent='Entrando...';
   msg.style.color='var(--muted)';
@@ -499,9 +517,13 @@ async function loginAccess(){
     msg.style.color='var(--red)';
     return;
   }
-  if(!email||!password){
-    msg.textContent='Introduce email y contraseña.';
+  if(!email || !password){
+    const missing=[];
+    if(!email) missing.push('email');
+    if(!password) missing.push('contraseña');
+    msg.textContent='Falta: '+missing.join(' y ')+'. Borra el campo y escríbelo manualmente; no uses autocompletado del navegador.';
     msg.style.color='var(--red)';
+    console.warn('Login bloqueado por campos vacíos', {emailLength:email.length, passwordLength:password.length});
     return;
   }
 
@@ -588,6 +610,7 @@ async function completePasswordReset(){
 }
 
 async function bootAccess(){
+  normalizeLoginFields();
   SB_URL=normalizeUrl(SUPABASE_URL);
   SB_KEY=SUPABASE_ANON_KEY;
   const missingKey=!SB_URL || !SB_KEY || SB_KEY.includes('PEGAR_AQUI');
@@ -631,7 +654,9 @@ async function bootAccess(){
     }
   }
   document.getElementById('access-overlay').style.display='flex';
+  normalizeLoginFields();
 }
+
 
 
 function loadConfig(){

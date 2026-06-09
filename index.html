@@ -169,19 +169,46 @@ tr:hover td{background:var(--lg)}
         <div class="access-sub">Acceso por usuario</div>
       </div>
     </div>
-    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce tu usuario y código de acceso. Solo el usuario administrador puede cargar archivos, borrar períodos o cambiar credenciales.</p>
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce tu email y contraseña de Supabase. Solo el perfil administrador puede cargar archivos, borrar períodos o cambiar credenciales.</p>
     <div class="config-field">
-      <label>Usuario</label>
-      <input id="access-user" placeholder="carlos" autocomplete="username">
+      <label>Email</label>
+      <input id="access-user" placeholder="carlos.menendez@me.com" type="email" autocomplete="username">
     </div>
     <div class="config-field">
-      <label>Código de acceso</label>
-      <input id="access-code" placeholder="Código" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAccess()">
+      <label>Contraseña</label>
+      <input id="access-code" placeholder="Contraseña" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAccess()">
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
       <button class="btn primary sm" onclick="loginAccess()">Entrar</button>
     </div>
     <div id="access-msg" class="access-msg"></div>
+  </div>
+</div>
+
+
+<!-- PASSWORD RESET OVERLAY -->
+<div id="reset-overlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#111,#252525);z-index:1300;display:none;align-items:center;justify-content:center">
+  <div class="access-card">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+      <div class="access-logo">FS</div>
+      <div>
+        <div class="access-title">Cambiar contraseña</div>
+        <div class="access-sub">Supabase Auth</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:1rem">Introduce una nueva contraseña para tu usuario. Después podrás entrar con tu email y esta contraseña.</p>
+    <div class="config-field">
+      <label>Nueva contraseña</label>
+      <input id="reset-pass-1" type="password" placeholder="Nueva contraseña" autocomplete="new-password">
+    </div>
+    <div class="config-field">
+      <label>Repetir contraseña</label>
+      <input id="reset-pass-2" type="password" placeholder="Repetir contraseña" autocomplete="new-password" onkeydown="if(event.key==='Enter')completePasswordReset()">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+      <button class="btn primary sm" onclick="completePasswordReset()">Guardar contraseña</button>
+    </div>
+    <div id="reset-msg" class="access-msg"></div>
   </div>
 </div>
 
@@ -399,111 +426,252 @@ tr:hover td{background:var(--lg)}
 // CONFIG & SUPABASE
 // ══════════════════════════════════════════════════════════════════════════════
 const LS_URL='fleet_sb_url', LS_KEY='fleet_sb_key';
-const LS_ACCESS='fleet_access_session';
+const LS_AUTH='fleet_supabase_auth_session';
 let SB_URL='', SB_KEY='';
 let CURRENT_USER=null;
+let CURRENT_SESSION=null;
+let RECOVERY_SESSION=null;
 
-// Usuarios locales de la app. Para cambiar códigos, sustituir los hashes SHA-256.
-// Código admin inicial: FIRSTSTOP2026! · Código consulta inicial: CONSULTA2026
-const APP_USERS=[
-  {user:'carlos',name:'Carlos',role:'admin',hash:'eccf7ebafe2f3881e97b877b1035ebded10de92e0cf0e94bae183ffca258384f'},
-  {user:'consulta',name:'Consulta',role:'viewer',hash:'27ee69e4ce606303b7cab2d7db6084629098566f1513ada96c6df63b19adc4fb'}
-];
-
-async function sha256(txt){
-  const enc=new TextEncoder().encode(txt);
-  const buf=await crypto.subtle.digest('SHA-256',enc);
-  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+function normalizeUrl(url){return (url||'').trim().replace(/\/$/,'')}
+function authToken(){return CURRENT_SESSION?.access_token || SB_KEY}
+function authHeaders(extra={}){
+  return {
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${authToken()}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...extra
+  };
 }
 function isAdmin(){return CURRENT_USER?.role==='admin'}
+
 function applyRole(){
   document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden-by-role',!isAdmin()));
   const ul=document.getElementById('user-label');
-  if(ul&&CURRENT_USER) ul.innerHTML=`Usuario: ${CURRENT_USER.name} <span class="role-pill">${isAdmin()?'ADMIN':'LECTURA'}</span>`;
+  if(ul&&CURRENT_USER){
+    const label=isAdmin()?'ADMIN':'LECTURA';
+    ul.innerHTML=`Usuario: ${CURRENT_USER.email||CURRENT_USER.name||''} <span class="role-pill">${label}</span>`;
+  }
 }
-async function loginAccess(){
-  const u=(document.getElementById('access-user').value||'').trim().toLowerCase();
-  const c=document.getElementById('access-code').value||'';
-  const msg=document.getElementById('access-msg');
-  const h=await sha256(c);
-  const found=APP_USERS.find(x=>x.user===u&&x.hash===h);
-  if(!found){msg.textContent='Acceso no válido.';msg.style.color='var(--red)';return}
-  CURRENT_USER={user:found.user,name:found.name,role:found.role};
-  sessionStorage.setItem(LS_ACCESS,JSON.stringify(CURRENT_USER));
-  document.getElementById('access-overlay').style.display='none';
+
+async function authFetch(path, options={}){
+  const r=await fetch(`${SB_URL}${path}`,{
+    ...options,
+    headers: authHeaders(options.headers||{})
+  });
+  const txt=await r.text();
+  let body=null;
+  if(txt && txt.trim()!==''){
+    try{body=JSON.parse(txt)}catch(e){body=txt}
+  }
+  if(!r.ok){
+    const msg=typeof body==='string'?body:(body?.msg||body?.message||body?.error||JSON.stringify(body));
+    throw new Error(`HTTP ${r.status}: ${msg}`);
+  }
+  return body;
+}
+
+async function loadProfile(user){
+  const rows=await authFetch(`/rest/v1/profiles?select=id,email,role&id=eq.${encodeURIComponent(user.id)}&limit=1`,{method:'GET'});
+  const profile=Array.isArray(rows)&&rows.length?rows[0]:null;
+  if(!profile){
+    throw new Error('Usuario autenticado, pero no tiene perfil en public.profiles. Asigna role admin o viewer.');
+  }
+  CURRENT_USER={id:user.id,email:user.email||profile.email,role:profile.role||'viewer'};
   applyRole();
-  loadConfig();
 }
+
+async function loginAccess(){
+  const email=(document.getElementById('access-user').value||'').trim().toLowerCase();
+  const password=document.getElementById('access-code').value||'';
+  const msg=document.getElementById('access-msg');
+  msg.textContent='Entrando...';
+  msg.style.color='var(--muted)';
+
+  SB_URL=normalizeUrl(localStorage.getItem(LS_URL)||'');
+  SB_KEY=localStorage.getItem(LS_KEY)||'';
+  if(!SB_URL||!SB_KEY){
+    msg.textContent='Antes debes guardar la URL y la anon key de Supabase en este navegador.';
+    msg.style.color='var(--red)';
+    document.getElementById('config-overlay').style.display='flex';
+    return;
+  }
+  if(!email||!password){
+    msg.textContent='Introduce email y contraseña.';
+    msg.style.color='var(--red)';
+    return;
+  }
+
+  try{
+    const session=await fetch(`${SB_URL}/auth/v1/token?grant_type=password`,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({email,password})
+    }).then(async r=>{
+      const txt=await r.text();
+      let body=null; try{body=txt?JSON.parse(txt):null}catch(e){body=txt}
+      if(!r.ok){throw new Error(body?.msg||body?.message||body?.error_description||body?.error||txt||('HTTP '+r.status))}
+      return body;
+    });
+    CURRENT_SESSION=session;
+    localStorage.setItem(LS_AUTH,JSON.stringify(session));
+    await loadProfile(session.user);
+    document.getElementById('access-overlay').style.display='none';
+    document.getElementById('config-overlay').style.display='none';
+    document.getElementById('app').style.display='flex';
+    initApp();
+  }catch(e){
+    msg.textContent='Acceso no válido: '+(e.message||e);
+    msg.style.color='var(--red)';
+  }
+}
+
 function logoutAccess(){
-  sessionStorage.removeItem(LS_ACCESS);
+  localStorage.removeItem(LS_AUTH);
   CURRENT_USER=null;
+  CURRENT_SESSION=null;
   document.getElementById('app').style.display='none';
   document.getElementById('config-overlay').style.display='none';
   document.getElementById('access-overlay').style.display='flex';
   document.getElementById('access-code').value='';
+  document.getElementById('access-msg').textContent='';
 }
-function bootAccess(){
-  try{CURRENT_USER=JSON.parse(sessionStorage.getItem(LS_ACCESS)||'null')}catch(e){CURRENT_USER=null}
-  if(CURRENT_USER){document.getElementById('access-overlay').style.display='none';applyRole();loadConfig();}
+
+function parseHashParams(){
+  const h=(window.location.hash||'').replace(/^#/,'');
+  return Object.fromEntries(new URLSearchParams(h));
+}
+
+function hasRecoveryToken(){
+  const p=parseHashParams();
+  return !!(p.access_token && (p.type==='recovery' || p.refresh_token));
+}
+
+async function completePasswordReset(){
+  const msg=document.getElementById('reset-msg');
+  const p1=document.getElementById('reset-pass-1').value||'';
+  const p2=document.getElementById('reset-pass-2').value||'';
+  msg.textContent='';
+  if(p1.length<8){msg.textContent='La contraseña debe tener al menos 8 caracteres.';msg.style.color='var(--red)';return;}
+  if(p1!==p2){msg.textContent='Las contraseñas no coinciden.';msg.style.color='var(--red)';return;}
+  if(!RECOVERY_SESSION?.access_token){msg.textContent='No hay sesión de recuperación válida. Vuelve a solicitar el email de recuperación.';msg.style.color='var(--red)';return;}
+  msg.textContent='Guardando contraseña...';
+  msg.style.color='var(--muted)';
+  try{
+    const r=await fetch(`${SB_URL}/auth/v1/user`,{
+      method:'PUT',
+      headers:{'apikey':SB_KEY,'Authorization':`Bearer ${RECOVERY_SESSION.access_token}`,'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({password:p1})
+    });
+    const txt=await r.text();
+    let body=null; try{body=txt?JSON.parse(txt):null}catch(e){body=txt}
+    if(!r.ok) throw new Error(body?.msg||body?.message||body?.error_description||body?.error||txt||('HTTP '+r.status));
+    msg.textContent='Contraseña actualizada. Ya puedes entrar con tu email y la nueva contraseña.';
+    msg.style.color='var(--gr)';
+    RECOVERY_SESSION=null;
+    localStorage.removeItem(LS_AUTH);
+    history.replaceState(null,document.title,window.location.pathname+window.location.search);
+    setTimeout(()=>{
+      document.getElementById('reset-overlay').style.display='none';
+      document.getElementById('access-overlay').style.display='flex';
+      document.getElementById('access-msg').textContent='Contraseña actualizada. Inicia sesión.';
+      document.getElementById('access-msg').style.color='var(--gr)';
+      document.getElementById('access-code').value='';
+    },900);
+  }catch(e){
+    msg.textContent='No se pudo cambiar la contraseña: '+(e.message||e);
+    msg.style.color='var(--red)';
+  }
+}
+
+async function bootAccess(){
+  SB_URL=normalizeUrl(localStorage.getItem(LS_URL)||'');
+  SB_KEY=localStorage.getItem(LS_KEY)||'';
+  if(!SB_URL||!SB_KEY){
+    document.getElementById('access-overlay').style.display='none';
+    document.getElementById('config-overlay').style.display='flex';
+    return;
+  }
+
+  if(hasRecoveryToken()){
+    const p=parseHashParams();
+    RECOVERY_SESSION={access_token:p.access_token,refresh_token:p.refresh_token||null,expires_in:p.expires_in||null,token_type:p.token_type||'bearer'};
+    document.getElementById('config-overlay').style.display='none';
+    document.getElementById('access-overlay').style.display='none';
+    document.getElementById('app').style.display='none';
+    document.getElementById('reset-overlay').style.display='flex';
+    return;
+  }
+
+  try{CURRENT_SESSION=JSON.parse(localStorage.getItem(LS_AUTH)||'null')}catch(e){CURRENT_SESSION=null}
+  if(CURRENT_SESSION?.access_token && CURRENT_SESSION?.user){
+    try{
+      await loadProfile(CURRENT_SESSION.user);
+      document.getElementById('access-overlay').style.display='none';
+      document.getElementById('config-overlay').style.display='none';
+      document.getElementById('reset-overlay').style.display='none';
+      document.getElementById('app').style.display='flex';
+      initApp();
+      return;
+    }catch(e){
+      localStorage.removeItem(LS_AUTH);
+    }
+  }
+  document.getElementById('access-overlay').style.display='flex';
 }
 
 
 function loadConfig(){
-  if(!CURRENT_USER) return;
-  SB_URL=localStorage.getItem(LS_URL)||'';
+  SB_URL=normalizeUrl(localStorage.getItem(LS_URL)||'');
   SB_KEY=localStorage.getItem(LS_KEY)||'';
-  if(SB_URL&&SB_KEY){
-    document.getElementById('config-overlay').style.display='none';
-    document.getElementById('app').style.display='flex';
-    initApp();
-  } else {
-    if(!isAdmin()){
-      document.getElementById('access-overlay').style.display='flex';
-      document.getElementById('access-msg').textContent='Faltan credenciales de Supabase en este navegador. Debe configurarlas un usuario administrador.';
-      document.getElementById('access-msg').style.color='var(--red)';
-      return;
-    }
-    document.getElementById('cfg-url').value=SB_URL;
-    document.getElementById('cfg-key').value=SB_KEY;
+  document.getElementById('cfg-url').value=SB_URL;
+  document.getElementById('cfg-key').value=SB_KEY;
+  if(!SB_URL||!SB_KEY){
+    document.getElementById('app').style.display='none';
+    document.getElementById('access-overlay').style.display='none';
     document.getElementById('config-overlay').style.display='flex';
+    return;
   }
+  document.getElementById('config-overlay').style.display='none';
+  document.getElementById('access-overlay').style.display='flex';
 }
 
 function showConfig(){
-  if(!isAdmin()){alert('Solo el usuario administrador puede cambiar credenciales.');return;}
+  if(CURRENT_USER && !isAdmin()){alert('Solo el usuario administrador puede cambiar credenciales.');return;}
   document.getElementById('cfg-url').value=SB_URL;
   document.getElementById('cfg-key').value=SB_KEY;
   document.getElementById('config-overlay').style.display='flex';
 }
 
 async function testConnection(){
-  if(!isAdmin()){alert('Solo el usuario administrador puede probar la conexión.');return;}
-  const url=document.getElementById('cfg-url').value.trim();
+  const url=normalizeUrl(document.getElementById('cfg-url').value);
   const key=document.getElementById('cfg-key').value.trim();
   const msg=document.getElementById('cfg-msg');
   msg.textContent='Probando...';
   try{
-    const r=await fetch(`${url}/rest/v1/fleet_data?limit=1`,{headers:{'apikey':key,'Authorization':`Bearer ${key}`}});
-    if(r.ok||r.status===406){msg.textContent='✅ Conexión OK';msg.style.color='var(--gr)'}
+    const r=await fetch(`${url}/auth/v1/settings`,{headers:{'apikey':key,'Accept':'application/json'}});
+    if(r.ok||r.status===401||r.status===404){msg.textContent='✅ URL y anon key parecen válidas. Guarda y entra con email/contraseña.';msg.style.color='var(--gr)'}
     else throw new Error(r.status);
-  }catch(e){msg.textContent='❌ Error de conexión. Revisa la URL y la clave.';msg.style.color='var(--red)'}
+  }catch(e){msg.textContent='❌ Error. Revisa URL y anon key.';msg.style.color='var(--red)'}
 }
 
+
 function saveConfig(){
-  if(!isAdmin()){alert('Solo el usuario administrador puede guardar credenciales.');return;}
-  SB_URL=document.getElementById('cfg-url').value.trim().replace(/\/$/,'');
+  SB_URL=normalizeUrl(document.getElementById('cfg-url').value);
   SB_KEY=document.getElementById('cfg-key').value.trim();
   if(!SB_URL||!SB_KEY){document.getElementById('cfg-msg').textContent='Rellena los dos campos.';return}
   localStorage.setItem(LS_URL,SB_URL);
   localStorage.setItem(LS_KEY,SB_KEY);
+  document.getElementById('cfg-msg').textContent='Guardado. Ahora inicia sesión con tu email y contraseña.';
+  document.getElementById('cfg-msg').style.color='var(--gr)';
   document.getElementById('config-overlay').style.display='none';
-  document.getElementById('app').style.display='flex';
-  initApp();
+  document.getElementById('access-overlay').style.display='flex';
 }
+
 
 // Supabase REST helpers
 async function sb(path,opts={}){
-  const headers={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json',...(opts.headers||{})};
+  const headers=authHeaders(opts.headers||{});
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{...opts,headers});
   const t=await r.text();
   if(!r.ok&&r.status!==200){throw new Error(t||('HTTP '+r.status))}
@@ -532,13 +700,7 @@ async function sbUpsert(table,rows){
     const r = await fetch(`${SB_URL}/rest/v1/${table}`,{
       method:'POST',
       body:JSON.stringify(rows),
-      headers:{
-        'apikey':SB_KEY,
-        'Authorization':`Bearer ${SB_KEY}`,
-        'Content-Type':'application/json',
-        'Prefer':'resolution=merge-duplicates,return=minimal',
-        'Accept':'application/json'
-      }
+      headers:authHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'})
     });
     if(r.ok || r.status===201 || r.status===204) return;
     const txt = await r.text();
@@ -568,7 +730,7 @@ async function sbDeleteRows(table, rows){
   for(const p of Object.values(periods)){
     await fetch(`${SB_URL}/rest/v1/${table}?year=eq.${p.year}&month=eq.${p.month}&canal=eq.${p.canal}`,{
       method:'DELETE',
-      headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Accept':'application/json'}
+      headers:authHeaders()
     });
   }
 }
@@ -577,10 +739,7 @@ async function sbInsert(table, rows){
   const r = await fetch(`${SB_URL}/rest/v1/${table}`,{
     method:'POST',
     body:JSON.stringify(rows),
-    headers:{
-      'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,
-      'Content-Type':'application/json','Prefer':'return=minimal','Accept':'application/json'
-    }
+    headers:authHeaders({'Prefer':'return=minimal'})
   });
   if(!r.ok && r.status!==201 && r.status!==204){
     const txt=await r.text();
@@ -1161,13 +1320,7 @@ function parseXLSX(buffer,canal){
 async function restJson(path, options={}){
   const r = await fetch(`${SB_URL}/rest/v1/${path}`,{
     ...options,
-    headers:{
-      'apikey':SB_KEY,
-      'Authorization':`Bearer ${SB_KEY}`,
-      'Content-Type':'application/json',
-      'Accept':'application/json',
-      ...(options.headers||{})
-    }
+    headers:authHeaders(options.headers||{})
   });
   const txt = await r.text();
   let body = null;

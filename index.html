@@ -1252,7 +1252,7 @@ function renderFlotasTb(){
   }
   const filtered=fleetRows.filter(f=>!q||f.name.toLowerCase().includes(q));
   // Top 10 si no hay búsqueda, todos si hay texto
-  const toShow=q ? filtered : filtered.slice(0,10);
+  const toShow=q ? filtered : filtered.slice(0,20);
   const countEl=document.getElementById('fleet-count');
   if(countEl) countEl.textContent=q
     ? `${toShow.length} resultado${toShow.length!==1?'s':''}`

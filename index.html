@@ -159,6 +159,27 @@ tr:hover td{background:var(--lg)}
 .role-pill{font-size:10px;padding:2px 7px;border-radius:10px;background:#333;color:#fff;display:inline-block;margin-top:4px}
 .hidden-by-role{display:none!important}
 
+
+@media print{
+  .sidebar,.topbar,.filter-bar,button{display:none!important}
+  .view{display:block!important;padding:0;margin:0}
+  .content{margin-left:0!important;padding:.5rem}
+  .card{box-shadow:none;border:1px solid #ddd;break-inside:avoid;margin-bottom:1rem}
+  canvas{max-width:100%}
+  .print-header{display:block!important}
+  body{font-size:11px}
+  #view-resumen,#view-flotas{display:block!important}
+  #view-historico,#view-canal,#view-upload,#view-periodos{display:none!important}
+  #flotas-detail-view{display:none!important}
+  #flotas-table-view{display:block!important}
+}
+.print-header{display:none;margin-bottom:1rem;border-bottom:2px solid var(--red);padding-bottom:.5rem}
+.export-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;cursor:pointer;color:var(--dg);transition:background .15s}
+.export-btn:hover{background:var(--bg2)}
+.export-btn.pdf{border-color:#E2001A;color:#E2001A}
+.export-btn.pdf:hover{background:var(--lred)}
+.export-btn.xl{border-color:#1D6F42;color:#1D6F42}
+.export-btn.xl:hover{background:#E8F5E9}
 </style>
 </head>
 <body>
@@ -296,10 +317,28 @@ tr:hover td{background:var(--lg)}
       <span class="pill" id="pill-period">—</span>
       <span class="pill r" id="pill-eq">EQ</span>
       <span class="pill b" id="pill-vc">VC</span>
+      <div style="margin-left:.75rem;display:flex;gap:.4rem">
+        <button class="export-btn pdf" onclick="exportPDF()" title="Exportar PDF">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          PDF
+        </button>
+        <button class="export-btn xl" onclick="exportExcel()" title="Exportar Excel">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          Excel
+        </button>
+      </div>
     </div>
   </div>
 
   <div class="content">
+    <div class="print-header" id="print-header">
+      <div style="display:flex;align-items:center;gap:1rem">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#E2001A">First Stop Fleet Dashboard</div>
+          <div style="font-size:11px;color:#666" id="print-subtitle"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- UPLOAD -->
     <div class="view" id="view-upload">
@@ -1352,8 +1391,165 @@ async function showFleetHist(fleet){
 function backToFlotasList(){
   document.getElementById('flotas-detail-view').style.display='none';
   document.getElementById('flotas-table-view').style.display='block';
-  // Limpiar gráfico para liberar memoria
   if(fleetHistChart){ fleetHistChart.destroy(); fleetHistChart=null; }
+}
+
+// ── EXPORT PDF ────────────────────────────────────────────────────────────────
+function exportPDF(){
+  // Preparar header de impresión
+  const years=[...S.years].sort();
+  const months=[...S.months].sort();
+  const sub=`${years.join(' / ')} · ${months.length} meses · Exportado ${new Date().toLocaleDateString('es-ES')}`;
+  document.getElementById('print-subtitle').textContent=sub;
+
+  // Asegurarse de que la vista resumen y flotas sean visibles para print
+  // Guardamos el estado actual para restaurarlo después
+  const views=document.querySelectorAll('.view');
+  const prevDisplay={};
+  views.forEach(v=>{ prevDisplay[v.id]=v.style.display; });
+
+  // Para el PDF mostramos resumen + flotas
+  views.forEach(v=>{ v.style.display='none'; });
+  document.getElementById('view-resumen').style.display='block';
+  document.getElementById('view-flotas').style.display='block';
+  document.getElementById('flotas-table-view').style.display='block';
+  if(document.getElementById('flotas-detail-view'))
+    document.getElementById('flotas-detail-view').style.display='none';
+
+  window.print();
+
+  // Restaurar estado
+  setTimeout(()=>{
+    views.forEach(v=>{ v.style.display=prevDisplay[v.id]; });
+  }, 500);
+}
+
+// ── EXPORT EXCEL ──────────────────────────────────────────────────────────────
+async function exportExcel(){
+  if(!window.XLSX){ alert('SheetJS no disponible.'); return; }
+
+  const wb=XLSX.utils.book_new();
+  const years=[...S.years].sort((a,b)=>a-b);
+  const months=[...S.months].sort((a,b)=>a-b);
+  const kpiYear=Math.max(...years);
+  const prevYear=years[years.indexOf(kpiYear)-1];
+  const monthNames=months.map(m=>MN[m-1]).join(', ');
+  const now=new Date().toLocaleDateString('es-ES');
+
+  // Obtener datos reales desde Supabase (todos los años, todos los meses)
+  const allYearsArr=[...new Set(S.summary.map(r=>r.year))].sort((a,b)=>a-b);
+  const allRows=await fetchData(allYearsArr,[1,2,3,4,5,6,7,8,9,10,11,12]);
+
+  // ── Hoja 1: KPIs ejecutivos con valores numéricos reales ─────────────────
+  const kpiRows=allRows.filter(r=>r.year===kpiYear&&months.includes(r.month));
+  const prevRows=prevYear?allRows.filter(r=>r.year===prevYear&&months.includes(r.month)):[];
+
+  function agg(rows){
+    let totNS=0,totGM=0,eqNS=0,eqGM=0,vcNS=0,vcGM=0;
+    for(const r of rows){
+      totNS+=r.ns||0; totGM+=r.gm||0;
+      if(r.canal==='EQ'){eqNS+=r.ns||0;eqGM+=r.gm||0;}
+      else{vcNS+=r.ns||0;vcGM+=r.gm||0;}
+    }
+    return{totNS,totGM,eqNS,eqGM,vcNS,vcGM};
+  }
+
+  const A=agg(kpiRows);
+  const P=agg(prevRows);
+  const nM=months.length||1;
+  const obYTD=objYTD(months);
+  const obEqYTD=objYTD(months,'EQ');
+  const obVcYTD=objYTD(months,'VC');
+  const proy=A.totNS/nM*12;
+  const eqProy=A.eqNS/nM*12;
+  const vcProy=A.vcNS/nM*12;
+  const gmPct=A.totNS>0?A.totGM/A.totNS:0;
+
+  const kpiData=[
+    ['First Stop Fleet Dashboard — Resumen ejecutivo'],
+    [`Periodo: ${years.join('/')} · Meses: ${monthNames} · Exportado: ${now}`],
+    [],
+    ['KPI','Valor (€)','Objetivo (€)','Cobertura (%)','Nota'],
+    ['NS YTD '+kpiYear, Math.round(A.totNS), Math.round(obYTD), +(A.totNS/obYTD*100).toFixed(1), A.totNS>=obYTD?'✓ En objetivo':'⚠ Por debajo'],
+    ['GM YTD '+kpiYear, Math.round(A.totGM), '', +(gmPct*100).toFixed(1)+'% GM', ''],
+    ['EQ NS YTD', Math.round(A.eqNS), Math.round(obEqYTD), +(A.eqNS/obEqYTD*100).toFixed(1), ''],
+    ['VC NS YTD', Math.round(A.vcNS), Math.round(obVcYTD), +(A.vcNS/obVcYTD*100).toFixed(1), ''],
+    ['Proyección FY', Math.round(proy), Math.round(OB_TOTAL), +(proy/OB_TOTAL*100).toFixed(1), `Gap FY: ${Math.round(proy-OB_TOTAL)}€`],
+    [],
+    ['Comparativa vs año anterior ('+prevYear+')','NS '+kpiYear,'NS '+prevYear,'Variación (%)',''],
+    ['Total', Math.round(A.totNS), Math.round(P.totNS), P.totNS>0?+((A.totNS-P.totNS)/P.totNS*100).toFixed(1):null,''],
+    ['EQ', Math.round(A.eqNS), Math.round(P.eqNS), P.eqNS>0?+((A.eqNS-P.eqNS)/P.eqNS*100).toFixed(1):null,''],
+    ['VC', Math.round(A.vcNS), Math.round(P.vcNS), P.vcNS>0?+((A.vcNS-P.vcNS)/P.vcNS*100).toFixed(1):null,''],
+  ];
+  const wsKpi=XLSX.utils.aoa_to_sheet(kpiData);
+  wsKpi['!cols']=[{wch:30},{wch:14},{wch:14},{wch:14},{wch:35}];
+  XLSX.utils.book_append_sheet(wb,wsKpi,'KPIs');
+
+  // ── Hoja 2: Tabla de flotas — construir desde allRows (no depende de fleetRows) ──
+  const flotaYears=allYearsArr;
+  const latY=Math.max(...flotaYears);
+  const prevY=flotaYears[flotaYears.indexOf(latY)-1];
+
+  // Agrupar por flota y año
+  const flotaMap={};
+  for(const r of allRows){
+    const key=r.fleet_norm;
+    if(!flotaMap[key]) flotaMap[key]={name:key,canals:new Set(),years:{}};
+    flotaMap[key].canals.add(r.canal);
+    if(!flotaMap[key].years[r.year]) flotaMap[key].years[r.year]={ns:0,gm:0,months:new Set()};
+    flotaMap[key].years[r.year].ns+=r.ns||0;
+    flotaMap[key].years[r.year].gm+=r.gm||0;
+    flotaMap[key].years[r.year].months.add(r.month);
+  }
+
+  const dynHeader=['Flota','Canal',...flotaYears.map(yr=>yr+(yr===latY?' YTD (€)':' FY (€)')),'Proyección FY (€)','Var vs PY (%)','GM% (%)','Estado'];
+  const flotaData=[dynHeader];
+
+  Object.values(flotaMap)
+    .filter(f=>f.years[latY]?.ns>0)
+    .sort((a,b)=>(b.years[latY]?.ns||0)-(a.years[latY]?.ns||0))
+    .forEach(f=>{
+      const ch=[...f.canals].sort().join('+');
+      const latest=f.years[latY]||{ns:0,gm:0,months:new Set([1])};
+      const prev=f.years[prevY]||{ns:0,gm:0,months:new Set([1])};
+      const nm=latest.months?.size||1;
+      const proy=latest.ns/nm*12;
+      const prevNm=prev.months?.size||1;
+      const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
+      const varV=prevProy>0?+((proy-prevProy)/prevProy*100).toFixed(1):null;
+      const gp=latest.ns>0?+(latest.gm/latest.ns*100).toFixed(1):0;
+      const dynCols=flotaYears.map(yr=>f.years[yr]?.ns>0?Math.round(f.years[yr].ns):0);
+      flotaData.push([f.name,ch,...dynCols,Math.round(proy),varV,gp,
+        varV===null?'Sin PY':varV>5?'Crece':varV>=-5?'Estable':'Cae']);
+    });
+
+  const wsFlota=XLSX.utils.aoa_to_sheet(flotaData);
+  wsFlota['!cols']=[{wch:40},{wch:8},...flotaYears.map(()=>({wch:14})),{wch:14},{wch:12},{wch:8},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,wsFlota,'Flotas');
+
+  // ── Hoja 3: Datos mensuales con valores reales ────────────────────────────
+  const rawData=[['Año','Mes','Canal','NS (€)','GM (€)','GM%']];
+  const grouped={};
+  for(const r of allRows){
+    const k=`${r.year}_${r.month}_${r.canal}`;
+    if(!grouped[k]) grouped[k]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
+    grouped[k].ns+=r.ns||0;
+    grouped[k].gm+=r.gm||0;
+  }
+  Object.values(grouped)
+    .sort((a,b)=>a.year-b.year||a.month-b.month||a.canal.localeCompare(b.canal))
+    .forEach(r=>{
+      const gp=r.ns>0?+(r.gm/r.ns*100).toFixed(1):0;
+      rawData.push([r.year,MN[r.month-1],r.canal,Math.round(r.ns),Math.round(r.gm),gp]);
+    });
+
+  const wsRaw=XLSX.utils.aoa_to_sheet(rawData);
+  wsRaw['!cols']=[{wch:8},{wch:8},{wch:8},{wch:14},{wch:14},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,wsRaw,'Mensual');
+
+  // ── Descargar ─────────────────────────────────────────────────────────────
+  const fname=`FirstStop_Fleet_${kpiYear}_${now.replace(/\//g,'-')}.xlsx`;
+  XLSX.writeFile(wb,fname);
 }
 
 async function openFleetFromResumen(fleet){
@@ -1449,7 +1645,7 @@ async function delPeriod(year,month,canal){
 // ══════════════════════════════════════════════════════════════════════════════
 const dropZone=document.getElementById('drop-zone');
 const fileInput=document.getElementById('file-input');
-fileInput.onchange=e=>handleFiles([...e.target.files]);
+fileInput.onchange=e=>{handleFiles([...e.target.files]);fileInput.value='';};
 dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag')};
 dropZone.ondragleave=()=>dropZone.classList.remove('drag');
 dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag');handleFiles([...e.dataTransfer.files])};

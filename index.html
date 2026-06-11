@@ -1449,7 +1449,7 @@ async function delPeriod(year,month,canal){
 // ══════════════════════════════════════════════════════════════════════════════
 const dropZone=document.getElementById('drop-zone');
 const fileInput=document.getElementById('file-input');
-fileInput.onchange=e=>handleFiles([...e.target.files]);
+fileInput.onchange=e=>{handleFiles([...e.target.files]);fileInput.value='';};
 dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag')};
 dropZone.ondragleave=()=>dropZone.classList.remove('drag');
 dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag');handleFiles([...e.dataTransfer.files])};

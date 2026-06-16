@@ -421,11 +421,15 @@ tr:hover td{background:var(--lg)}
     <!-- FLOTAS -->
     <div class="view" id="view-flotas">
       <!-- Barra de filtros: años + buscador -->
-      <div class="filter-bar" id="flotas-filter-bar">
+      <div class="filter-bar" id="flotas-filter-bar" style="flex-wrap:wrap;gap:.5rem .85rem">
         <span class="filter-label">Años</span>
         <div class="chip-group" id="yr-chips-f"></div>
+        <span class="filter-label" style="margin-left:.25rem">Canal</span>
+        <div class="chip-group" id="canal-chips-f"></div>
+        <span class="filter-label" style="margin-left:.25rem">Mes</span>
+        <div class="chip-group" id="mo-chips-f"></div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem">
-          <input class="search" id="fleet-q" placeholder="Buscar flota..." oninput="renderFlotasTb()" style="width:220px">
+          <input class="search" id="fleet-q" placeholder="Buscar flota..." oninput="renderFlotasTb()" style="width:200px">
           <span id="fleet-count" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
         </div>
       </div>
@@ -926,7 +930,7 @@ function varCls(v){return v>0.01?'up':v<-0.01?'dn':''}
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════════════════════════════
-let S={years:new Set(),months:new Set(),yearsH:new Set(),yearsF:new Set(),summary:[],fleetRows:[]};
+let S={years:new Set(),months:new Set(),yearsH:new Set(),yearsF:new Set(),canalsF:new Set(['EQ','VC']),monthsF:new Set(),summary:[],fleetRows:[]};
 let charts={};
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -956,9 +960,13 @@ async function loadSummary(){
   // Default: all years, all months
   S.years=years; S.months=months;
   S.yearsH=new Set(years); S.yearsF=new Set(years);
+  S.canalsF=new Set(['EQ','VC']);
+  S.monthsF=new Set(months);
   buildChips();
   buildChipsH();
   buildChipsF();
+  buildChipsCanalF();
+  buildChipsMoF();
   updatePills();
 }
 
@@ -983,6 +991,31 @@ function buildChipsF(){
   const el=document.getElementById('yr-chips-f');
   if(!el) return;
   el.innerHTML=years.map(y=>`<span class="chip on" data-y="${y}" onclick="toggleChipF(this)">${y}</span>`).join('');
+}
+
+function buildChipsCanalF(){
+  const el=document.getElementById('canal-chips-f');
+  if(!el) return;
+  el.innerHTML=['EQ','VC'].map(c=>`<span class="chip on" data-c="${c}" onclick="toggleChipCanalF(this)">${c}</span>`).join('');
+}
+
+function buildChipsMoF(){
+  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
+  const el=document.getElementById('mo-chips-f');
+  if(!el) return;
+  el.innerHTML=months.map(m=>`<span class="chip on" data-m="${m}" onclick="toggleChipMoF(this)">${MN[m-1]}</span>`).join('');
+}
+
+function toggleChipCanalF(el){
+  el.classList.toggle('on');
+  S.canalsF=new Set([...document.querySelectorAll('#canal-chips-f .chip.on')].map(c=>c.dataset.c));
+  refreshFlotas();
+}
+
+function toggleChipMoF(el){
+  el.classList.toggle('on');
+  S.monthsF=new Set([...document.querySelectorAll('#mo-chips-f .chip.on')].map(c=>+c.dataset.m));
+  refreshFlotas();
 }
 
 function toggleChip(el,t){
@@ -1031,7 +1064,7 @@ function nav(id,el){
     document.getElementById('flotas-detail-view').style.display='none';
     document.getElementById('flotas-table-view').style.display='block';
     if(fleetHistChart){fleetHistChart.destroy();fleetHistChart=null;}
-    buildChipsF(); refreshFlotas();
+    buildChipsF(); buildChipsCanalF(); buildChipsMoF(); refreshFlotas();
   }
   else if(id==='canal') refreshCanal();
   else if(id==='periodos') refreshPeriodos();
@@ -1255,10 +1288,14 @@ async function refreshHistorico(){
 let fleetRows=[];
 async function refreshFlotas(){
   const years=S.yearsF.size ? [...S.yearsF].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
-  const rows=await fetchData(years,[1,2,3,4,5,6,7,8,9,10,11,12]);
+  const activeMonths=S.monthsF.size ? [...S.monthsF].sort((a,b)=>a-b) : [1,2,3,4,5,6,7,8,9,10,11,12];
+  const activeCanals=S.canalsF.size ? [...S.canalsF] : ['EQ','VC'];
+  const rows=await fetchData(years,activeMonths);
   if(!rows) return;
+  // Filtrar por canal
+  const filteredRows=rows.filter(r=>activeCanals.includes(r.canal));
   const byFleet={};
-  for(const r of rows){
+  for(const r of filteredRows){
     const k=r.fleet_norm;
     if(!byFleet[k]) byFleet[k]={name:k,years:{},canals:new Set()};
     if(!byFleet[k].years[r.year]) byFleet[k].years[r.year]={ns:0,gm:0,months:new Set()};
@@ -1293,13 +1330,16 @@ function renderFlotasTb(){
   // Top 10 si no hay búsqueda, todos si hay texto
   const toShow=q ? filtered : filtered.slice(0,20);
   const countEl=document.getElementById('fleet-count');
+  const activeCanals=S.canalsF.size ? [...S.canalsF].sort().join('+') : 'EQ+VC';
+  const activeMos=S.monthsF.size ? [...S.monthsF].sort((a,b)=>a-b).map(m=>MN[m-1]).join(',') : 'Todos';
+  const filterCtx=`${activeCanals} · ${activeMos}`;
   if(countEl) countEl.textContent=q
-    ? `${toShow.length} resultado${toShow.length!==1?'s':''}`
-    : `Top ${toShow.length} de ${filtered.length}`;
+    ? `${toShow.length} resultado${toShow.length!==1?'s':''} · ${filterCtx}`
+    : `Top ${toShow.length} de ${filtered.length} · ${filterCtx}`;
   const showEl=document.getElementById('fleet-showing');
   if(showEl) showEl.textContent=q
-    ? `${toShow.length} resultado${toShow.length!==1?'s':''}`
-    : `Top ${toShow.length} · ${filtered.length} flotas total`;
+    ? `${toShow.length} resultado${toShow.length!==1?'s':''} · ${filterCtx}`
+    : `Top ${toShow.length} · ${filtered.length} flotas · ${filterCtx}`;
 
   document.getElementById('fleet-tb').innerHTML=toShow.map(f=>{
     const c=[...f.canals].sort().join('+');

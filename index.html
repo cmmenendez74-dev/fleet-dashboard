@@ -440,16 +440,44 @@ th.sort-desc::after{content:' ↓';font-size:9px}
       <div class="filter-bar">
         <span class="filter-label">Año</span>
         <div class="chip-group" id="yr-chips-h"></div>
+        <span class="filter-label" style="margin-left:.5rem">Modo</span>
+        <div class="chip-group">
+          <span class="chip on" id="hist-mode-anual" onclick="setHistMode('anual')">Anual</span>
+          <span class="chip" id="hist-mode-mtd" onclick="setHistMode('mtd')">Mes vs Mes</span>
+        </div>
+        <span class="filter-label" id="hist-mes-label" style="margin-left:.5rem;display:none">Mes</span>
+        <div class="chip-group" id="hist-mes-chips" style="display:none"></div>
       </div>
-      <div class="yoy-grid" id="yoy-cards"></div>
-      <div class="g2">
-        <div class="card"><div class="card-hd">NS€ anual — evolución mensual</div>
-          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-ns"></canvas></div></div></div>
-        <div class="card"><div class="card-hd">GM% por año y canal</div>
-          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-gm"></canvas></div></div></div>
+
+      <!-- Modo Anual -->
+      <div id="hist-view-anual">
+        <div class="yoy-grid" id="yoy-cards"></div>
+        <div class="g2">
+          <div class="card"><div class="card-hd">NS€ anual — evolución mensual</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-ns"></canvas></div></div></div>
+          <div class="card"><div class="card-hd">GM% por año y canal</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-gm"></canvas></div></div></div>
+        </div>
+        <div class="card"><div class="card-hd">Comparativa mensual apilada</div>
+        <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-bar"></canvas></div></div></div>
       </div>
-      <div class="card"><div class="card-hd">Comparativa mensual apilada</div>
-      <div class="card-bd"><div class="chart-box tall"><canvas id="ch-yoy-bar"></canvas></div></div></div>
+
+      <!-- Modo MTD (Mes vs Mes) -->
+      <div id="hist-view-mtd" style="display:none">
+        <div class="kpi-row" id="mtd-kpis" style="margin-bottom:.85rem"></div>
+        <div class="g2">
+          <div class="card"><div class="card-hd" id="mtd-ns-title">NS€ — comparativa del mes</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-mtd-ns"></canvas></div></div></div>
+          <div class="card"><div class="card-hd" id="mtd-gm-title">GM% — comparativa del mes</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-mtd-gm"></canvas></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-hd" id="mtd-top-title">Top flotas en el mes — NS€</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead><tr id="mtd-tb-head"></tr></thead><tbody id="mtd-tb"></tbody></table>
+          </div></div>
+        </div>
+      </div>
     </div>
 
     <!-- FLOTAS -->
@@ -1032,7 +1060,7 @@ function varCls(v){return v>0.01?'up':v<-0.01?'dn':''}
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════════════════════════════
-let S={years:new Set(),months:new Set(),yearsH:new Set(),yearsF:new Set(),canalsF:new Set(['EQ','VC']),monthsF:new Set(),summary:[],fleetRows:[],fleetIndex:null,fleetCache:null};
+let S={years:new Set(),months:new Set(),yearsH:new Set(),yearsF:new Set(),canalsF:new Set(['EQ','VC']),monthsF:new Set(),summary:[],fleetRows:[],fleetIndex:null,fleetCache:null,histMode:'anual',histMes:null};
 let charts={};
 let _alertData=null;
 let _currentDetailFleet=null;
@@ -1071,6 +1099,7 @@ async function loadSummary(){
   buildChipsF();
   buildChipsCanalF();
   buildChipsMoF();
+  buildChipsMesH();
   updatePills();
   // Construir índice de flotas para buscador global (en background)
   buildFleetIndex();
@@ -1151,7 +1180,8 @@ function toggleChip(el,t){
 function toggleChipH(el){
   el.classList.toggle('on');
   S.yearsH=new Set([...document.querySelectorAll('#yr-chips-h .chip.on')].map(c=>+c.dataset.y));
-  refreshHistorico();
+  if(S.histMode==='mtd') refreshMTD();
+  else refreshHistorico();
 }
 
 function toggleChipF(el){
@@ -1182,7 +1212,7 @@ function nav(id,el){
   el.classList.add('active');
   document.getElementById('topbar-title').textContent=TITLES[id]||id;
   if(id==='resumen') refreshResumen();
-  else if(id==='historico'){buildChipsH(); refreshHistorico();}
+  else if(id==='historico'){buildChipsH(); buildChipsMesH(); applyHistMode(); refreshHistorico();}
   else if(id==='flotas'){
     document.getElementById('flotas-detail-view').style.display='none';
     document.getElementById('flotas-table-view').style.display='block';
@@ -1343,6 +1373,148 @@ async function refreshResumen(){
 // ══════════════════════════════════════════════════════════════════════════════
 // HISTÓRICO
 // ══════════════════════════════════════════════════════════════════════════════
+// ── MODO MTD ──────────────────────────────────────────────────────────────────
+let mtdChart1=null, mtdChart2=null;
+
+function buildChipsMesH(){
+  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
+  const el=document.getElementById('hist-mes-chips');
+  if(!el) return;
+  // Seleccionar por defecto el mes más reciente disponible
+  const latestMo=Math.max(...months);
+  if(S.histMes===null) S.histMes=latestMo;
+  el.innerHTML=months.map(m=>`<span class="chip${m===S.histMes?' on':''}" data-m="${m}" onclick="toggleMesH(this)">${MN[m-1]}</span>`).join('');
+}
+
+function toggleMesH(el){
+  // Solo uno seleccionado a la vez
+  document.querySelectorAll('#hist-mes-chips .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  S.histMes=+el.dataset.m;
+  refreshMTD();
+}
+
+function setHistMode(mode){
+  S.histMode=mode;
+  document.getElementById('hist-mode-anual').classList.toggle('on', mode==='anual');
+  document.getElementById('hist-mode-mtd').classList.toggle('on', mode==='mtd');
+  applyHistMode();
+  if(mode==='anual') refreshHistorico();
+  else refreshMTD();
+}
+
+function applyHistMode(){
+  const isMTD=S.histMode==='mtd';
+  document.getElementById('hist-view-anual').style.display=isMTD?'none':'block';
+  document.getElementById('hist-view-mtd').style.display=isMTD?'block':'none';
+  document.getElementById('hist-mes-label').style.display=isMTD?'':'none';
+  document.getElementById('hist-mes-chips').style.display=isMTD?'flex':'none';
+}
+
+async function refreshMTD(){
+  if(S.histMes===null) return;
+  const mes=S.histMes;
+  const years=S.yearsH.size ? [...S.yearsH].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
+
+  const rows=await fetchData(years,[mes]);
+  if(!rows?.length) return;
+
+  // Actualizar títulos
+  const mesNombre=MN[mes-1];
+  document.getElementById('mtd-ns-title').textContent=`NS€ — ${mesNombre} por año`;
+  document.getElementById('mtd-gm-title').textContent=`GM% — ${mesNombre} por año (EQ y VC)`;
+  document.getElementById('mtd-top-title').textContent=`Top flotas — ${mesNombre} NS€`;
+
+  // Agregar por año y canal
+  const byYear={};
+  for(const r of rows){
+    if(!byYear[r.year]) byYear[r.year]={ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0};
+    byYear[r.year].ns+=r.ns; byYear[r.year].gm+=r.gm;
+    if(r.canal==='EQ'){byYear[r.year].eqns+=r.ns;byYear[r.year].eqgm+=r.gm;}
+    else{byYear[r.year].vcns+=r.ns;byYear[r.year].vcgm+=r.gm;}
+  }
+
+  // KPIs: año más reciente vs anterior
+  const latY=Math.max(...years);
+  const prevY=years[years.indexOf(latY)-1];
+  const cur=byYear[latY]||{ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0};
+  const prev=prevY?byYear[prevY]||{ns:0,gm:0,eqns:0,vcns:0}:{ns:0,gm:0,eqns:0,vcns:0};
+  const varTot=prev.ns>0?(cur.ns-prev.ns)/prev.ns:null;
+  const varEQ=prev.eqns>0?(cur.eqns-prev.eqns)/prev.eqns:null;
+  const varVC=prev.vcns>0?(cur.vcns-prev.vcns)/prev.vcns:null;
+  const gmPct=cur.ns>0?cur.gm/cur.ns:0;
+  const gmPrev=prev.ns>0?prev.gm/prev.ns:0;
+  const gmVar=gmPrev>0?gmPct-gmPrev:null;
+
+  document.getElementById('mtd-kpis').innerHTML=[
+    {cls:'k-tot',l:`NS ${mesNombre} ${latY}`,v:fmtM(cur.ns),s:varTot!==null?`${varStr(varTot)} vs ${prevY} (${fmtM(prev.ns)})`:'Sin año anterior',sc:varCls(varTot)},
+    {cls:'k-eq', l:`EQ ${mesNombre} ${latY}`,v:fmtM(cur.eqns),s:varEQ!==null?`${varStr(varEQ)} vs ${prevY}`:'—',sc:varCls(varEQ)},
+    {cls:'k-vc', l:`VC ${mesNombre} ${latY}`,v:fmtM(cur.vcns),s:varVC!==null?`${varStr(varVC)} vs ${prevY}`:'—',sc:varCls(varVC)},
+    {cls:'k-gm', l:`GM% ${mesNombre} ${latY}`,v:fmtP(gmPct),s:gmVar!==null?`${gmVar>=0?'+':''}${(gmVar*100).toFixed(1)} pp vs ${prevY}`:'—',sc:''},
+  ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
+    <div class="kpi-val">${k.v}</div><div class="kpi-sub ${k.sc}">${k.s}</div></div>`).join('');
+
+  // Gráfico barras NS por año
+  const nsData=years.map(yr=>byYear[yr]?Math.round(byYear[yr].ns):null);
+  const nsColors=years.map(yr=>YCOL[yr]||'#999');
+  if(mtdChart1) mtdChart1.destroy();
+  const ctx1=document.getElementById('ch-mtd-ns')?.getContext('2d');
+  if(ctx1) mtdChart1=new Chart(ctx1,{
+    type:'bar',
+    data:{labels:years.map(String),datasets:[
+      {label:'EQ',data:years.map(yr=>byYear[yr]?Math.round(byYear[yr].eqns):null),backgroundColor:years.map(yr=>(YCOL[yr]||'#999')),stack:'s'},
+      {label:'VC',data:years.map(yr=>byYear[yr]?Math.round(byYear[yr].vcns):null),backgroundColor:years.map(yr=>(YCOL[yr]||'#999')+'66'),stack:'s'},
+    ]},
+    options:chartOpts({stacked:true})
+  });
+
+  // Gráfico GM% por año y canal
+  const gmDs2=[
+    {label:'EQ',data:years.map(yr=>byYear[yr]?.eqns>0?+(byYear[yr].eqgm/byYear[yr].eqns*100).toFixed(1):null),
+     borderColor:'#E2001A',backgroundColor:'transparent',tension:.3,pointRadius:5,pointHoverRadius:7,borderWidth:2},
+    {label:'VC',data:years.map(yr=>byYear[yr]?.vcns>0?+(byYear[yr].vcgm/byYear[yr].vcns*100).toFixed(1):null),
+     borderColor:'#1565C0',backgroundColor:'transparent',tension:.3,pointRadius:5,pointHoverRadius:7,borderWidth:2,borderDash:[4,2]},
+  ];
+  if(mtdChart2) mtdChart2.destroy();
+  const ctx2=document.getElementById('ch-mtd-gm')?.getContext('2d');
+  if(ctx2) mtdChart2=new Chart(ctx2,{type:'line',data:{labels:years.map(String),datasets:gmDs2},options:chartOpts({pct:true})});
+
+  // Tabla top flotas del mes — todos los años seleccionados
+  const byFleet={};
+  for(const r of rows){
+    if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={name:r.fleet_norm,canals:new Set(),years:{}};
+    if(!byFleet[r.fleet_norm].years[r.year]) byFleet[r.fleet_norm].years[r.year]={ns:0,gm:0};
+    byFleet[r.fleet_norm].years[r.year].ns+=r.ns;
+    byFleet[r.fleet_norm].years[r.year].gm+=r.gm;
+    byFleet[r.fleet_norm].canals.add(r.canal);
+  }
+  const fleetList=Object.values(byFleet).sort((a,b)=>(b.years[latY]?.ns||0)-(a.years[latY]?.ns||0)).slice(0,25);
+
+  // Header dinámico
+  const headEl=document.getElementById('mtd-tb-head');
+  if(headEl){
+    headEl.innerHTML='<th>Flota</th><th>Canal</th>'
+      +years.map(yr=>`<th class="r">${yr}</th>`).join('')
+      +'<th class="r">Var vs PY</th><th class="r">GM%</th>';
+  }
+
+  document.getElementById('mtd-tb').innerHTML=fleetList.map(f=>{
+    const c=[...f.canals].sort().join('+');
+    const curNS=f.years[latY]?.ns||0;
+    const prevNS=prevY?f.years[prevY]?.ns||0:0;
+    const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
+    const gp=f.years[latY]?.ns>0?f.years[latY].gm/f.years[latY].ns:0;
+    const dynCols=years.map(yr=>`<td class="r">${f.years[yr]?.ns>0?fmtM(f.years[yr].ns):'—'}</td>`).join('');
+    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')">
+      <td style="color:var(--bl)">${f.name}</td>
+      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      ${dynCols}
+      <td class="r ${varCls(varV)}">${varStr(varV)}</td>
+      <td class="r">${fmtP(gp)}</td>
+    </tr>`;
+  }).join('');
+}
+
 async function refreshHistorico(){
   const years=S.yearsH.size ? [...S.yearsH].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
   const rows=await fetchData(years,[1,2,3,4,5,6,7,8,9,10,11,12]);

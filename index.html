@@ -429,8 +429,8 @@ th.sort-desc::after{content:' ↓';font-size:9px}
       <div class="card"><div class="card-hd">Top flotas — NS YTD</div>
       <div class="card-bd"><div class="tbl-wrap">
         <table><thead><tr>
-          <th>Flota</th><th>Canal</th><th class="r">NS YTD</th><th class="r">GM YTD</th>
-          <th class="r">GM%</th><th class="r">Proy FY</th><th>Var vs PY</th><th>Estado</th>
+          <th>Flota</th><th>Canal</th><th class="r">NS YTD</th><th class="r">NS PY</th><th class="r">Var vs PY</th>
+          <th class="r">GM YTD</th><th class="r">GM%</th><th class="r">Proy FY</th><th>Estado</th>
         </tr></thead><tbody id="top-tb"></tbody></table>
       </div></div></div>
     </div>
@@ -1283,26 +1283,43 @@ async function refreshResumen(){
   const mtdNS=mtdRows.reduce((s,r)=>s+r.ns,0);
   const mtdGM=mtdRows.reduce((s,r)=>s+r.gm,0);
 
-  // KPIs ejecutivos, solo año KPI.
+  // KPIs ejecutivos — año KPI + comparativa vs año anterior
+  const prevYear=yrs[yrs.indexOf(kpiYear)-1];
+  const prevRows2=prevYear ? rows.filter(r=>r.year===prevYear) : [];
+  const P2=aggregate(prevRows2);
+  const varTotKpi=P2.totNS>0?(A.totNS-P2.totNS)/P2.totNS:null;
+  const varEqKpi=P2.eqNS>0?(A.eqNS-P2.eqNS)/P2.eqNS:null;
+  const varVcKpi=P2.vcNS>0?(A.vcNS-P2.vcNS)/P2.vcNS:null;
+  const pyLabel=prevYear?`vs ${prevYear}: `:'Sin año anterior';
+  const mtdPrevRows=prevYear?rows.filter(r=>r.year===prevYear&&r.month===latestMonth):[];
+  const mtdPrevNS=mtdPrevRows.reduce((s,r)=>s+r.ns,0);
+  const mtdVarV=mtdPrevNS>0?(mtdNS-mtdPrevNS)/mtdPrevNS:null;
   document.getElementById('kpis-r').innerHTML=[
-    {cls:'k-tot',l:`NS YTD ${kpiYear} (${nM}m)`,v:fmtM(A.totNS),s:`vs objetivo YTD: ${(A.totNS-obYTD)>=0?'+':''}${fmtM(A.totNS-obYTD)}`,sc:A.totNS>=obYTD?'up':'dn'},
-    {cls:'k-gm', l:`GM YTD ${kpiYear}`,v:fmtM(A.totGM),s:`GM% ${fmtP(A.totGM/A.totNS)}`,sc:''},
-    {cls:'k-eq', l:'EQ NS YTD',v:fmtM(A.eqNS),s:`Obj. ${fmtM(obEqYTD)} · ${sem(A.eqNS/obEqYTD)} ${fmtP(A.eqNS/obEqYTD)}`,sc:A.eqNS>=obEqYTD?'up':'dn'},
-    {cls:'k-vc', l:'VC NS YTD',v:fmtM(A.vcNS),s:`Obj. ${fmtM(obVcYTD)} · ${sem(A.vcNS/obVcYTD)} ${fmtP(A.vcNS/obVcYTD)}`,sc:A.vcNS>=obVcYTD?'up':'dn'},
+    {cls:'k-tot',l:`NS YTD ${kpiYear} (${nM}m)`,v:fmtM(A.totNS),
+     s:varTotKpi!==null?`${pyLabel}${fmtM(P2.totNS)} <b class="${varCls(varTotKpi)}">${varStr(varTotKpi)}</b>`:`Obj YTD: ${(A.totNS-obYTD)>=0?'+':''}${fmtM(A.totNS-obYTD)}`,sc:varCls(varTotKpi)||''},
+    {cls:'k-gm', l:`GM YTD ${kpiYear}`,v:fmtM(A.totGM),
+     s:P2.totNS>0?`GM% ${fmtP(A.totGM/A.totNS)} · PY ${fmtP(P2.totGM/P2.totNS)}`:`GM% ${fmtP(A.totGM/A.totNS)}`,sc:''},
+    {cls:'k-eq', l:`EQ NS YTD ${kpiYear}`,v:fmtM(A.eqNS),
+     s:varEqKpi!==null?`${pyLabel}${fmtM(P2.eqNS)} <b class="${varCls(varEqKpi)}">${varStr(varEqKpi)}</b>`:`Obj. ${fmtM(obEqYTD)} ${fmtP(A.eqNS/obEqYTD)}`,sc:varCls(varEqKpi)||''},
+    {cls:'k-vc', l:`VC NS YTD ${kpiYear}`,v:fmtM(A.vcNS),
+     s:varVcKpi!==null?`${pyLabel}${fmtM(P2.vcNS)} <b class="${varCls(varVcKpi)}">${varStr(varVcKpi)}</b>`:`Obj. ${fmtM(obVcYTD)} ${fmtP(A.vcNS/obVcYTD)}`,sc:varCls(varVcKpi)||''},
     {cls:'k-py', l:'Proyección FY',v:fmtM(proy),s:`${sem(cob)} Cobertura ${fmtP(cob)} vs OB26`,sc:cob>=1?'up':'dn'},
-    {cls:'k-tot',l:`MTD ${MN[latestMonth-1]} ${kpiYear}`,v:fmtM(mtdNS),s:`GM ${fmtM(mtdGM)} · ${fmtP(mtdGM/mtdNS)}`,sc:''},
+    {cls:'k-tot',l:`MTD ${MN[latestMonth-1]} ${kpiYear}`,v:fmtM(mtdNS),
+     s:mtdVarV!==null?`${pyLabel}${fmtM(mtdPrevNS)} <b class="${varCls(mtdVarV)}">${varStr(mtdVarV)}</b>`:`GM ${fmtM(mtdGM)} · ${fmtP(mtdGM/mtdNS)}`,sc:varCls(mtdVarV)||''},
   ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
     <div class="kpi-val">${k.v}</div><div class="kpi-sub ${k.sc}">${k.s}</div></div>`).join('');
 
   document.getElementById('objective-cards').innerHTML=[
-    {l:'Total vs OB26',real:A.totNS,obj:obYTD,proy,fy:OB_TOTAL},
-    {l:'Equity vs OB26',real:A.eqNS,obj:obEqYTD,proy:eqProy,fy:OBJ26.EQ.ns},
-    {l:'VC vs OB26',real:A.vcNS,obj:obVcYTD,proy:vcProy,fy:OBJ26.VC.ns},
+    {l:'Total vs OB26',real:A.totNS,py:P2.totNS,obj:obYTD,proy,fy:OB_TOTAL},
+    {l:'Equity vs OB26',real:A.eqNS,py:P2.eqNS,obj:obEqYTD,proy:eqProy,fy:OBJ26.EQ.ns},
+    {l:'VC vs OB26',real:A.vcNS,py:P2.vcNS,obj:obVcYTD,proy:vcProy,fy:OBJ26.VC.ns},
   ].map(x=>{
-    const cov=x.real/x.obj, fycov=x.proy/x.fy;
+    const fycov=x.proy/x.fy;
+    const pyVar=x.py>0?(x.real-x.py)/x.py:null;
+    const pyTxt=pyVar!==null?`PY ${fmtM(x.py)} · <b class="${varCls(pyVar)}">${varStr(pyVar)}</b>`:'Sin PY';
     return `<div class="obj-card ${statusClass(fycov)}"><div class="obj-lbl">${x.l}</div>
-      <div class="obj-val">${sem(fycov)} ${fmtP(fycov)}</div>
-      <div class="obj-sub">YTD: ${fmtM(x.real)} / ${fmtM(x.obj)}<br>Proy: ${fmtM(x.proy)} · Gap FY ${(x.proy-x.fy)>=0?'+':''}${fmtM(x.proy-x.fy)}</div></div>`;
+      <div class="obj-val">${sem(fycov)} ${fmtP(fycov)} vs OB</div>
+      <div class="obj-sub">YTD: ${fmtM(x.real)} / Obj ${fmtM(x.obj)}<br>${pyTxt}<br>Proy: ${fmtM(x.proy)} · Gap FY ${(x.proy-x.fy)>=0?'+':''}${fmtM(x.proy-x.fy)}</div></div>`;
   }).join('');
 
   const mv=Object.values(allAgg.monthly);
@@ -1326,7 +1343,6 @@ async function refreshResumen(){
   makeChart('ch-gmpct','line',mos.map(m=>MN[m-1]),gmDs,{pct:true});
 
   // Variaciones por flota contra el año anterior, usando mismos meses seleccionados.
-  const prevYear=yrs[yrs.indexOf(kpiYear)-1];
   const curByKpi=aggregate(rows.filter(r=>r.year===kpiYear)).byFleet;
   const prevByKpi=prevYear ? aggregate(rows.filter(r=>r.year===prevYear)).byFleet : {};
   const varRows=[];
@@ -1359,13 +1375,14 @@ async function refreshResumen(){
     const prevNs=prevByKpi[f.name]?.ns||0;
     const varV=prevNs>0?(f.ns-prevNs)/prevNs:null;
     const st=growthState(varV, prevNs>0);
-    const bw=varV===null?50:Math.max(4,Math.min(100,Math.round((varV+0.50)*100)));
     return`<tr class="tr-link" onclick="openFleetFromResumen('${f.name.replace(/'/g,"\'")}')">
       <td>${f.name}</td>
       <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
-      <td class="r">${fmtM(f.ns)}</td><td class="r">${fmtM(f.gm)}</td>
+      <td class="r">${fmtM(f.ns)}</td>
+      <td class="r ${prevNs>0?'':''}"><span style="color:var(--muted)">${prevNs>0?fmtM(prevNs):'—'}</span></td>
+      <td class="r ${varCls(varV)}">${varStr(varV)}</td>
+      <td class="r">${fmtM(f.gm)}</td>
       <td class="r">${fmtP(p)}</td><td class="r">${fmtM(pr)}</td>
-      <td style="min-width:110px"><div style="display:flex;align-items:center;gap:6px"><span class="${varCls(varV)}" style="width:50px;text-align:right">${varV===null?'—':varStr(varV)}</span><div class="bar" style="flex:1"><div class="bar-f ${st.cls}" style="width:${bw}%"></div></div></div></td>
       <td title="${st.txt}">${st.dot}</td></tr>`;
   }).join('');
 }
@@ -1653,11 +1670,10 @@ function renderFlotasTb(){
     const prev=f.years[prevY]||{ns:0,gm:0,months:new Set([1])};
     const nm=latest.months.size||1;
     const proy=latest.ns/nm*12;
-    const prevNm=prev.months?.size||1;
-    const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
-    const varV=prevProy>0?(proy-prevProy)/prevProy:null;
+    // Var vs PY: comparar NS YTD real vs NS del mismo período del año anterior
+    const varV=prev.ns>0?(latest.ns-prev.ns)/prev.ns:null;
     const gp=latest.ns>0?latest.gm/latest.ns:0;
-    return{...f,_ns:latest.ns,_proy:proy,_var:varV,_gm:gp};
+    return{...f,_ns:latest.ns,_proy:proy,_var:varV,_gm:gp,_pyNS:prev.ns};
   }).filter(f=>f._ns>=nsMin);
   // Sorting
   enriched.sort((a,b)=>{
@@ -1687,7 +1703,7 @@ function renderFlotasTb(){
       <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
       ${dynCols}
       <td class="r">${f._proy>0?fmtM(f._proy):'—'}</td>
-      <td class="r ${varCls(f._var)}">${varStr(f._var)}</td>
+      <td class="r ${varCls(f._var)}">${varStr(f._var)}${f._pyNS>0?`<br><span style="font-size:10px;color:var(--muted)">${fmtM(f._pyNS)}</span>`:''}</td>
       <td class="r">${fmtP(f._gm)}</td>
       <td class="r">${fmtM(f._ns)}</td>
       <td title="${growthLabel(f._var)}">${growthSem(f._var)}</td>
@@ -1963,19 +1979,29 @@ async function refreshCanal(){
   const yrs=selectedYears;
   const mos=selectedMonths;
 
-  function kpiHtml(ns,gm,nm,canal){
+  // Año anterior para canal
+  const prevYrCanal=selectedYears[selectedYears.indexOf(kpiYear)-1];
+  const prevKpiRowsC=prevYrCanal?rows.filter(r=>r.year===prevYrCanal):[];
+  let pyEqNS=0,pyVcNS=0,pyEqGM=0,pyVcGM=0;
+  for(const r of prevKpiRowsC){
+    if(r.canal==='EQ'){pyEqNS+=r.ns;pyEqGM+=r.gm;}else{pyVcNS+=r.ns;pyVcGM+=r.gm;}
+  }
+  function kpiHtml(ns,gm,nm,canal,pyNS,pyGM){
     const annual=objAnnual(canal);
     const ytdObj=objYTD(mos,canal);
     const proy=ns/nm*12;
+    const varV=pyNS>0?(ns-pyNS)/pyNS:null;
+    const pyStr=varV!==null?`PY ${fmtM(pyNS)} · <b class="${varCls(varV)}">${varStr(varV)}</b>`:'Sin año anterior';
+    const pyGmPct=pyNS>0?pyGM/pyNS:null;
     return[
-      {l:`NS YTD ${kpiYear}`,v:fmtM(ns),s:`Obj YTD ${fmtM(ytdObj)} · ${sem(ns/ytdObj)} ${fmtP(ns/ytdObj)}`},
-      {l:'GM YTD',v:fmtM(gm),s:`GM% ${fmtP(ns>0?gm/ns:0)}`},
+      {l:`NS YTD ${kpiYear}`,v:fmtM(ns),s:pyStr},
+      {l:'GM YTD',v:fmtM(gm),s:`GM% ${fmtP(ns>0?gm/ns:0)}${pyGmPct!==null?' · PY '+fmtP(pyGmPct):''}` },
       {l:'Proy FY',v:fmtM(proy),s:`OB26 ${fmtM(annual)} · ${fmtP(proy/annual)}`},
       {l:'Gap FY',v:(proy-annual>=0?'+':'')+fmtM(proy-annual),s:sem(proy/annual)},
     ].map(k=>`<div class="kpi"><div class="kpi-lbl">${k.l}</div><div class="kpi-val" style="font-size:16px">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`).join('');
   }
-  document.getElementById('kpis-eq').innerHTML=kpiHtml(eqNS,eqGM,nM,'EQ');
-  document.getElementById('kpis-vc').innerHTML=kpiHtml(vcNS,vcGM,nM,'VC');
+  document.getElementById('kpis-eq').innerHTML=kpiHtml(eqNS,eqGM,nM,'EQ',pyEqNS,pyEqGM);
+  document.getElementById('kpis-vc').innerHTML=kpiHtml(vcNS,vcGM,nM,'VC',pyVcNS,pyVcGM);
 
   function canalDs(canal,yrList){
     return yrList.map(yr=>({
@@ -1988,11 +2014,15 @@ async function refreshCanal(){
   makeChart('ch-eq','line',mos.map(m=>MN[m-1]),canalDs('EQ',yrs),{});
   makeChart('ch-vc','line',mos.map(m=>MN[m-1]),canalDs('VC',yrs),{});
 
-  const compDs=[
-    {label:'EQ',data:mos.map(m=>{const rs=mv.filter(x=>x.year===kpiYear&&x.canal==='EQ'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
-    {label:'VC',data:mos.map(m=>{const rs=mv.filter(x=>x.year===kpiYear&&x.canal==='VC'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),backgroundColor:'rgba(21,101,192,0.8)',borderRadius:3},
-  ];
-  makeChart('ch-canal','bar',mos.map(m=>MN[m-1]),compDs,{stacked:false});
+  // Comparativa EQ vs VC: año actual + año anterior si existe
+  const compYrs=prevYrCanal?[prevYrCanal,kpiYear]:[kpiYear];
+  const compDs=compYrs.flatMap(yr=>[
+    {label:`EQ ${yr}`,data:mos.map(m=>{const rs=mv.filter(x=>x.year===yr&&x.canal==='EQ'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),
+     backgroundColor:yr===kpiYear?'rgba(226,0,26,0.85)':'rgba(226,0,26,0.35)',borderRadius:2,stack:String(yr)},
+    {label:`VC ${yr}`,data:mos.map(m=>{const rs=mv.filter(x=>x.year===yr&&x.canal==='VC'&&x.month===m);const n=rs.reduce((s,r)=>s+r.ns,0);return n>0?Math.round(n):null}),
+     backgroundColor:yr===kpiYear?'rgba(21,101,192,0.85)':'rgba(21,101,192,0.35)',borderRadius:2,stack:String(yr)},
+  ]);
+  makeChart('ch-canal','bar',mos.map(m=>MN[m-1]),compDs,{stacked:true});
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

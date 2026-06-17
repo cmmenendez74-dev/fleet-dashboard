@@ -601,8 +601,8 @@ th.sort-desc::after{content:' ↓';font-size:9px}
       <div id="alert-summary" class="kpi-row" style="margin-bottom:.85rem"></div>
       <div class="g2">
         <div class="card" style="border-top:3px solid var(--red)">
-          <div class="card-hd">🔴 Flotas que caen vs año anterior</div>
-          <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th>Canal</th><th class="r">NS actual</th><th class="r">NS anterior</th><th class="r">Variación</th></tr></thead><tbody id="alert-drop-tb"></tbody></table></div></div>
+          <div class="card-hd">🔴 Flotas que caen vs año anterior <span id="alert-drop-period" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
+          <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th>Canal</th><th class="r">NS Actual</th><th class="r">NS Ant. (mismo período)</th><th class="r">Variación</th></tr></thead><tbody id="alert-drop-tb"></tbody></table></div></div>
         </div>
         <div class="card" style="border-top:3px solid var(--am)">
           <div class="card-hd">🟡 Flotas con GM% bajo</div>
@@ -614,8 +614,8 @@ th.sort-desc::after{content:' ↓';font-size:9px}
         <div class="card-bd"><div id="alert-missing" style="font-size:12px;line-height:1.9;color:var(--muted)">Calculando...</div></div>
       </div>
       <div class="card" style="border-top:3px solid var(--gr)">
-        <div class="card-hd">🟢 Flotas que más crecen</div>
-        <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th>Canal</th><th class="r">NS actual</th><th class="r">NS anterior</th><th class="r">Variación</th></tr></thead><tbody id="alert-grow-tb"></tbody></table></div></div>
+        <div class="card-hd">🟢 Flotas que más crecen <span id="alert-grow-period" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
+        <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th>Canal</th><th class="r">NS Actual</th><th class="r">NS Ant. (mismo período)</th><th class="r">Variación</th></tr></thead><tbody id="alert-grow-tb"></tbody></table></div></div>
       </div>
     </div>
 
@@ -2458,21 +2458,25 @@ async function refreshAlertas(){
   }
 
   const latestMonth=Math.max(...[...new Set(rows.filter(r=>r.year===latY).map(r=>r.month))]);
+  // Meses YTD del año actual (ej. Ene-Jun si latestMonth=6)
+  const ytdMonths=new Set([...Array(latestMonth).keys()].map(i=>i+1));
   const allFleets=Object.values(byFleet);
 
-  // Calcular métricas
+  // Calcular métricas — comparar siempre YTD real vs mismo período (mismos meses) del año anterior
   const enriched=allFleets.map(f=>{
     const lat=f.years[latY]||{ns:0,gm:0,months:new Set()};
-    const prev=f.years[prevY]||{ns:0,gm:0};
+    // NS anterior: solo los mismos meses YTD, no el FY completo
+    const prevYearData=f.years[prevY];
+    const prevRows=rows.filter(r=>r.fleet_norm===f.name&&r.year===prevY&&ytdMonths.has(r.month));
+    const prevNsYTD=prevRows.reduce((s,r)=>s+r.ns,0);
+    const prevGmYTD=prevRows.reduce((s,r)=>s+r.gm,0);
     const nm=lat.months.size||1;
     const proy=lat.ns/nm*12;
-    const prevNm=f.years[prevY]?.months?.size||nm;
-    const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
-    const varV=prevProy>0?(proy-prevProy)/prevProy:null;
+    const varV=prevNsYTD>0?(lat.ns-prevNsYTD)/prevNsYTD:null;
     const gp=lat.ns>0?lat.gm/lat.ns:0;
     const hasLatestMo=lat.months.has(latestMonth);
     const c=[...f.canals].sort().join('+');
-    return{name:f.name,canal:c,nsLat:lat.ns,nsPrev:prev.ns,proy,prevProy,varV,gp,hasLatestMo};
+    return{name:f.name,canal:c,nsLat:lat.ns,nsPrev:prevNsYTD,proy,varV,gp,hasLatestMo};
   }).filter(f=>f.nsLat>=minNS||f.nsPrev>=minNS);
 
   // Alertas: caídas
@@ -2484,12 +2488,13 @@ async function refreshAlertas(){
   // Crecimientos
   const grows=enriched.filter(f=>f.varV!==null&&f.varV>0.05).sort((a,b)=>b.varV-a.varV).slice(0,10);
 
-  // Summary KPIs
+  // Summary KPIs — YTD real vs mismo período año anterior
+  const ytdLabel=`YTD Ene-${MN[latestMonth-1]}`;
   document.getElementById('alert-summary').innerHTML=[
-    {cls:'k-py',l:'Flotas con caída',v:drops.length,s:`>${(dropPct*100).toFixed(0)}% vs PY`},
+    {cls:'k-py',l:'Flotas con caída',v:drops.length,s:`>${(dropPct*100).toFixed(0)}% · ${ytdLabel} vs PY`},
     {cls:'k-eq',l:'GM% bajo umbral',v:lowGm.length,s:`<${(gmThresh*100).toFixed(0)}%`},
     {cls:'k-vc',l:'Sin datos '+MN[latestMonth-1],v:missing.length,s:'Mes más reciente'},
-    {cls:'k-gm',l:'Flotas creciendo',v:grows.length,s:'>5% vs PY'},
+    {cls:'k-gm',l:'Flotas creciendo',v:grows.length,s:`>5% · ${ytdLabel} vs PY`},
   ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
     <div class="kpi-val">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`).join('');
 
@@ -2504,10 +2509,17 @@ async function refreshAlertas(){
     return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\'")}')">
       <td style="color:var(--bl)">${f.name}</td><td>${badge}</td>
       <td class="r">${fmtM(f.nsLat)}</td>
-      <td class="r">${fmtM(f.nsPrev)}</td>
-      <td class="r ${varCls(f.varV)}">${varStr(f.varV)}</td>
+      <td class="r"><span style="color:var(--muted)">${f.nsPrev>0?fmtM(f.nsPrev):'—'}</span></td>
+      <td class="r ${varCls(f.varV)}">${f.varV!==null?varStr(f.varV):'Sin PY'}</td>
     </tr>`;
   };
+
+  // Indicar el período en los títulos
+  const periodTxt=`Ene-${MN[latestMonth-1]} ${latY} vs Ene-${MN[latestMonth-1]} ${prevY}`;
+  const dpEl=document.getElementById('alert-drop-period');
+  const gpEl=document.getElementById('alert-grow-period');
+  if(dpEl) dpEl.textContent=`· ${periodTxt}`;
+  if(gpEl) gpEl.textContent=`· ${periodTxt}`;
 
   document.getElementById('alert-drop-tb').innerHTML=drops.length
     ? drops.slice(0,15).map(f=>trAlert(f)).join('')

@@ -202,6 +202,25 @@ th.sort-desc::after{content:' ↓';font-size:9px}
 /* Export fleet button */
 .fleet-export-btn{padding:4px 10px;border-radius:6px;border:1px solid #1D6F42;background:#fff;color:#1D6F42;font-size:11px;font-weight:500;cursor:pointer}
 .fleet-export-btn:hover{background:#E8F5E9}
+/* MTD comparativa header */
+.mtd-compare{display:grid;grid-template-columns:1fr auto 1fr;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:.85rem}
+.mtd-col{padding:1.1rem 1.5rem}
+.mtd-col.prev{background:var(--bg2)}
+.mtd-yr{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:.25rem}
+.mtd-val{font-size:26px;font-weight:700;color:var(--dg);line-height:1.1;font-variant-numeric:tabular-nums}
+.mtd-sub{font-size:12px;color:var(--muted);margin-top:.2rem}
+.mtd-divider{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 1.4rem;background:#fff;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+.mtd-delta{font-size:22px;font-weight:800;line-height:1;text-align:center}
+.mtd-delta.up{color:var(--gr)}.mtd-delta.dn{color:var(--red)}.mtd-delta.neu{color:var(--muted)}
+.mtd-delta-abs{font-size:12px;color:var(--muted);margin-top:.2rem;text-align:center;font-variant-numeric:tabular-nums}
+.mtd-metrics{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-top:1px solid var(--border)}
+.mtd-metric{padding:.6rem 1.2rem;border-right:1px solid var(--border)}
+.mtd-metric:last-child{border-right:none}
+.mtd-metric-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.mtd-metric-row{display:flex;align-items:baseline;gap:.4rem;margin-top:.1rem;flex-wrap:wrap}
+.mtd-metric-cur{font-size:14px;font-weight:700;color:var(--dg)}
+.mtd-metric-prev{font-size:11px;color:var(--muted)}
+.mtd-metric-var{font-size:11px;font-weight:600}
 </style>
 </head>
 <body>
@@ -464,13 +483,31 @@ th.sort-desc::after{content:' ↓';font-size:9px}
 
       <!-- Modo MTD (Mes vs Mes) -->
       <div id="hist-view-mtd" style="display:none">
-        <div class="kpi-row" id="mtd-kpis" style="margin-bottom:.85rem"></div>
-        <div class="g2">
-          <div class="card"><div class="card-hd" id="mtd-ns-title">NS€ — comparativa del mes</div>
-            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-mtd-ns"></canvas></div></div></div>
-          <div class="card"><div class="card-hd" id="mtd-gm-title">GM% — comparativa del mes</div>
-            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-mtd-gm"></canvas></div></div></div>
+
+        <!-- Cabecera comparativa: bloque visual año actual vs año anterior -->
+        <div id="mtd-header" style="margin-bottom:.85rem"></div>
+
+        <!-- Gráfico principal: barras agrupadas EQ+VC por año -->
+        <div class="card" style="margin-bottom:.85rem">
+          <div class="card-hd" id="mtd-ns-title">NS€ — comparativa del mes por año</div>
+          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-mtd-ns"></canvas></div></div>
         </div>
+
+        <!-- Detalle canal + GM% -->
+        <div class="g2" style="margin-bottom:.85rem">
+          <div class="card">
+            <div class="card-hd" id="mtd-canal-title">Desglose EQ vs VC</div>
+            <div class="card-bd"><div class="tbl-wrap">
+              <table><thead><tr id="mtd-canal-head"></tr></thead><tbody id="mtd-canal-tb"></tbody></table>
+            </div></div>
+          </div>
+          <div class="card">
+            <div class="card-hd" id="mtd-gm-title">GM% por año y canal</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-mtd-gm"></canvas></div></div>
+          </div>
+        </div>
+
+        <!-- Tabla top flotas -->
         <div class="card">
           <div class="card-hd" id="mtd-top-title">Top flotas en el mes — NS€</div>
           <div class="card-bd"><div class="tbl-wrap">
@@ -1284,7 +1321,7 @@ async function refreshResumen(){
   const mtdGM=mtdRows.reduce((s,r)=>s+r.gm,0);
 
   // KPIs ejecutivos — año KPI + comparativa vs año anterior
-  const prevYear=yrs[yrs.indexOf(kpiYear)-1];
+  const prevYear=selectedYears[selectedYears.indexOf(kpiYear)-1];
   const prevRows2=prevYear ? rows.filter(r=>r.year===prevYear) : [];
   const P2=aggregate(prevRows2);
   const varTotKpi=P2.totNS>0?(A.totNS-P2.totNS)/P2.totNS:null;
@@ -1432,15 +1469,10 @@ async function refreshMTD(){
   if(S.histMes===null) return;
   const mes=S.histMes;
   const years=S.yearsH.size ? [...S.yearsH].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
+  const mesNombre=MN[mes-1];
 
   const rows=await fetchData(years,[mes]);
   if(!rows?.length) return;
-
-  // Actualizar títulos
-  const mesNombre=MN[mes-1];
-  document.getElementById('mtd-ns-title').textContent=`NS€ — ${mesNombre} por año`;
-  document.getElementById('mtd-gm-title').textContent=`GM% — ${mesNombre} por año (EQ y VC)`;
-  document.getElementById('mtd-top-title').textContent=`Top flotas — ${mesNombre} NS€`;
 
   // Agregar por año y canal
   const byYear={};
@@ -1451,52 +1483,174 @@ async function refreshMTD(){
     else{byYear[r.year].vcns+=r.ns;byYear[r.year].vcgm+=r.gm;}
   }
 
-  // KPIs: año más reciente vs anterior
   const latY=Math.max(...years);
-  const prevY=years[years.indexOf(latY)-1];
+  const prevY=years.length>1?years[years.indexOf(latY)-1]:null;
   const cur=byYear[latY]||{ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0};
-  const prev=prevY?byYear[prevY]||{ns:0,gm:0,eqns:0,vcns:0}:{ns:0,gm:0,eqns:0,vcns:0};
-  const varTot=prev.ns>0?(cur.ns-prev.ns)/prev.ns:null;
-  const varEQ=prev.eqns>0?(cur.eqns-prev.eqns)/prev.eqns:null;
-  const varVC=prev.vcns>0?(cur.vcns-prev.vcns)/prev.vcns:null;
-  const gmPct=cur.ns>0?cur.gm/cur.ns:0;
-  const gmPrev=prev.ns>0?prev.gm/prev.ns:0;
-  const gmVar=gmPrev>0?gmPct-gmPrev:null;
+  const prev=prevY?(byYear[prevY]||{ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0}):null;
 
-  document.getElementById('mtd-kpis').innerHTML=[
-    {cls:'k-tot',l:`NS ${mesNombre} ${latY}`,v:fmtM(cur.ns),s:varTot!==null?`${varStr(varTot)} vs ${prevY} (${fmtM(prev.ns)})`:'Sin año anterior',sc:varCls(varTot)},
-    {cls:'k-eq', l:`EQ ${mesNombre} ${latY}`,v:fmtM(cur.eqns),s:varEQ!==null?`${varStr(varEQ)} vs ${prevY}`:'—',sc:varCls(varEQ)},
-    {cls:'k-vc', l:`VC ${mesNombre} ${latY}`,v:fmtM(cur.vcns),s:varVC!==null?`${varStr(varVC)} vs ${prevY}`:'—',sc:varCls(varVC)},
-    {cls:'k-gm', l:`GM% ${mesNombre} ${latY}`,v:fmtP(gmPct),s:gmVar!==null?`${gmVar>=0?'+':''}${(gmVar*100).toFixed(1)} pp vs ${prevY}`:'—',sc:''},
-  ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
-    <div class="kpi-val">${k.v}</div><div class="kpi-sub ${k.sc}">${k.s}</div></div>`).join('');
+  // Helpers
+  const varV=(a,b)=>b>0?(a-b)/b:null;
+  const diffM=(a,b)=>b>0?Math.round(a-b):null;
+  const varCl=v=>v===null?'neu':v>0.005?'up':v<-0.005?'dn':'neu';
+  const ppStr=v=>v===null?'—':(v>=0?'+':'')+( v*100).toFixed(1)+' pp';
 
-  // Gráfico barras NS por año
-  const nsData=years.map(yr=>byYear[yr]?Math.round(byYear[yr].ns):null);
-  const nsColors=years.map(yr=>YCOL[yr]||'#999');
+  const vTot=varV(cur.ns,prev?.ns||0);
+  const vEq=varV(cur.eqns,prev?.eqns||0);
+  const vVc=varV(cur.vcns,prev?.vcns||0);
+  const vGm=prev?.ns>0?(cur.ns>0?cur.gm/cur.ns:0)-(prev.gm/prev.ns):null;
+  const absD=diffM(cur.ns,prev?.ns||0);
+
+  // ── BLOQUE COMPARATIVA PRINCIPAL ─────────────────────────────────────────
+  const prevBlock=prev?`
+    <div class="mtd-col prev">
+      <div class="mtd-yr">${mesNombre} ${prevY}</div>
+      <div class="mtd-val">${fmtM(prev.ns)}</div>
+      <div class="mtd-sub">EQ: <b>${fmtM(prev.eqns)}</b> · VC: <b>${fmtM(prev.vcns)}</b></div>
+      <div class="mtd-sub">GM: <b>${fmtM(prev.gm)}</b> · GM% <b>${fmtP(prev.ns>0?prev.gm/prev.ns:0)}</b></div>
+    </div>
+    <div class="mtd-divider">
+      <div class="mtd-delta ${varCl(vTot)}">${varStr(vTot)}</div>
+      <div class="mtd-delta-abs">${absD!==null?(absD>=0?'+':'')+fmtM(absD):''}</div>
+    </div>`
+    :'<div class="mtd-col prev" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px">Sin año anterior</div><div class="mtd-divider">—</div>';
+
+  document.getElementById('mtd-header').innerHTML=`
+    <div class="mtd-compare">
+      ${prevBlock}
+      <div class="mtd-col cur">
+        <div class="mtd-yr">${mesNombre} ${latY} <span style="background:var(--bl);color:#fff;padding:1px 6px;border-radius:8px;font-size:10px">Actual</span></div>
+        <div class="mtd-val">${fmtM(cur.ns)}</div>
+        <div class="mtd-sub">EQ: <b>${fmtM(cur.eqns)}</b> · VC: <b>${fmtM(cur.vcns)}</b></div>
+        <div class="mtd-sub">GM: <b>${fmtM(cur.gm)}</b> · GM% <b>${fmtP(cur.ns>0?cur.gm/cur.ns:0)}</b></div>
+      </div>
+    </div>
+    <div class="mtd-metrics">
+      <div class="mtd-metric">
+        <div class="mtd-metric-lbl">EQ NS</div>
+        <div class="mtd-metric-row">
+          <span class="mtd-metric-cur">${fmtM(cur.eqns)}</span>
+          ${prev?`<span class="mtd-metric-prev">vs ${fmtM(prev.eqns)}</span><span class="mtd-metric-var ${varCl(vEq)}">${varStr(vEq)}</span>`:''}
+        </div>
+      </div>
+      <div class="mtd-metric">
+        <div class="mtd-metric-lbl">VC NS</div>
+        <div class="mtd-metric-row">
+          <span class="mtd-metric-cur">${fmtM(cur.vcns)}</span>
+          ${prev?`<span class="mtd-metric-prev">vs ${fmtM(prev.vcns)}</span><span class="mtd-metric-var ${varCl(vVc)}">${varStr(vVc)}</span>`:''}
+        </div>
+      </div>
+      <div class="mtd-metric">
+        <div class="mtd-metric-lbl">GM% ${latY}</div>
+        <div class="mtd-metric-row">
+          <span class="mtd-metric-cur">${fmtP(cur.ns>0?cur.gm/cur.ns:0)}</span>
+          ${prev?`<span class="mtd-metric-prev">vs ${fmtP(prev.ns>0?prev.gm/prev.ns:0)}</span><span class="mtd-metric-var ${varCl(vGm)}">${ppStr(vGm)}</span>`:''}
+        </div>
+      </div>
+      <div class="mtd-metric">
+        <div class="mtd-metric-lbl">GM€ ${latY}</div>
+        <div class="mtd-metric-row">
+          <span class="mtd-metric-cur">${fmtM(cur.gm)}</span>
+          ${prev?`<span class="mtd-metric-prev">vs ${fmtM(prev.gm)}</span><span class="mtd-metric-var ${varCl(varV(cur.gm,prev.gm))}">${varStr(varV(cur.gm,prev.gm))}</span>`:''}
+        </div>
+      </div>
+    </div>`;
+
+  // ── GRÁFICO BARRAS AGRUPADAS EQ+VC por año ───────────────────────────────
+  document.getElementById('mtd-ns-title').textContent=`NS€ ${mesNombre} — todos los años`;
   if(mtdChart1) mtdChart1.destroy();
   const ctx1=document.getElementById('ch-mtd-ns')?.getContext('2d');
   if(ctx1) mtdChart1=new Chart(ctx1,{
     type:'bar',
-    data:{labels:years.map(String),datasets:[
-      {label:'EQ',data:years.map(yr=>byYear[yr]?Math.round(byYear[yr].eqns):null),backgroundColor:years.map(yr=>(YCOL[yr]||'#999')),stack:'s'},
-      {label:'VC',data:years.map(yr=>byYear[yr]?Math.round(byYear[yr].vcns):null),backgroundColor:years.map(yr=>(YCOL[yr]||'#999')+'66'),stack:'s'},
-    ]},
-    options:chartOpts({stacked:true})
+    data:{
+      labels:years.map(String),
+      datasets:[
+        {label:'EQ',data:years.map(yr=>byYear[yr]?Math.round(byYear[yr].eqns):null),
+         backgroundColor:years.map(yr=>yr===latY?'rgba(226,0,26,0.9)':'rgba(226,0,26,0.35)'),
+         borderColor:years.map(yr=>yr===latY?'#E2001A':'rgba(226,0,26,0.6)'),
+         borderWidth:1,borderRadius:3,stack:'s'},
+        {label:'VC',data:years.map(yr=>byYear[yr]?Math.round(byYear[yr].vcns):null),
+         backgroundColor:years.map(yr=>yr===latY?'rgba(21,101,192,0.9)':'rgba(21,101,192,0.35)'),
+         borderColor:years.map(yr=>yr===latY?'#1565C0':'rgba(21,101,192,0.6)'),
+         borderWidth:1,borderRadius:3,stack:'s'},
+      ]
+    },
+    options:{
+      ...chartOpts({stacked:true}),
+      plugins:{
+        ...chartOpts({stacked:true}).plugins,
+        tooltip:{
+          callbacks:{
+            afterBody:(items)=>{
+              const yr=+items[0].label;
+              const d=byYear[yr];
+              if(!d) return '';
+              const tot=Math.round(d.ns);
+              const gm=fmtP(d.ns>0?d.gm/d.ns:0);
+              return [`Total: ${fmtM(tot)}`, `GM%: ${gm}`];
+            }
+          }
+        }
+      }
+    }
   });
 
-  // Gráfico GM% por año y canal
+  // ── TABLA DESGLOSE CANAL ─────────────────────────────────────────────────
+  document.getElementById('mtd-canal-title').textContent=`Desglose EQ vs VC — ${mesNombre}`;
+  const cHead=document.getElementById('mtd-canal-head');
+  if(cHead) cHead.innerHTML='<th>Canal</th>'+years.map(yr=>`<th class="r">${yr}</th>`).join('')+(years.length>1?'<th class="r">Var vs PY</th>':'');
+  const cTb=document.getElementById('mtd-canal-tb');
+  if(cTb){
+    const cRows=['EQ','VC','Total'].map(c=>{
+      const vals=years.map(yr=>{
+        const d=byYear[yr];
+        if(!d) return 0;
+        return c==='EQ'?d.eqns:c==='VC'?d.vcns:d.ns;
+      });
+      const curV=vals[vals.length-1]||0;
+      const prevV=vals.length>1?vals[vals.length-2]||0:0;
+      const vr=varV(curV,prevV);
+      const badge=c==='EQ'?'<span class="badge EQ">EQ</span>':c==='VC'?'<span class="badge VC">VC</span>':'<b>Total</b>';
+      return`<tr style="${c==='Total'?'font-weight:600;border-top:2px solid var(--border)':''}">
+        <td>${badge}</td>
+        ${vals.map(v=>`<td class="r">${fmtM(v)}</td>`).join('')}
+        ${years.length>1?`<td class="r ${varCl(vr)}">${varStr(vr)}</td>`:''}
+      </tr>`;
+    });
+    // Fila GM%
+    const gmRows=['EQ','VC','Total'].map(c=>{
+      const vals=years.map(yr=>{
+        const d=byYear[yr];
+        if(!d) return null;
+        const ns=c==='EQ'?d.eqns:c==='VC'?d.vcns:d.ns;
+        const gm=c==='EQ'?d.eqgm:c==='VC'?d.vcgm:d.gm;
+        return ns>0?gm/ns:null;
+      });
+      const curV=vals[vals.length-1];
+      const prevV=vals.length>1?vals[vals.length-2]:null;
+      const pp=(curV!==null&&prevV!==null)?curV-prevV:null;
+      return`<tr style="color:var(--muted);font-size:11px${c==='Total'?';font-weight:600':''}">
+        <td>GM% ${c==='Total'?'tot':c}</td>
+        ${vals.map(v=>`<td class="r">${v!==null?fmtP(v):'—'}</td>`).join('')}
+        ${years.length>1?`<td class="r ${varCl(pp)}">${pp!==null?ppStr(pp):'—'}</td>`:''}
+      </tr>`;
+    });
+    cTb.innerHTML=cRows.join('')+'<tr><td colspan="99" style="padding:2px"></td></tr>'+gmRows.join('');
+  }
+
+  // ── GRÁFICO GM% por año y canal ──────────────────────────────────────────
+  document.getElementById('mtd-gm-title').textContent=`GM% ${mesNombre} — EQ y VC por año`;
   const gmDs2=[
     {label:'EQ',data:years.map(yr=>byYear[yr]?.eqns>0?+(byYear[yr].eqgm/byYear[yr].eqns*100).toFixed(1):null),
-     borderColor:'#E2001A',backgroundColor:'transparent',tension:.3,pointRadius:5,pointHoverRadius:7,borderWidth:2},
+     borderColor:'#E2001A',backgroundColor:'rgba(226,0,26,0.08)',tension:.3,pointRadius:5,pointHoverRadius:7,borderWidth:2,fill:true},
     {label:'VC',data:years.map(yr=>byYear[yr]?.vcns>0?+(byYear[yr].vcgm/byYear[yr].vcns*100).toFixed(1):null),
-     borderColor:'#1565C0',backgroundColor:'transparent',tension:.3,pointRadius:5,pointHoverRadius:7,borderWidth:2,borderDash:[4,2]},
+     borderColor:'#1565C0',backgroundColor:'rgba(21,101,192,0.08)',tension:.3,pointRadius:5,pointHoverRadius:7,borderWidth:2,borderDash:[5,3],fill:true},
   ];
   if(mtdChart2) mtdChart2.destroy();
   const ctx2=document.getElementById('ch-mtd-gm')?.getContext('2d');
   if(ctx2) mtdChart2=new Chart(ctx2,{type:'line',data:{labels:years.map(String),datasets:gmDs2},options:chartOpts({pct:true})});
 
-  // Tabla top flotas del mes — todos los años seleccionados
+  // ── TABLA TOP FLOTAS ─────────────────────────────────────────────────────
+  document.getElementById('mtd-top-title').textContent=`Top flotas — ${mesNombre} NS€`;
   const byFleet={};
   for(const r of rows){
     if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={name:r.fleet_norm,canals:new Set(),years:{}};
@@ -1506,27 +1660,24 @@ async function refreshMTD(){
     byFleet[r.fleet_norm].canals.add(r.canal);
   }
   const fleetList=Object.values(byFleet).sort((a,b)=>(b.years[latY]?.ns||0)-(a.years[latY]?.ns||0)).slice(0,25);
-
-  // Header dinámico
   const headEl=document.getElementById('mtd-tb-head');
-  if(headEl){
-    headEl.innerHTML='<th>Flota</th><th>Canal</th>'
-      +years.map(yr=>`<th class="r">${yr}</th>`).join('')
-      +'<th class="r">Var vs PY</th><th class="r">GM%</th>';
-  }
+  if(headEl) headEl.innerHTML='<th>Flota</th><th>Canal</th>'
+    +years.map(yr=>`<th class="r">${yr}${yr===latY?' ★':''}</th>`).join('')
+    +(years.length>1?'<th class="r">Var vs PY</th>':'')
+    +'<th class="r">GM%</th>';
 
   document.getElementById('mtd-tb').innerHTML=fleetList.map(f=>{
     const c=[...f.canals].sort().join('+');
     const curNS=f.years[latY]?.ns||0;
     const prevNS=prevY?f.years[prevY]?.ns||0:0;
-    const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
+    const vr=varV(curNS,prevNS);
     const gp=f.years[latY]?.ns>0?f.years[latY].gm/f.years[latY].ns:0;
-    const dynCols=years.map(yr=>`<td class="r">${f.years[yr]?.ns>0?fmtM(f.years[yr].ns):'—'}</td>`).join('');
-    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')">
+    const dynCols=years.map(yr=>`<td class="r"${yr===latY?' style="font-weight:600"':''}>${f.years[yr]?.ns>0?fmtM(f.years[yr].ns):'—'}</td>`).join('');
+    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\'")}')">
       <td style="color:var(--bl)">${f.name}</td>
       <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
       ${dynCols}
-      <td class="r ${varCls(varV)}">${varStr(varV)}</td>
+      ${years.length>1?`<td class="r ${varCl(vr)}">${varStr(vr)}${prevNS>0?`<br><span style="font-size:10px;color:var(--muted)">${fmtM(prevNS)}</span>`:''}</td>`:''}
       <td class="r">${fmtP(gp)}</td>
     </tr>`;
   }).join('');

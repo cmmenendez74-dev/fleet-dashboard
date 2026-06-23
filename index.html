@@ -161,7 +161,7 @@ tr:hover td{background:var(--lg)}
 
 
 @media print{
-  .sidebar,.topbar,.filter-bar,button{display:none!important}
+  .sidebar,.topbar,.filter-bar,button,#present-exit{display:none!important}
   .view{display:block!important;padding:0;margin:0}
   .content{margin-left:0!important;padding:.5rem}
   .card{box-shadow:none;border:1px solid #ddd;break-inside:avoid;margin-bottom:1rem}
@@ -169,7 +169,7 @@ tr:hover td{background:var(--lg)}
   .print-header{display:block!important}
   body{font-size:11px}
   #view-resumen,#view-flotas{display:block!important}
-  #view-historico,#view-canal,#view-upload,#view-periodos{display:none!important}
+  #view-historico,#view-canal,#view-upload,#view-periodos,#view-alertas,#view-heatmap,#view-comparar{display:none!important}
   #flotas-detail-view{display:none!important}
   #flotas-table-view{display:block!important}
 }
@@ -202,7 +202,39 @@ th.sort-desc::after{content:' ↓';font-size:9px}
 /* Export fleet button */
 .fleet-export-btn{padding:4px 10px;border-radius:6px;border:1px solid #1D6F42;background:#fff;color:#1D6F42;font-size:11px;font-weight:500;cursor:pointer}
 .fleet-export-btn:hover{background:#E8F5E9}
-/* MTD comparativa header */
+/* ── MODO PRESENTACIÓN ──────────────────────────────────────────────────────── */
+body.present-mode .sidebar,
+body.present-mode .topbar,
+body.present-mode .filter-bar{display:none!important}
+body.present-mode .content{margin-left:0!important;padding:1rem 1.5rem}
+body.present-mode .card{box-shadow:0 1px 6px rgba(0,0,0,.08)}
+#present-exit{display:none;position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+  background:#E2001A;color:#fff;border:none;border-radius:24px;padding:10px 20px;
+  font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(226,0,26,.4);
+  display:flex;align-items:center;gap:6px}
+body.present-mode #present-exit{display:flex!important}
+#present-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;
+  border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;
+  cursor:pointer;color:var(--dg);transition:background .15s}
+#present-btn:hover{background:var(--bg2)}
+body.present-mode #present-btn{display:none}
+/* ── COMPARADOR DE PERÍODOS ─────────────────────────────────────────────────── */
+.cmp-selectors{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.cmp-box{background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem}
+.cmp-box-a{border-top:3px solid #E2001A}
+.cmp-box-b{border-top:3px solid #1565C0}
+.cmp-box-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.6rem}
+.cmp-box-title.a{color:#E2001A}.cmp-box-title.b{color:#1565C0}
+.cmp-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem}
+.cmp-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1rem}
+.cmp-kpi{background:#fff;border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem}
+.cmp-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.cmp-kpi-vals{display:flex;align-items:baseline;gap:.5rem;margin-top:.2rem;flex-wrap:wrap}
+.cmp-kpi-a{font-size:18px;font-weight:700;color:#E2001A}
+.cmp-kpi-b{font-size:18px;font-weight:700;color:#1565C0}
+.cmp-kpi-var{font-size:12px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--bg2)}
+.cmp-kpi-var.up{color:var(--gr);background:#E8F5E9}
+.cmp-kpi-var.dn{color:var(--red);background:var(--lred)}
 .mtd-compare{display:grid;grid-template-columns:1fr auto 1fr;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:.85rem}
 .mtd-col{padding:1.1rem 1.5rem}
 .mtd-col.prev{background:var(--bg2)}
@@ -308,6 +340,12 @@ th.sort-desc::after{content:' ↓';font-size:9px}
   </div>
 </div>
 
+<!-- BOTÓN SALIR PRESENTACIÓN (flotante) -->
+<button id="present-exit" onclick="togglePresent()">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+  Salir presentación
+</button>
+
 <!-- APP -->
 <div class="app" id="app" style="display:none">
 
@@ -340,6 +378,10 @@ th.sort-desc::after{content:' ↓';font-size:9px}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
     Heatmap
   </div>
+  <div class="nav-item" onclick="nav('comparar',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+    Comparar períodos
+  </div>
   <div class="nav-section">Datos</div>
   <div class="nav-item admin-only" id="nav-upload" onclick="nav('upload',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -371,6 +413,10 @@ th.sort-desc::after{content:' ↓';font-size:9px}
       <span class="pill r" id="pill-eq">EQ</span>
       <span class="pill b" id="pill-vc">VC</span>
       <div style="margin-left:.75rem;display:flex;gap:.4rem">
+        <button id="present-btn" onclick="togglePresent()" title="Modo presentación">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Presentar
+        </button>
         <button class="export-btn pdf" onclick="exportPDF()" title="Exportar PDF">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           PDF
@@ -638,6 +684,72 @@ th.sort-desc::after{content:' ↓';font-size:9px}
       <div class="card">
         <div class="card-hd" id="heatmap-title">Heatmap NS€ — Año × Mes</div>
         <div class="card-bd" style="overflow-x:auto"><div id="heatmap-grid"></div></div>
+      </div>
+    </div>
+
+    <!-- COMPARAR PERÍODOS -->
+    <div class="view" id="view-comparar">
+      <div class="cmp-selectors">
+        <!-- Período A -->
+        <div class="cmp-box cmp-box-a">
+          <div class="cmp-box-title a">● Período A</div>
+          <div class="cmp-row">
+            <span class="filter-label">Año</span>
+            <div class="chip-group" id="cmp-yr-a"></div>
+          </div>
+          <div class="cmp-row">
+            <span class="filter-label">Meses</span>
+            <div class="chip-group" id="cmp-mo-a"></div>
+          </div>
+          <div class="cmp-row">
+            <span class="filter-label">Canal</span>
+            <div class="chip-group" id="cmp-canal-a"></div>
+          </div>
+        </div>
+        <!-- Período B -->
+        <div class="cmp-box cmp-box-b">
+          <div class="cmp-box-title b">● Período B</div>
+          <div class="cmp-row">
+            <span class="filter-label">Año</span>
+            <div class="chip-group" id="cmp-yr-b"></div>
+          </div>
+          <div class="cmp-row">
+            <span class="filter-label">Meses</span>
+            <div class="chip-group" id="cmp-mo-b"></div>
+          </div>
+          <div class="cmp-row">
+            <span class="filter-label">Canal</span>
+            <div class="chip-group" id="cmp-canal-b"></div>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:1rem">
+        <button class="btn" onclick="runComparacion()" style="padding:8px 28px;font-size:13px;font-weight:600">
+          Comparar
+        </button>
+      </div>
+      <!-- Resultados -->
+      <div id="cmp-results" style="display:none">
+        <div class="cmp-kpi-grid" id="cmp-kpis"></div>
+        <div class="g2" style="margin-bottom:1rem">
+          <div class="card">
+            <div class="card-hd" id="cmp-ns-title">NS€ mensual — A vs B</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-cmp-ns"></canvas></div></div>
+          </div>
+          <div class="card">
+            <div class="card-hd" id="cmp-gm-title">GM% — A vs B</div>
+            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-cmp-gm"></canvas></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd" id="cmp-fleet-title">Top flotas — comparativa A vs B</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead><tr id="cmp-tb-head"></tr></thead><tbody id="cmp-tb"></tbody></table>
+          </div></div>
+        </div>
+      </div>
+      <div id="cmp-empty" style="text-align:center;padding:3rem;color:var(--muted);font-size:13px">
+        Selecciona dos períodos y pulsa <b>Comparar</b>
       </div>
     </div>
 
@@ -1240,6 +1352,7 @@ function updatePills(){
 // ══════════════════════════════════════════════════════════════════════════════
 const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',
                canal:'EQ vs VC',alertas:'Alertas',heatmap:'Heatmap mensual',
+               comparar:'Comparar períodos',
                upload:'Cargar archivos',periodos:'Períodos'};
 function nav(id,el){
   if((id==='upload'||id==='periodos')&&!isAdmin()){alert('Solo el usuario administrador puede acceder a esta sección.');return;}
@@ -1259,10 +1372,15 @@ function nav(id,el){
   else if(id==='canal') refreshCanal();
   else if(id==='alertas') refreshAlertas();
   else if(id==='heatmap') refreshHeatmap();
+  else if(id==='comparar') initComparar();
   else if(id==='periodos') refreshPeriodos();
-  // Cerrar buscador global al navegar
   document.getElementById('global-search-results').style.display='none';
   document.getElementById('global-search').value='';
+}
+
+// ── MODO PRESENTACIÓN ────────────────────────────────────────────────────────
+function togglePresent(){
+  document.body.classList.toggle('present-mode');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2688,6 +2806,203 @@ async function exportFleetDetail(){
 // — se inyecta en el título del gráfico histórico
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPARAR PERÍODOS
+// ══════════════════════════════════════════════════════════════════════════════
+let cmpChartNS=null, cmpChartGM=null;
+let cmpState={
+  a:{year:null,months:new Set(),canals:new Set(['EQ','VC'])},
+  b:{year:null,months:new Set(),canals:new Set(['EQ','VC'])}
+};
+
+function initComparar(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort((a,b)=>a-b);
+  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
+  // Defaults: A = año más reciente YTD, B = año anterior mismo período
+  const latY=Math.max(...years);
+  const prevY=years.length>1?years[years.indexOf(latY)-1]:latY;
+  const latestMo=Math.max(...months);
+  const ytdMos=months.filter(m=>m<=latestMo);
+
+  if(!cmpState.a.year) cmpState.a={year:latY,months:new Set(ytdMos),canals:new Set(['EQ','VC'])};
+  if(!cmpState.b.year) cmpState.b={year:prevY,months:new Set(ytdMos),canals:new Set(['EQ','VC'])};
+
+  buildCmpChips('a', years, months);
+  buildCmpChips('b', years, months);
+}
+
+function buildCmpChips(ab, years, months){
+  const st=cmpState[ab];
+  // Años (radio — solo uno)
+  const yrEl=document.getElementById(`cmp-yr-${ab}`);
+  if(yrEl) yrEl.innerHTML=years.map(y=>`<span class="chip${st.year===y?' on':''}" data-y="${y}"
+    onclick="setCmpYear('${ab}',${y},this)">${y}</span>`).join('');
+  // Meses (multi)
+  const moEl=document.getElementById(`cmp-mo-${ab}`);
+  if(moEl) moEl.innerHTML=months.map(m=>`<span class="chip${st.months.has(m)?' on':''}" data-m="${m}"
+    onclick="toggleCmpMo('${ab}',${m},this)">${MN[m-1]}</span>`).join('');
+  // Canal (multi)
+  const cEl=document.getElementById(`cmp-canal-${ab}`);
+  if(cEl) cEl.innerHTML=['EQ','VC'].map(c=>`<span class="chip${st.canals.has(c)?' on':''}" data-c="${c}"
+    onclick="toggleCmpCanal('${ab}','${c}',this)">${c}</span>`).join('');
+}
+
+function setCmpYear(ab,yr,el){
+  cmpState[ab].year=yr;
+  document.querySelectorAll(`#cmp-yr-${ab} .chip`).forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+function toggleCmpMo(ab,m,el){
+  el.classList.toggle('on');
+  if(el.classList.contains('on')) cmpState[ab].months.add(m);
+  else cmpState[ab].months.delete(m);
+}
+function toggleCmpCanal(ab,c,el){
+  el.classList.toggle('on');
+  if(el.classList.contains('on')) cmpState[ab].canals.add(c);
+  else cmpState[ab].canals.delete(c);
+}
+
+async function runComparacion(){
+  const sa=cmpState.a, sb=cmpState.b;
+  if(!sa.year||!sb.year){alert('Selecciona un año para cada período.');return;}
+  if(!sa.months.size||!sb.months.size){alert('Selecciona al menos un mes en cada período.');return;}
+
+  const allYears=[...new Set([sa.year,sb.year])];
+  const allMonths=[...new Set([...sa.months,...sb.months])].sort((a,b)=>a-b);
+  const rows=await fetchData(allYears,allMonths);
+  if(!rows?.length){alert('Sin datos para los períodos seleccionados.');return;}
+
+  // Agregar por período
+  function agg(year,months,canals){
+    const r=rows.filter(x=>x.year===year&&months.has(x.month)&&canals.has(x.canal));
+    let ns=0,gm=0,eqns=0,eqgm=0,vcns=0,vcgm=0;
+    for(const x of r){ns+=x.ns;gm+=x.gm;if(x.canal==='EQ'){eqns+=x.ns;eqgm+=x.gm;}else{vcns+=x.ns;vcgm+=x.gm;}}
+    return{ns,gm,eqns,eqgm,vcns,vcgm};
+  }
+  const A=agg(sa.year,sa.months,sa.canals);
+  const B=agg(sb.year,sb.months,sb.canals);
+
+  const labelA=`${sa.year} ${[...sa.months].sort((a,b)=>a-b).map(m=>MN[m-1]).join('-')} [${[...sa.canals].sort().join('+')}]`;
+  const labelB=`${sb.year} ${[...sb.months].sort((a,b)=>a-b).map(m=>MN[m-1]).join('-')} [${[...sb.canals].sort().join('+')}]`;
+
+  const vNS=B.ns>0?(A.ns-B.ns)/B.ns:null;
+  const vGM=B.gm>0?(A.gm-B.gm)/B.gm:null;
+  const vEQ=B.eqns>0?(A.eqns-B.eqns)/B.eqns:null;
+  const vVC=B.vcns>0?(A.vcns-B.vcns)/B.vcns:null;
+  const gmPctA=A.ns>0?A.gm/A.ns:0, gmPctB=B.ns>0?B.gm/B.ns:0;
+  const vGmPct=gmPctB>0?gmPctA-gmPctB:null;
+
+  const varCl=v=>v===null?'':v>0.005?' up':v<-0.005?' dn':'';
+
+  // KPIs
+  document.getElementById('cmp-kpis').innerHTML=[
+    {l:'NS Total',va:fmtM(A.ns),vb:fmtM(B.ns),vr:vNS},
+    {l:'GM Total',va:fmtM(A.gm),vb:fmtM(B.gm),vr:vGM},
+    {l:'GM%',va:fmtP(gmPctA),vb:fmtP(gmPctB),vr:vGmPct,pp:true},
+    {l:'NS EQ',va:fmtM(A.eqns),vb:fmtM(B.eqns),vr:vEQ},
+    {l:'NS VC',va:fmtM(A.vcns),vb:fmtM(B.vcns),vr:vVC},
+    {l:'GM% EQ',va:fmtP(A.eqns>0?A.eqgm/A.eqns:0),vb:fmtP(B.eqns>0?B.eqgm/B.eqns:0),vr:A.eqns>0&&B.eqns>0?A.eqgm/A.eqns-B.eqgm/B.eqns:null,pp:true},
+  ].map(k=>{
+    const cls=varCl(k.vr);
+    const delta=k.vr===null?'—':k.pp?(k.vr>=0?'+':'')+( k.vr*100).toFixed(1)+' pp':varStr(k.vr);
+    return`<div class="cmp-kpi">
+      <div class="cmp-kpi-lbl">${k.l}</div>
+      <div class="cmp-kpi-vals">
+        <span class="cmp-kpi-a">${k.va}</span>
+        <span style="color:var(--muted);font-size:11px">vs</span>
+        <span class="cmp-kpi-b">${k.vb}</span>
+        <span class="cmp-kpi-var${cls}">${delta}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Gráfico NS mensual A vs B
+  const mosA=[...sa.months].sort((a,b)=>a-b);
+  const mosB=[...sb.months].sort((a,b)=>a-b);
+  const allMos=[...new Set([...mosA,...mosB])].sort((a,b)=>a-b);
+  const nsA=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sa.year&&x.month===m&&sa.canals.has(x.canal));
+    const n=r.reduce((s,x)=>s+x.ns,0); return n>0?Math.round(n):null;
+  });
+  const nsB=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sb.year&&x.month===m&&sb.canals.has(x.canal));
+    const n=r.reduce((s,x)=>s+x.ns,0); return n>0?Math.round(n):null;
+  });
+  const gmPctAm=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sa.year&&x.month===m&&sa.canals.has(x.canal));
+    const ns=r.reduce((s,x)=>s+x.ns,0), gm=r.reduce((s,x)=>s+x.gm,0);
+    return ns>0?+(gm/ns*100).toFixed(1):null;
+  });
+  const gmPctBm=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sb.year&&x.month===m&&sb.canals.has(x.canal));
+    const ns=r.reduce((s,x)=>s+x.ns,0), gm=r.reduce((s,x)=>s+x.gm,0);
+    return ns>0?+(gm/ns*100).toFixed(1):null;
+  });
+
+  document.getElementById('cmp-ns-title').textContent=`NS€ mensual — ${labelA} vs ${labelB}`;
+  document.getElementById('cmp-gm-title').textContent=`GM% mensual — ${labelA} vs ${labelB}`;
+  document.getElementById('cmp-fleet-title').textContent=`Top flotas — A vs B`;
+
+  if(cmpChartNS) cmpChartNS.destroy();
+  const ctx1=document.getElementById('ch-cmp-ns')?.getContext('2d');
+  if(ctx1) cmpChartNS=new Chart(ctx1,{type:'bar',
+    data:{labels:allMos.map(m=>MN[m-1]),datasets:[
+      {label:labelA,data:nsA,backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
+      {label:labelB,data:nsB,backgroundColor:'rgba(21,101,192,0.6)',borderRadius:3},
+    ]},options:chartOpts({stacked:false})
+  });
+
+  if(cmpChartGM) cmpChartGM.destroy();
+  const ctx2=document.getElementById('ch-cmp-gm')?.getContext('2d');
+  if(ctx2) cmpChartGM=new Chart(ctx2,{type:'line',
+    data:{labels:allMos.map(m=>MN[m-1]),datasets:[
+      {label:labelA,data:gmPctAm,borderColor:'#E2001A',backgroundColor:'rgba(226,0,26,0.08)',tension:.3,pointRadius:5,borderWidth:2,fill:true},
+      {label:labelB,data:gmPctBm,borderColor:'#1565C0',backgroundColor:'rgba(21,101,192,0.08)',tension:.3,pointRadius:5,borderWidth:2,borderDash:[5,3],fill:true},
+    ]},options:chartOpts({pct:true})
+  });
+
+  // Tabla flotas
+  const byFleet={};
+  for(const r of rows){
+    if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={name:r.fleet_norm,canals:new Set(),a:{ns:0,gm:0},b:{ns:0,gm:0}};
+    const inA=r.year===sa.year&&sa.months.has(r.month)&&sa.canals.has(r.canal);
+    const inB=r.year===sb.year&&sb.months.has(r.month)&&sb.canals.has(r.canal);
+    if(inA){byFleet[r.fleet_norm].a.ns+=r.ns;byFleet[r.fleet_norm].a.gm+=r.gm;}
+    if(inB){byFleet[r.fleet_norm].b.ns+=r.ns;byFleet[r.fleet_norm].b.gm+=r.gm;}
+    byFleet[r.fleet_norm].canals.add(r.canal);
+  }
+  const fleetList=Object.values(byFleet)
+    .filter(f=>f.a.ns>0||f.b.ns>0)
+    .sort((x,y)=>y.a.ns-x.a.ns).slice(0,30);
+
+  const head=document.getElementById('cmp-tb-head');
+  if(head) head.innerHTML=`<th>Flota</th><th>Canal</th>
+    <th class="r" style="color:#E2001A">NS A</th>
+    <th class="r" style="color:#1565C0">NS B</th>
+    <th class="r">Var A/B</th>
+    <th class="r">GM% A</th><th class="r">GM% B</th>`;
+
+  document.getElementById('cmp-tb').innerHTML=fleetList.map(f=>{
+    const c=[...f.canals].sort().join('+');
+    const vr=f.b.ns>0?(f.a.ns-f.b.ns)/f.b.ns:null;
+    const gmA=f.a.ns>0?f.a.gm/f.a.ns:0, gmB=f.b.ns>0?f.b.gm/f.b.ns:0;
+    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')">
+      <td style="color:var(--bl)">${f.name}</td>
+      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      <td class="r" style="font-weight:600;color:#E2001A">${f.a.ns>0?fmtM(f.a.ns):'—'}</td>
+      <td class="r" style="font-weight:600;color:#1565C0">${f.b.ns>0?fmtM(f.b.ns):'—'}</td>
+      <td class="r ${varCls(vr)}">${varStr(vr)}</td>
+      <td class="r">${f.a.ns>0?fmtP(gmA):'—'}</td>
+      <td class="r">${f.b.ns>0?fmtP(gmB):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cmp-results').style.display='block';
+  document.getElementById('cmp-empty').style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // START
 // ══════════════════════════════════════════════════════════════════════════════
 bootAccess();

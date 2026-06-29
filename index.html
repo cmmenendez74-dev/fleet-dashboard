@@ -169,7 +169,7 @@ tr:hover td{background:var(--lg)}
   .print-header{display:block!important}
   body{font-size:11px}
   #view-resumen,#view-flotas{display:block!important}
-  #view-historico,#view-canal,#view-upload,#view-periodos,#view-alertas,#view-heatmap,#view-comparar{display:none!important}
+  #view-historico,#view-upload,#view-periodos,#view-alertas{display:none!important}
   #flotas-detail-view{display:none!important}
   #flotas-table-view{display:block!important}
 }
@@ -211,7 +211,7 @@ body.present-mode .card{box-shadow:0 1px 6px rgba(0,0,0,.08)}
 #present-exit{display:none;position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
   background:#E2001A;color:#fff;border:none;border-radius:24px;padding:10px 20px;
   font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(226,0,26,.4);
-  display:flex;align-items:center;gap:6px}
+  align-items:center;gap:6px}
 body.present-mode #present-exit{display:flex!important}
 #present-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;
   border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;
@@ -340,12 +340,6 @@ body.present-mode #present-btn{display:none}
   </div>
 </div>
 
-<!-- BOTÓN SALIR PRESENTACIÓN (flotante) -->
-<button id="present-exit" onclick="togglePresent()">
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-  Salir presentación
-</button>
-
 <!-- APP -->
 <div class="app" id="app" style="display:none">
 
@@ -366,21 +360,9 @@ body.present-mode #present-btn{display:none}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Por flota
   </div>
-  <div class="nav-item" onclick="nav('canal',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    EQ vs VC
-  </div>
   <div class="nav-item" onclick="nav('alertas',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     Alertas
-  </div>
-  <div class="nav-item" onclick="nav('heatmap',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
-    Heatmap
-  </div>
-  <div class="nav-item" onclick="nav('comparar',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
-    Comparar períodos
   </div>
   <div class="nav-section">Datos</div>
   <div class="nav-item admin-only" id="nav-upload" onclick="nav('upload',this)">
@@ -471,12 +453,18 @@ body.present-mode #present-btn{display:none}
 
     <!-- RESUMEN -->
     <div class="view active" id="view-resumen">
-      <div class="filter-bar">
+      <div class="filter-bar" style="flex-wrap:wrap">
         <span class="filter-label">Año</span>
         <div class="chip-group" id="yr-chips"></div>
         <span class="filter-label">Mes</span>
         <div class="chip-group" id="mo-chips"></div>
+        <div style="margin-left:auto;display:flex;gap:4px">
+          <span class="chip on" id="res-tab-resumen" onclick="setResumenTab('resumen',this)">Resumen</span>
+          <span class="chip" id="res-tab-canal" onclick="setResumenTab('canal',this)">EQ vs VC</span>
+        </div>
       </div>
+      <!-- Sub-vista Resumen -->
+      <div id="res-view-resumen">
       <div class="kpi-row" id="kpis-r"></div>
       <div class="obj-grid" id="objective-cards"></div>
       <div class="g2">
@@ -498,7 +486,30 @@ body.present-mode #present-btn{display:none}
           <th class="r">GM YTD</th><th class="r">GM%</th><th class="r">Proy FY</th><th>Estado</th>
         </tr></thead><tbody id="top-tb"></tbody></table>
       </div></div></div>
-    </div>
+      </div><!-- /res-view-resumen -->
+
+      <!-- Sub-vista Canal (EQ vs VC) embebida en Resumen -->
+      <div id="res-view-canal" style="display:none">
+        <div class="g2">
+          <div class="card" style="border-top:3px solid var(--red)">
+            <div class="card-hd" style="color:var(--red)">EQ — Equity</div>
+            <div class="card-bd">
+              <div class="kpi-row" id="kpis-eq" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
+              <div class="chart-box"><canvas id="ch-eq"></canvas></div>
+            </div>
+          </div>
+          <div class="card" style="border-top:3px solid var(--bl)">
+            <div class="card-hd" style="color:var(--bl)">VC — Partners</div>
+            <div class="card-bd">
+              <div class="kpi-row" id="kpis-vc" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
+              <div class="chart-box"><canvas id="ch-vc"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="card"><div class="card-hd">EQ vs VC — comparativa mensual</div>
+        <div class="card-bd"><div class="chart-box tall"><canvas id="ch-canal"></canvas></div></div></div>
+      </div><!-- /res-view-canal -->
+    </div><!-- /view-resumen -->
 
     <!-- HISTORICO -->
     <div class="view" id="view-historico">
@@ -509,6 +520,8 @@ body.present-mode #present-btn{display:none}
         <div class="chip-group">
           <span class="chip on" id="hist-mode-anual" onclick="setHistMode('anual')">Anual</span>
           <span class="chip" id="hist-mode-mtd" onclick="setHistMode('mtd')">Mes vs Mes</span>
+          <span class="chip" id="hist-mode-heatmap" onclick="setHistMode('heatmap')">Heatmap</span>
+          <span class="chip" id="hist-mode-comparar" onclick="setHistMode('comparar')">Comparar</span>
         </div>
         <span class="filter-label" id="hist-mes-label" style="margin-left:.5rem;display:none">Mes</span>
         <div class="chip-group" id="hist-mes-chips" style="display:none"></div>
@@ -561,7 +574,65 @@ body.present-mode #present-btn{display:none}
           </div></div>
         </div>
       </div>
-    </div>
+      <!-- Modo Heatmap -->
+      <div id="hist-view-heatmap" style="display:none">
+        <div class="filter-bar" style="margin-bottom:.85rem">
+          <span class="filter-label">Métrica</span>
+          <div class="chip-group" id="heatmap-metric-chips">
+            <span class="chip on" data-m="ns" onclick="toggleHeatmapMetric(this)">NS€</span>
+            <span class="chip" data-m="gm" onclick="toggleHeatmapMetric(this)">GM€</span>
+            <span class="chip" data-m="gmpct" onclick="toggleHeatmapMetric(this)">GM%</span>
+          </div>
+          <span class="filter-label" style="margin-left:.5rem">Canal</span>
+          <div class="chip-group" id="heatmap-canal-chips">
+            <span class="chip on" data-c="all" onclick="toggleHeatmapCanal(this)">EQ+VC</span>
+            <span class="chip" data-c="EQ" onclick="toggleHeatmapCanal(this)">EQ</span>
+            <span class="chip" data-c="VC" onclick="toggleHeatmapCanal(this)">VC</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd" id="heatmap-title">Heatmap NS€ — Año × Mes</div>
+          <div class="card-bd" style="overflow-x:auto"><div id="heatmap-grid"></div></div>
+        </div>
+      </div>
+
+      <!-- Modo Comparar períodos -->
+      <div id="hist-view-comparar" style="display:none">
+        <div class="cmp-selectors">
+          <div class="cmp-box cmp-box-a">
+            <div class="cmp-box-title a">● Período A</div>
+            <div class="cmp-row"><span class="filter-label">Año</span><div class="chip-group" id="cmp-yr-a"></div></div>
+            <div class="cmp-row"><span class="filter-label">Meses</span><div class="chip-group" id="cmp-mo-a"></div></div>
+            <div class="cmp-row"><span class="filter-label">Canal</span><div class="chip-group" id="cmp-canal-a"></div></div>
+          </div>
+          <div class="cmp-box cmp-box-b">
+            <div class="cmp-box-title b">● Período B</div>
+            <div class="cmp-row"><span class="filter-label">Año</span><div class="chip-group" id="cmp-yr-b"></div></div>
+            <div class="cmp-row"><span class="filter-label">Meses</span><div class="chip-group" id="cmp-mo-b"></div></div>
+            <div class="cmp-row"><span class="filter-label">Canal</span><div class="chip-group" id="cmp-canal-b"></div></div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-bottom:1rem">
+          <button class="btn" onclick="runComparacion()" style="padding:8px 28px;font-size:13px;font-weight:600">Comparar</button>
+        </div>
+        <div id="cmp-results" style="display:none">
+          <div class="cmp-kpi-grid" id="cmp-kpis"></div>
+          <div class="g2" style="margin-bottom:1rem">
+            <div class="card"><div class="card-hd" id="cmp-ns-title">NS€ mensual — A vs B</div>
+              <div class="card-bd"><div class="chart-box tall"><canvas id="ch-cmp-ns"></canvas></div></div></div>
+            <div class="card"><div class="card-hd" id="cmp-gm-title">GM% — A vs B</div>
+              <div class="card-bd"><div class="chart-box tall"><canvas id="ch-cmp-gm"></canvas></div></div></div>
+          </div>
+          <div class="card"><div class="card-hd" id="cmp-fleet-title">Top flotas — comparativa A vs B</div>
+            <div class="card-bd"><div class="tbl-wrap">
+              <table><thead><tr id="cmp-tb-head"></tr></thead><tbody id="cmp-tb"></tbody></table>
+            </div></div></div>
+        </div>
+        <div id="cmp-empty" style="text-align:center;padding:3rem;color:var(--muted);font-size:13px">
+          Selecciona dos períodos y pulsa <b>Comparar</b>
+        </div>
+      </div>
+    </div><!-- /view-historico -->
 
     <!-- FLOTAS -->
     <div class="view" id="view-flotas">
@@ -665,118 +736,13 @@ body.present-mode #present-btn{display:none}
       </div>
     </div>
 
-    <!-- HEATMAP -->
-    <div class="view" id="view-heatmap">
-      <div class="filter-bar">
-        <span class="filter-label">Métrica</span>
-        <div class="chip-group" id="heatmap-metric-chips">
-          <span class="chip on" data-m="ns" onclick="toggleHeatmapMetric(this)">NS€</span>
-          <span class="chip" data-m="gm" onclick="toggleHeatmapMetric(this)">GM€</span>
-          <span class="chip" data-m="gmpct" onclick="toggleHeatmapMetric(this)">GM%</span>
-        </div>
-        <span class="filter-label" style="margin-left:.5rem">Canal</span>
-        <div class="chip-group" id="heatmap-canal-chips">
-          <span class="chip on" data-c="all" onclick="toggleHeatmapCanal(this)">EQ+VC</span>
-          <span class="chip" data-c="EQ" onclick="toggleHeatmapCanal(this)">EQ</span>
-          <span class="chip" data-c="VC" onclick="toggleHeatmapCanal(this)">VC</span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd" id="heatmap-title">Heatmap NS€ — Año × Mes</div>
-        <div class="card-bd" style="overflow-x:auto"><div id="heatmap-grid"></div></div>
-      </div>
-    </div>
-
-    <!-- COMPARAR PERÍODOS -->
-    <div class="view" id="view-comparar">
-      <div class="cmp-selectors">
-        <!-- Período A -->
-        <div class="cmp-box cmp-box-a">
-          <div class="cmp-box-title a">● Período A</div>
-          <div class="cmp-row">
-            <span class="filter-label">Año</span>
-            <div class="chip-group" id="cmp-yr-a"></div>
-          </div>
-          <div class="cmp-row">
-            <span class="filter-label">Meses</span>
-            <div class="chip-group" id="cmp-mo-a"></div>
-          </div>
-          <div class="cmp-row">
-            <span class="filter-label">Canal</span>
-            <div class="chip-group" id="cmp-canal-a"></div>
-          </div>
-        </div>
-        <!-- Período B -->
-        <div class="cmp-box cmp-box-b">
-          <div class="cmp-box-title b">● Período B</div>
-          <div class="cmp-row">
-            <span class="filter-label">Año</span>
-            <div class="chip-group" id="cmp-yr-b"></div>
-          </div>
-          <div class="cmp-row">
-            <span class="filter-label">Meses</span>
-            <div class="chip-group" id="cmp-mo-b"></div>
-          </div>
-          <div class="cmp-row">
-            <span class="filter-label">Canal</span>
-            <div class="chip-group" id="cmp-canal-b"></div>
-          </div>
-        </div>
-      </div>
-      <div style="text-align:center;margin-bottom:1rem">
-        <button class="btn" onclick="runComparacion()" style="padding:8px 28px;font-size:13px;font-weight:600">
-          Comparar
-        </button>
-      </div>
-      <!-- Resultados -->
-      <div id="cmp-results" style="display:none">
-        <div class="cmp-kpi-grid" id="cmp-kpis"></div>
-        <div class="g2" style="margin-bottom:1rem">
-          <div class="card">
-            <div class="card-hd" id="cmp-ns-title">NS€ mensual — A vs B</div>
-            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-cmp-ns"></canvas></div></div>
-          </div>
-          <div class="card">
-            <div class="card-hd" id="cmp-gm-title">GM% — A vs B</div>
-            <div class="card-bd"><div class="chart-box tall"><canvas id="ch-cmp-gm"></canvas></div></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hd" id="cmp-fleet-title">Top flotas — comparativa A vs B</div>
-          <div class="card-bd"><div class="tbl-wrap">
-            <table><thead><tr id="cmp-tb-head"></tr></thead><tbody id="cmp-tb"></tbody></table>
-          </div></div>
-        </div>
-      </div>
-      <div id="cmp-empty" style="text-align:center;padding:3rem;color:var(--muted);font-size:13px">
-        Selecciona dos períodos y pulsa <b>Comparar</b>
-      </div>
-    </div>
-
-    <!-- CANAL -->
-    <div class="view" id="view-canal">
-      <div class="g2">
-        <div class="card" style="border-top:3px solid var(--red)">
-          <div class="card-hd" style="color:var(--red)">EQ — Equity</div>
-          <div class="card-bd">
-            <div class="kpi-row" id="kpis-eq" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
-            <div class="chart-box"><canvas id="ch-eq"></canvas></div>
-          </div>
-        </div>
-        <div class="card" style="border-top:3px solid var(--bl)">
-          <div class="card-hd" style="color:var(--bl)">VC — Partners</div>
-          <div class="card-bd">
-            <div class="kpi-row" id="kpis-vc" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
-            <div class="chart-box"><canvas id="ch-vc"></canvas></div>
-          </div>
-        </div>
-      </div>
-      <div class="card"><div class="card-hd">EQ vs VC — comparativa mensual</div>
-      <div class="card-bd"><div class="chart-box tall"><canvas id="ch-canal"></canvas></div></div></div>
-    </div>
 
   </div><!-- /content -->
 </div><!-- /main -->
+  <button id="present-exit" onclick="togglePresent()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    Salir presentación
+  </button>
 </div><!-- /app -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -1351,9 +1317,19 @@ function updatePills(){
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════════════════════
 const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',
-               canal:'EQ vs VC',alertas:'Alertas',heatmap:'Heatmap mensual',
-               comparar:'Comparar períodos',
-               upload:'Cargar archivos',periodos:'Períodos'};
+               alertas:'Alertas',upload:'Cargar archivos',periodos:'Períodos'};
+
+// ── Resumen: tab Canal embebido ───────────────────────────────────────────────
+let _resumenTab='resumen';
+function setResumenTab(tab,el){
+  _resumenTab=tab;
+  document.querySelectorAll('#view-resumen .chip[id^="res-tab-"]').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('res-view-resumen').style.display=tab==='resumen'?'block':'none';
+  document.getElementById('res-view-canal').style.display=tab==='canal'?'block':'none';
+  if(tab==='canal') refreshCanal();
+}
+
 function nav(id,el){
   if((id==='upload'||id==='periodos')&&!isAdmin()){alert('Solo el usuario administrador puede acceder a esta sección.');return;}
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1369,10 +1345,7 @@ function nav(id,el){
     if(fleetHistChart){fleetHistChart.destroy();fleetHistChart=null;}
     buildChipsF(); buildChipsCanalF(); buildChipsMoF(); refreshFlotas();
   }
-  else if(id==='canal') refreshCanal();
   else if(id==='alertas') refreshAlertas();
-  else if(id==='heatmap') refreshHeatmap();
-  else if(id==='comparar') initComparar();
   else if(id==='periodos') refreshPeriodos();
   document.getElementById('global-search-results').style.display='none';
   document.getElementById('global-search').value='';
@@ -1570,17 +1543,23 @@ function setHistMode(mode){
   S.histMode=mode;
   document.getElementById('hist-mode-anual').classList.toggle('on', mode==='anual');
   document.getElementById('hist-mode-mtd').classList.toggle('on', mode==='mtd');
+  document.getElementById('hist-mode-heatmap').classList.toggle('on', mode==='heatmap');
+  document.getElementById('hist-mode-comparar').classList.toggle('on', mode==='comparar');
   applyHistMode();
   if(mode==='anual') refreshHistorico();
-  else refreshMTD();
+  else if(mode==='mtd') refreshMTD();
+  else if(mode==='heatmap') refreshHeatmap();
+  else if(mode==='comparar') initComparar();
 }
 
 function applyHistMode(){
-  const isMTD=S.histMode==='mtd';
-  document.getElementById('hist-view-anual').style.display=isMTD?'none':'block';
-  document.getElementById('hist-view-mtd').style.display=isMTD?'block':'none';
-  document.getElementById('hist-mes-label').style.display=isMTD?'':'none';
-  document.getElementById('hist-mes-chips').style.display=isMTD?'flex':'none';
+  const mode=S.histMode;
+  document.getElementById('hist-view-anual').style.display=mode==='anual'?'block':'none';
+  document.getElementById('hist-view-mtd').style.display=mode==='mtd'?'block':'none';
+  document.getElementById('hist-view-heatmap').style.display=mode==='heatmap'?'block':'none';
+  document.getElementById('hist-view-comparar').style.display=mode==='comparar'?'block':'none';
+  document.getElementById('hist-mes-label').style.display=mode==='mtd'?'':'none';
+  document.getElementById('hist-mes-chips').style.display=mode==='mtd'?'flex':'none';
 }
 
 async function refreshMTD(){
@@ -2094,25 +2073,43 @@ function exportPDF(){
 async function exportExcel(){
   if(!window.XLSX){ alert('SheetJS no disponible.'); return; }
 
+  // ── Detectar vista activa para aplicar filtros correctos ─────────────────
+  const activeView=document.querySelector('.view.active')?.id||'view-resumen';
+  const isFlotas=activeView==='view-flotas';
+
+  // Filtros según vista
+  const years=isFlotas
+    ? (S.yearsF.size?[...S.yearsF].sort((a,b)=>a-b):[...S.years].sort((a,b)=>a-b))
+    : [...S.years].sort((a,b)=>a-b);
+  const months=isFlotas
+    ? (S.monthsF.size?[...S.monthsF].sort((a,b)=>a-b):[...S.months].sort((a,b)=>a-b))
+    : [...S.months].sort((a,b)=>a-b);
+  const canals=isFlotas
+    ? (S.canalsF.size?[...S.canalsF]:['EQ','VC'])
+    : ['EQ','VC'];
+  const nsMin=isFlotas?(+(document.getElementById('ns-threshold')?.value||0)):0;
+
   const wb=XLSX.utils.book_new();
-  const years=[...S.years].sort((a,b)=>a-b);
-  const months=[...S.months].sort((a,b)=>a-b);
   const kpiYear=Math.max(...years);
-  const prevYear=years[years.indexOf(kpiYear)-1];
+  const prevYear=years.length>1?years[years.indexOf(kpiYear)-1]:null;
   const monthNames=months.map(m=>MN[m-1]).join(', ');
   const now=new Date().toLocaleDateString('es-ES');
+  const canalLabel=canals.sort().join('+');
 
-  // Obtener datos reales desde Supabase (todos los años, todos los meses)
-  const allYearsArr=[...new Set(S.summary.map(r=>r.year))].sort((a,b)=>a-b);
-  const allRows=await fetchData(allYearsArr,[1,2,3,4,5,6,7,8,9,10,11,12]);
+  // Obtener datos filtrados desde Supabase
+  const allRows=await fetchData(years,months);
+  if(!allRows?.length){ alert('Sin datos para los filtros seleccionados.'); return; }
 
-  // ── Hoja 1: KPIs ejecutivos con valores numéricos reales ─────────────────
-  const kpiRows=allRows.filter(r=>r.year===kpiYear&&months.includes(r.month));
-  const prevRows=prevYear?allRows.filter(r=>r.year===prevYear&&months.includes(r.month)):[];
+  // Aplicar filtro de canal
+  const rows=canals.length<2?allRows.filter(r=>canals.includes(r.canal)):allRows;
 
-  function agg(rows){
+  // ── Hoja 1: KPIs ejecutivos ───────────────────────────────────────────────
+  const kpiRows=rows.filter(r=>r.year===kpiYear);
+  const prevRows=prevYear?rows.filter(r=>r.year===prevYear):[];
+
+  function agg(baseRows){
     let totNS=0,totGM=0,eqNS=0,eqGM=0,vcNS=0,vcGM=0;
-    for(const r of rows){
+    for(const r of baseRows){
       totNS+=r.ns||0; totGM+=r.gm||0;
       if(r.canal==='EQ'){eqNS+=r.ns||0;eqGM+=r.gm||0;}
       else{vcNS+=r.ns||0;vcGM+=r.gm||0;}
@@ -2131,9 +2128,10 @@ async function exportExcel(){
   const vcProy=A.vcNS/nM*12;
   const gmPct=A.totNS>0?A.totGM/A.totNS:0;
 
+  const periodoDesc=`${years.join('/')} · ${monthNames} · Canal: ${canalLabel}${nsMin>0?' · NS≥'+(nsMin/1000).toFixed(0)+'k':''}`;
   const kpiData=[
     ['First Stop Fleet Dashboard — Resumen ejecutivo'],
-    [`Periodo: ${years.join('/')} · Meses: ${monthNames} · Exportado: ${now}`],
+    [`Periodo: ${periodoDesc} · Exportado: ${now}`],
     [],
     ['KPI','Valor (€)','Objetivo (€)','Cobertura (%)','Nota'],
     ['NS YTD '+kpiYear, Math.round(A.totNS), Math.round(obYTD), +(A.totNS/obYTD*100).toFixed(1), A.totNS>=obYTD?'✓ En objetivo':'⚠ Por debajo'],
@@ -2142,7 +2140,7 @@ async function exportExcel(){
     ['VC NS YTD', Math.round(A.vcNS), Math.round(obVcYTD), +(A.vcNS/obVcYTD*100).toFixed(1), ''],
     ['Proyección FY', Math.round(proy), Math.round(OB_TOTAL), +(proy/OB_TOTAL*100).toFixed(1), `Gap FY: ${Math.round(proy-OB_TOTAL)}€`],
     [],
-    ['Comparativa vs año anterior ('+prevYear+')','NS '+kpiYear,'NS '+prevYear,'Variación (%)',''],
+    ['Comparativa vs año anterior'+(prevYear?' ('+prevYear+')':''),'NS '+kpiYear,'NS '+(prevYear||'PY'),'Variación (%)',''],
     ['Total', Math.round(A.totNS), Math.round(P.totNS), P.totNS>0?+((A.totNS-P.totNS)/P.totNS*100).toFixed(1):null,''],
     ['EQ', Math.round(A.eqNS), Math.round(P.eqNS), P.eqNS>0?+((A.eqNS-P.eqNS)/P.eqNS*100).toFixed(1):null,''],
     ['VC', Math.round(A.vcNS), Math.round(P.vcNS), P.vcNS>0?+((A.vcNS-P.vcNS)/P.vcNS*100).toFixed(1):null,''],
@@ -2151,14 +2149,9 @@ async function exportExcel(){
   wsKpi['!cols']=[{wch:30},{wch:14},{wch:14},{wch:14},{wch:35}];
   XLSX.utils.book_append_sheet(wb,wsKpi,'KPIs');
 
-  // ── Hoja 2: Tabla de flotas — construir desde allRows (no depende de fleetRows) ──
-  const flotaYears=allYearsArr;
-  const latY=Math.max(...flotaYears);
-  const prevY=flotaYears[flotaYears.indexOf(latY)-1];
-
-  // Agrupar por flota y año
+  // ── Hoja 2: Tabla de flotas — filtrada exactamente como la vista ──────────
   const flotaMap={};
-  for(const r of allRows){
+  for(const r of rows){
     const key=r.fleet_norm;
     if(!flotaMap[key]) flotaMap[key]={name:key,canals:new Set(),years:{}};
     flotaMap[key].canals.add(r.canal);
@@ -2168,35 +2161,34 @@ async function exportExcel(){
     flotaMap[key].years[r.year].months.add(r.month);
   }
 
-  const dynHeader=['Flota','Canal',...flotaYears.map(yr=>yr+(yr===latY?' YTD (€)':' FY (€)')),'Proyección FY (€)','Var vs PY (%)','GM% (%)','Estado'];
+  const dynHeader=['Flota','Canal',...years.map(yr=>yr+(yr===kpiYear?' YTD (€)':' (€)')),'Proyección FY (€)','Var vs PY (%)','GM% (%)','Estado'];
   const flotaData=[dynHeader];
 
   Object.values(flotaMap)
-    .filter(f=>f.years[latY]?.ns>0)
-    .sort((a,b)=>(b.years[latY]?.ns||0)-(a.years[latY]?.ns||0))
+    .filter(f=>f.years[kpiYear]?.ns>0 && (f.years[kpiYear]?.ns||0)>=nsMin)
+    .sort((a,b)=>(b.years[kpiYear]?.ns||0)-(a.years[kpiYear]?.ns||0))
     .forEach(f=>{
       const ch=[...f.canals].sort().join('+');
-      const latest=f.years[latY]||{ns:0,gm:0,months:new Set([1])};
-      const prev=f.years[prevY]||{ns:0,gm:0,months:new Set([1])};
+      const latest=f.years[kpiYear]||{ns:0,gm:0,months:new Set([1])};
+      const prev=prevYear?(f.years[prevYear]||{ns:0,gm:0}):{ns:0,gm:0};
       const nm=latest.months?.size||1;
       const proy=latest.ns/nm*12;
-      const prevNm=prev.months?.size||1;
-      const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
-      const varV=prevProy>0?+((proy-prevProy)/prevProy*100).toFixed(1):null;
+      // Var vs PY: mismo período (YTD real vs YTD real)
+      const varV=prev.ns>0?+((latest.ns-prev.ns)/prev.ns*100).toFixed(1):null;
       const gp=latest.ns>0?+(latest.gm/latest.ns*100).toFixed(1):0;
-      const dynCols=flotaYears.map(yr=>f.years[yr]?.ns>0?Math.round(f.years[yr].ns):0);
+      const dynCols=years.map(yr=>f.years[yr]?.ns>0?Math.round(f.years[yr].ns):0);
       flotaData.push([f.name,ch,...dynCols,Math.round(proy),varV,gp,
         varV===null?'Sin PY':varV>5?'Crece':varV>=-5?'Estable':'Cae']);
     });
 
   const wsFlota=XLSX.utils.aoa_to_sheet(flotaData);
-  wsFlota['!cols']=[{wch:40},{wch:8},...flotaYears.map(()=>({wch:14})),{wch:14},{wch:12},{wch:8},{wch:10}];
+  wsFlota['!cols']=[{wch:40},{wch:8},...years.map(()=>({wch:14})),{wch:14},{wch:12},{wch:8},{wch:10}];
   XLSX.utils.book_append_sheet(wb,wsFlota,'Flotas');
 
-  // ── Hoja 3: Datos mensuales con valores reales ────────────────────────────
+  // ── Hoja 3: Datos mensuales — filtrados ──────────────────────────────────
   const rawData=[['Año','Mes','Canal','NS (€)','GM (€)','GM%']];
   const grouped={};
-  for(const r of allRows){
+  for(const r of rows){
     const k=`${r.year}_${r.month}_${r.canal}`;
     if(!grouped[k]) grouped[k]={year:r.year,month:r.month,canal:r.canal,ns:0,gm:0};
     grouped[k].ns+=r.ns||0;
@@ -2214,7 +2206,7 @@ async function exportExcel(){
   XLSX.utils.book_append_sheet(wb,wsRaw,'Mensual');
 
   // ── Descargar ─────────────────────────────────────────────────────────────
-  const fname=`FirstStop_Fleet_${kpiYear}_${now.replace(/\//g,'-')}.xlsx`;
+  const fname=`FirstStop_Fleet_${kpiYear}_${canalLabel}_${now.replace(/\//g,'-')}.xlsx`;
   XLSX.writeFile(wb,fname);
 }
 

@@ -388,7 +388,7 @@ body.present-mode #present-btn{display:none}
     <div class="topbar-title" id="topbar-title">Resumen global</div>
     <div class="topbar-pills">
       <div style="position:relative;margin-right:.25rem">
-        <input id="global-search" class="search" placeholder="🔍 Buscar flota..." style="width:180px;font-size:12px" oninput="globalSearch(this.value)" autocomplete="off">
+        <input id="global-search" class="search" placeholder="🔍 Ir a flota..." style="width:180px;font-size:12px" oninput="globalSearch(this.value)" autocomplete="off">
         <div id="global-search-results" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.12);min-width:260px;max-height:260px;overflow-y:auto;z-index:200;font-size:12px"></div>
       </div>
       <span class="pill" id="pill-period">—</span>
@@ -731,7 +731,12 @@ body.present-mode #present-btn{display:none}
         <div class="card-bd"><div id="alert-missing" style="font-size:12px;line-height:1.9;color:var(--muted)">Calculando...</div></div>
       </div>
       <div class="card" style="border-top:3px solid var(--gr)">
-        <div class="card-hd">🟢 Flotas que más crecen <span id="alert-grow-period" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
+        <div class="card-hd">🟢 Flotas que más crecen <span id="alert-grow-period" style="font-size:11px;font-weight:400;color:var(--muted)"></span>
+          <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:8px">
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#CE93D8;vertical-align:middle;margin-right:3px"></span>
+            sin datos en el mes más reciente (el crecimiento es del acumulado, revisar)
+          </span>
+        </div>
         <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th>Canal</th><th class="r">NS Actual</th><th class="r">NS Ant. (mismo período)</th><th class="r">Variación</th></tr></thead><tbody id="alert-grow-tb"></tbody></table></div></div>
       </div>
     </div>
@@ -1982,22 +1987,36 @@ async function showFleetHist(fleet){
   document.getElementById('fleet-detail-name').textContent=fleet;
   document.getElementById('fleet-hist-title').textContent=`Evolución mensual NS€ — ${fleet}${mtdLabel}`;
 
-  // Fila resumen
-  const flota=fleetRows.find(f=>f.name===fleet);
+  // Fila resumen — calculada directamente desde 'rows' (siempre disponible),
+  // en vez de depender de 'fleetRows' que puede no estar poblado si se llega
+  // aquí desde el buscador global sin haber pasado antes por refreshFlotas().
   const years_f=S.yearsF.size ? [...S.yearsF].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
   const latYf=Math.max(...years_f);
   const prevYf=years_f[years_f.indexOf(latYf)-1];
-  if(flota){
-    const ch=[...flota.canals].sort().join('+');
-    const latest=flota.years[latYf]||{ns:0,gm:0,months:new Set([1])};
-    const prev=flota.years[prevYf]||{ns:0,gm:0,months:new Set([1])};
+
+  // Agrupar rows por año (solo para esta flota, ya filtrada en la query)
+  const byYearLocal={};
+  for(const r of rows){
+    if(!byYearLocal[r.year]) byYearLocal[r.year]={ns:0,gm:0,months:new Set(),canals:new Set()};
+    byYearLocal[r.year].ns+=r.ns;
+    byYearLocal[r.year].gm+=r.gm;
+    byYearLocal[r.year].months.add(r.month);
+    byYearLocal[r.year].canals.add(r.canal);
+  }
+  const allCanalsLocal=new Set();
+  rows.forEach(r=>allCanalsLocal.add(r.canal));
+
+  if(rows.length){
+    const ch=[...allCanalsLocal].sort().join('+');
+    const latest=byYearLocal[latYf]||{ns:0,gm:0,months:new Set([1])};
+    const prev=byYearLocal[prevYf]||{ns:0,gm:0,months:new Set([1])};
     const nm=latest.months.size||1;
     const proy=latest.ns/nm*12;
     const prevNm=prev.months?.size||1;
     const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
     const varV=prevProy>0?(proy-prevProy)/prevProy:null;
     const gp=latest.ns>0?latest.gm/latest.ns:0;
-    const dynCols=years_f.map(yr=>{const d=flota.years[yr]||{ns:0};return`<td class="r">${d.ns>0?fmtM(d.ns):'—'}</td>`;}).join('');
+    const dynCols=years_f.map(yr=>{const d=byYearLocal[yr]||{ns:0};return`<td class="r">${d.ns>0?fmtM(d.ns):'—'}</td>`;}).join('');
     const dthead=document.getElementById('fleet-detail-row')?.closest('table')?.querySelector('thead tr');
     if(dthead){
       dthead.innerHTML='<th>Flota</th><th>Canal</th>'
@@ -2014,6 +2033,9 @@ async function showFleetHist(fleet){
         <td class="r">${fmtP(gp)}</td>
         <td title="${growthLabel(varV)}">${growthSem(varV)}</td>
       </tr>`;
+  }else{
+    document.getElementById('fleet-detail-row').innerHTML=
+      '<tr><td colspan="99" class="no-data">Sin datos para esta flota en el período seleccionado</td></tr>';
   }
 
   // Gráfico histórico completo (todos los años de la flota)
@@ -2088,6 +2110,7 @@ async function exportExcel(){
     ? (S.canalsF.size?[...S.canalsF]:['EQ','VC'])
     : ['EQ','VC'];
   const nsMin=isFlotas?(+(document.getElementById('ns-threshold')?.value||0)):0;
+  const searchQ=isFlotas?(document.getElementById('fleet-q')?.value||'').trim().toLowerCase():'';
 
   const wb=XLSX.utils.book_new();
   const kpiYear=Math.max(...years);
@@ -2128,7 +2151,17 @@ async function exportExcel(){
   const vcProy=A.vcNS/nM*12;
   const gmPct=A.totNS>0?A.totGM/A.totNS:0;
 
-  const periodoDesc=`${years.join('/')} · ${monthNames} · Canal: ${canalLabel}${nsMin>0?' · NS≥'+(nsMin/1000).toFixed(0)+'k':''}`;
+  // Pre-calcular total de flotas que cumplen el filtro (para mostrarlo en cabecera)
+  const flotaMapPreview={};
+  for(const r of rows){
+    if(!flotaMapPreview[r.fleet_norm]) flotaMapPreview[r.fleet_norm]={ns:0};
+    if(r.year===kpiYear) flotaMapPreview[r.fleet_norm].ns+=r.ns||0;
+  }
+  const totalFlotasFiltro=Object.entries(flotaMapPreview)
+    .filter(([name,d])=>d.ns>0&&d.ns>=nsMin)
+    .filter(([name])=>!searchQ||name.toLowerCase().includes(searchQ)).length;
+
+  const periodoDesc=`${years.join('/')} · ${monthNames} · Canal: ${canalLabel}${nsMin>0?' · NS≥'+(nsMin/1000).toFixed(0)+'k':''}${searchQ?' · Búsqueda: "'+searchQ+'"':''} · ${totalFlotasFiltro} flotas exportadas (todas las que cumplen el filtro)`;
   const kpiData=[
     ['First Stop Fleet Dashboard — Resumen ejecutivo'],
     [`Periodo: ${periodoDesc} · Exportado: ${now}`],
@@ -2164,10 +2197,12 @@ async function exportExcel(){
   const dynHeader=['Flota','Canal',...years.map(yr=>yr+(yr===kpiYear?' YTD (€)':' (€)')),'Proyección FY (€)','Var vs PY (%)','GM% (%)','Estado'];
   const flotaData=[dynHeader];
 
-  Object.values(flotaMap)
+  const flotasFiltradas=Object.values(flotaMap)
     .filter(f=>f.years[kpiYear]?.ns>0 && (f.years[kpiYear]?.ns||0)>=nsMin)
-    .sort((a,b)=>(b.years[kpiYear]?.ns||0)-(a.years[kpiYear]?.ns||0))
-    .forEach(f=>{
+    .filter(f=>!searchQ||f.name.toLowerCase().includes(searchQ))
+    .sort((a,b)=>(b.years[kpiYear]?.ns||0)-(a.years[kpiYear]?.ns||0));
+
+  flotasFiltradas.forEach(f=>{
       const ch=[...f.canals].sort().join('+');
       const latest=f.years[kpiYear]||{ns:0,gm:0,months:new Set([1])};
       const prev=prevYear?(f.years[prevYear]||{ns:0,gm:0}):{ns:0,gm:0};
@@ -2184,6 +2219,7 @@ async function exportExcel(){
   const wsFlota=XLSX.utils.aoa_to_sheet(flotaData);
   wsFlota['!cols']=[{wch:40},{wch:8},...years.map(()=>({wch:14})),{wch:14},{wch:12},{wch:8},{wch:10}];
   XLSX.utils.book_append_sheet(wb,wsFlota,'Flotas');
+  console.log(`Excel: ${flotasFiltradas.length} flotas exportadas (todas las que cumplen el filtro, no solo el Top 20 visible en pantalla)`);
 
   // ── Hoja 3: Datos mensuales — filtrados ──────────────────────────────────
   const rawData=[['Año','Mes','Canal','NS (€)','GM (€)','GM%']];
@@ -2507,6 +2543,18 @@ function makeChart(id,type,labels,datasets,cfg){
 // ══════════════════════════════════════════════════════════════════════════════
 function globalSearch(q){
   const res=document.getElementById('global-search-results');
+
+  // Si estamos en la vista "Por flota", sincronizar con el buscador de la tabla
+  // y filtrar directamente la tabla en lugar de (o además de) mostrar el dropdown.
+  const activeView=document.querySelector('.view.active')?.id;
+  if(activeView==='view-flotas'){
+    const fleetQInput=document.getElementById('fleet-q');
+    if(fleetQInput && fleetQInput.value!==q){
+      fleetQInput.value=q;
+      renderFlotasTb();
+    }
+  }
+
   if(!q||q.length<2){res.style.display='none';return;}
   const matches=S.fleetIndex ? S.fleetIndex.filter(f=>f.toLowerCase().includes(q.toLowerCase())).slice(0,10) : [];
   if(!matches.length){res.style.display='none';return;}
@@ -2611,13 +2659,14 @@ async function refreshAlertas(){
   const trAlert=(f,showGm=false)=>{
     const c=f.canal;
     const badge=`<span class="badge ${c.includes('+')?'both':c}">${c}</span>`;
+    const missingBadge=!f.hasLatestMo?`<span title="Sin datos en ${MN[latestMonth-1]}" style="display:inline-block;margin-left:5px;width:7px;height:7px;border-radius:50%;background:#CE93D8;vertical-align:middle"></span>`:'';
     if(showGm) return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\'")}')">
-      <td style="color:var(--bl)">${f.name}</td><td>${badge}</td>
+      <td style="color:var(--bl)">${f.name}${missingBadge}</td><td>${badge}</td>
       <td class="r">${fmtM(f.nsLat)}</td>
       <td class="r ${f.gp<0.05?'dn':f.gp<gmThresh?'warn':''}">${fmtP(f.gp)}</td>
     </tr>`;
     return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\'")}')">
-      <td style="color:var(--bl)">${f.name}</td><td>${badge}</td>
+      <td style="color:var(--bl)">${f.name}${missingBadge}</td><td>${badge}</td>
       <td class="r">${fmtM(f.nsLat)}</td>
       <td class="r"><span style="color:var(--muted)">${f.nsPrev>0?fmtM(f.nsPrev):'—'}</span></td>
       <td class="r ${varCls(f.varV)}">${f.varV!==null?varStr(f.varV):'Sin PY'}</td>

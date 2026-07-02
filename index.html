@@ -2503,7 +2503,7 @@ async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
 
   for(let i=0;i<rowsOut.length;i+=50){
     const batch=rowsOut.slice(i,i+50);
-    await restJson('fleet_data_daily',{
+    await restJson('fleet_data_daily?on_conflict=snap_date,canal,fleet_norm',{
       method:'POST',
       body:JSON.stringify(batch),
       headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}

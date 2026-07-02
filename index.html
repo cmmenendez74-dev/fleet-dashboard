@@ -388,7 +388,7 @@ body.present-mode #present-btn{display:none}
     <div class="topbar-title" id="topbar-title">Resumen global</div>
     <div class="topbar-pills">
       <div style="position:relative;margin-right:.25rem">
-        <input id="global-search" class="search" placeholder="🔍 Ir a flota..." style="width:180px;font-size:12px" oninput="globalSearch(this.value)" autocomplete="off">
+        <input id="global-search" class="search" placeholder="🔍 Buscar flota..." style="width:180px;font-size:12px" oninput="globalSearch(this.value)" autocomplete="off">
         <div id="global-search-results" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.12);min-width:260px;max-height:260px;overflow-y:auto;z-index:200;font-size:12px"></div>
       </div>
       <span class="pill" id="pill-period">—</span>
@@ -425,23 +425,29 @@ body.present-mode #present-btn{display:none}
     <div class="view" id="view-upload">
       <div class="card"><div class="card-hd">Cargar archivos Navision</div>
       <div class="card-bd">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
+          <span class="filter-label">Fecha de estos archivos</span>
+          <input type="date" id="upload-date" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;background:#fff;font-family:inherit">
+          <span style="font-size:11px;color:var(--muted)">Se usa para guardar la evolución diaria (NS, GM, OPR-ID por día). Por defecto, hoy.</span>
+        </div>
         <label class="upload-zone" id="drop-zone">
           <input type="file" id="file-input" multiple accept=".xlsx,.xls">
           <svg style="width:36px;height:36px;color:#ccc;margin-bottom:.5rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <h3>Arrastra archivos EQ y VC aquí</h3>
-          <p style="margin-top:.3rem">Detecta año, mes y canal por el nombre · Múltiples meses a la vez</p>
-          <p style="margin-top:.25rem;font-size:11px;color:#aaa">EQ_Enero2026.xlsx · VC_Mayo26.xlsx · EQ_2025.xlsx</p>
+          <h3>Arrastra los archivos EQ, VC e ID aquí</h3>
+          <p style="margin-top:.3rem">El tipo de archivo (EQ / VC / ID) se detecta por sus columnas, no por el nombre</p>
+          <p style="margin-top:.25rem;font-size:11px;color:#aaa">Ej: VCJulio26.xlsx · EQJulio2026.xlsx · id1726.xlsx</p>
         </label>
         <div id="upload-log" class="upload-log"></div>
         <button class="btn primary" onclick="document.getElementById('file-input').click()">Seleccionar archivos</button>
       </div></div>
       <div class="card"><div class="card-hd">Formato de archivos</div>
       <div class="card-bd" style="font-size:12px;color:var(--muted);line-height:1.9">
-        <b style="color:var(--text)">Nombre:</b> Debe empezar por EQ o VC · Contener mes en español (Enero, Feb, Marzo...) · Año (2024, 2025, 2026)<br>
-        <b style="color:var(--text)">EQ:</b> Hoja Export · Columnas NOMBRE, NS€, GM€<br>
-        <b style="color:var(--text)">VC:</b> Columnas CLI_RAZON, TOTAL_VENTA, GM_FST<br>
-        <b style="color:var(--text)">Flotas nuevas:</b> Se incorporan solas al subir el archivo<br>
-        <b style="color:var(--text)">Resubir un mes:</b> Sobreescribe los datos de ese período
+        <b style="color:var(--text)">EQ (resultados):</b> Hoja Export · Columnas NOMBRE, NS€, GM€<br>
+        <b style="color:var(--text)">VC:</b> Columnas CLI_RAZON, Recuento de OPR_ID, TOTAL_VENTA, GM_FST<br>
+        <b style="color:var(--text)">ID (nº operaciones Equity):</b> Columnas Customer Name, Docs — se combina automáticamente con el archivo EQ de la misma fecha<br>
+        <b style="color:var(--text)">Cada subida:</b> Sobreescribe el mes en curso (como hasta ahora) y además guarda un snapshot del día elegido arriba, para poder ver la evolución diaria<br>
+        <b style="color:var(--text)">Fines de semana:</b> Si no subes archivo, no se guarda ese día — el siguiente día laborable ya recoge en su acumulado lo generado durante el fin de semana<br>
+        <b style="color:var(--text)">Flotas nuevas:</b> Se incorporan solas al subir el archivo
       </div></div>
     </div>
 
@@ -520,6 +526,7 @@ body.present-mode #present-btn{display:none}
         <div class="chip-group">
           <span class="chip on" id="hist-mode-anual" onclick="setHistMode('anual')">Anual</span>
           <span class="chip" id="hist-mode-mtd" onclick="setHistMode('mtd')">Mes vs Mes</span>
+          <span class="chip" id="hist-mode-diario" onclick="setHistMode('diario')">Evolución diaria</span>
           <span class="chip" id="hist-mode-heatmap" onclick="setHistMode('heatmap')">Heatmap</span>
           <span class="chip" id="hist-mode-comparar" onclick="setHistMode('comparar')">Comparar</span>
         </div>
@@ -574,6 +581,45 @@ body.present-mode #present-btn{display:none}
           </div></div>
         </div>
       </div>
+      <!-- Modo Diario (Evolución diaria) -->
+      <div id="hist-view-diario" style="display:none">
+        <div class="filter-bar" style="flex-wrap:wrap;margin-bottom:.85rem">
+          <span class="filter-label">Desde</span>
+          <input type="date" id="diario-from" onchange="refreshDiario()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:#fff;font-family:inherit">
+          <span class="filter-label" style="margin-left:.35rem">Hasta</span>
+          <input type="date" id="diario-to" onchange="refreshDiario()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:#fff;font-family:inherit">
+          <span class="filter-label" style="margin-left:.5rem">Canal</span>
+          <div class="chip-group" id="diario-canal-chips">
+            <span class="chip on" data-c="EQ" onclick="toggleDiarioCanal(this)">EQ</span>
+            <span class="chip on" data-c="VC" onclick="toggleDiarioCanal(this)">VC</span>
+          </div>
+          <span class="filter-label" style="margin-left:.5rem">Flota</span>
+          <select id="diario-fleet" onchange="refreshDiario()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:#fff;max-width:220px">
+            <option value="">Todas</option>
+          </select>
+          <span class="filter-label" style="margin-left:.5rem">Métrica</span>
+          <div class="chip-group" id="diario-metric-chips">
+            <span class="chip on" data-m="ns" onclick="toggleDiarioMetric(this)">NS€</span>
+            <span class="chip" data-m="gm" onclick="toggleDiarioMetric(this)">GM€</span>
+            <span class="chip" data-m="opr" onclick="toggleDiarioMetric(this)">OPR-ID</span>
+          </div>
+        </div>
+        <div class="kpi-row" id="diario-kpis" style="margin-bottom:.85rem"></div>
+        <div class="card" style="margin-bottom:.85rem">
+          <div class="card-hd">Producción diaria (variación respecto al último día con datos)</div>
+          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-diario"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">Detalle por día</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead><tr>
+              <th>Fecha</th><th class="r">NS día</th><th class="r">GM día</th><th class="r">GM%</th>
+              <th class="r">OPR-ID EQ</th><th class="r">OPR-ID VC</th><th class="r">NS acumulado</th>
+            </tr></thead><tbody id="diario-tb"></tbody></table>
+          </div></div>
+        </div>
+      </div>
+
       <!-- Modo Heatmap -->
       <div id="hist-view-heatmap" style="display:none">
         <div class="filter-bar" style="margin-bottom:.85rem">
@@ -731,12 +777,7 @@ body.present-mode #present-btn{display:none}
         <div class="card-bd"><div id="alert-missing" style="font-size:12px;line-height:1.9;color:var(--muted)">Calculando...</div></div>
       </div>
       <div class="card" style="border-top:3px solid var(--gr)">
-        <div class="card-hd">🟢 Flotas que más crecen <span id="alert-grow-period" style="font-size:11px;font-weight:400;color:var(--muted)"></span>
-          <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:8px">
-            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#CE93D8;vertical-align:middle;margin-right:3px"></span>
-            sin datos en el mes más reciente (el crecimiento es del acumulado, revisar)
-          </span>
-        </div>
+        <div class="card-hd">🟢 Flotas que más crecen <span id="alert-grow-period" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
         <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th>Canal</th><th class="r">NS Actual</th><th class="r">NS Ant. (mismo período)</th><th class="r">Variación</th></tr></thead><tbody id="alert-grow-tb"></tbody></table></div></div>
       </div>
     </div>
@@ -1343,7 +1384,14 @@ function nav(id,el){
   el.classList.add('active');
   document.getElementById('topbar-title').textContent=TITLES[id]||id;
   if(id==='resumen') refreshResumen();
-  else if(id==='historico'){buildChipsH(); buildChipsMesH(); applyHistMode(); refreshHistorico();}
+  else if(id==='historico'){
+    buildChipsH(); buildChipsMesH(); applyHistMode();
+    if(S.histMode==='mtd') refreshMTD();
+    else if(S.histMode==='diario') initDiario();
+    else if(S.histMode==='heatmap') refreshHeatmap();
+    else if(S.histMode==='comparar') initComparar();
+    else refreshHistorico();
+  }
   else if(id==='flotas'){
     document.getElementById('flotas-detail-view').style.display='none';
     document.getElementById('flotas-table-view').style.display='block';
@@ -1548,11 +1596,13 @@ function setHistMode(mode){
   S.histMode=mode;
   document.getElementById('hist-mode-anual').classList.toggle('on', mode==='anual');
   document.getElementById('hist-mode-mtd').classList.toggle('on', mode==='mtd');
+  document.getElementById('hist-mode-diario').classList.toggle('on', mode==='diario');
   document.getElementById('hist-mode-heatmap').classList.toggle('on', mode==='heatmap');
   document.getElementById('hist-mode-comparar').classList.toggle('on', mode==='comparar');
   applyHistMode();
   if(mode==='anual') refreshHistorico();
   else if(mode==='mtd') refreshMTD();
+  else if(mode==='diario') initDiario();
   else if(mode==='heatmap') refreshHeatmap();
   else if(mode==='comparar') initComparar();
 }
@@ -1561,6 +1611,7 @@ function applyHistMode(){
   const mode=S.histMode;
   document.getElementById('hist-view-anual').style.display=mode==='anual'?'block':'none';
   document.getElementById('hist-view-mtd').style.display=mode==='mtd'?'block':'none';
+  document.getElementById('hist-view-diario').style.display=mode==='diario'?'block':'none';
   document.getElementById('hist-view-heatmap').style.display=mode==='heatmap'?'block':'none';
   document.getElementById('hist-view-comparar').style.display=mode==='comparar'?'block':'none';
   document.getElementById('hist-mes-label').style.display=mode==='mtd'?'':'none';
@@ -1987,36 +2038,22 @@ async function showFleetHist(fleet){
   document.getElementById('fleet-detail-name').textContent=fleet;
   document.getElementById('fleet-hist-title').textContent=`Evolución mensual NS€ — ${fleet}${mtdLabel}`;
 
-  // Fila resumen — calculada directamente desde 'rows' (siempre disponible),
-  // en vez de depender de 'fleetRows' que puede no estar poblado si se llega
-  // aquí desde el buscador global sin haber pasado antes por refreshFlotas().
+  // Fila resumen
+  const flota=fleetRows.find(f=>f.name===fleet);
   const years_f=S.yearsF.size ? [...S.yearsF].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
   const latYf=Math.max(...years_f);
   const prevYf=years_f[years_f.indexOf(latYf)-1];
-
-  // Agrupar rows por año (solo para esta flota, ya filtrada en la query)
-  const byYearLocal={};
-  for(const r of rows){
-    if(!byYearLocal[r.year]) byYearLocal[r.year]={ns:0,gm:0,months:new Set(),canals:new Set()};
-    byYearLocal[r.year].ns+=r.ns;
-    byYearLocal[r.year].gm+=r.gm;
-    byYearLocal[r.year].months.add(r.month);
-    byYearLocal[r.year].canals.add(r.canal);
-  }
-  const allCanalsLocal=new Set();
-  rows.forEach(r=>allCanalsLocal.add(r.canal));
-
-  if(rows.length){
-    const ch=[...allCanalsLocal].sort().join('+');
-    const latest=byYearLocal[latYf]||{ns:0,gm:0,months:new Set([1])};
-    const prev=byYearLocal[prevYf]||{ns:0,gm:0,months:new Set([1])};
+  if(flota){
+    const ch=[...flota.canals].sort().join('+');
+    const latest=flota.years[latYf]||{ns:0,gm:0,months:new Set([1])};
+    const prev=flota.years[prevYf]||{ns:0,gm:0,months:new Set([1])};
     const nm=latest.months.size||1;
     const proy=latest.ns/nm*12;
     const prevNm=prev.months?.size||1;
     const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
     const varV=prevProy>0?(proy-prevProy)/prevProy:null;
     const gp=latest.ns>0?latest.gm/latest.ns:0;
-    const dynCols=years_f.map(yr=>{const d=byYearLocal[yr]||{ns:0};return`<td class="r">${d.ns>0?fmtM(d.ns):'—'}</td>`;}).join('');
+    const dynCols=years_f.map(yr=>{const d=flota.years[yr]||{ns:0};return`<td class="r">${d.ns>0?fmtM(d.ns):'—'}</td>`;}).join('');
     const dthead=document.getElementById('fleet-detail-row')?.closest('table')?.querySelector('thead tr');
     if(dthead){
       dthead.innerHTML='<th>Flota</th><th>Canal</th>'
@@ -2033,9 +2070,6 @@ async function showFleetHist(fleet){
         <td class="r">${fmtP(gp)}</td>
         <td title="${growthLabel(varV)}">${growthSem(varV)}</td>
       </tr>`;
-  }else{
-    document.getElementById('fleet-detail-row').innerHTML=
-      '<tr><td colspan="99" class="no-data">Sin datos para esta flota en el período seleccionado</td></tr>';
   }
 
   // Gráfico histórico completo (todos los años de la flota)
@@ -2110,7 +2144,6 @@ async function exportExcel(){
     ? (S.canalsF.size?[...S.canalsF]:['EQ','VC'])
     : ['EQ','VC'];
   const nsMin=isFlotas?(+(document.getElementById('ns-threshold')?.value||0)):0;
-  const searchQ=isFlotas?(document.getElementById('fleet-q')?.value||'').trim().toLowerCase():'';
 
   const wb=XLSX.utils.book_new();
   const kpiYear=Math.max(...years);
@@ -2151,17 +2184,7 @@ async function exportExcel(){
   const vcProy=A.vcNS/nM*12;
   const gmPct=A.totNS>0?A.totGM/A.totNS:0;
 
-  // Pre-calcular total de flotas que cumplen el filtro (para mostrarlo en cabecera)
-  const flotaMapPreview={};
-  for(const r of rows){
-    if(!flotaMapPreview[r.fleet_norm]) flotaMapPreview[r.fleet_norm]={ns:0};
-    if(r.year===kpiYear) flotaMapPreview[r.fleet_norm].ns+=r.ns||0;
-  }
-  const totalFlotasFiltro=Object.entries(flotaMapPreview)
-    .filter(([name,d])=>d.ns>0&&d.ns>=nsMin)
-    .filter(([name])=>!searchQ||name.toLowerCase().includes(searchQ)).length;
-
-  const periodoDesc=`${years.join('/')} · ${monthNames} · Canal: ${canalLabel}${nsMin>0?' · NS≥'+(nsMin/1000).toFixed(0)+'k':''}${searchQ?' · Búsqueda: "'+searchQ+'"':''} · ${totalFlotasFiltro} flotas exportadas (todas las que cumplen el filtro)`;
+  const periodoDesc=`${years.join('/')} · ${monthNames} · Canal: ${canalLabel}${nsMin>0?' · NS≥'+(nsMin/1000).toFixed(0)+'k':''}`;
   const kpiData=[
     ['First Stop Fleet Dashboard — Resumen ejecutivo'],
     [`Periodo: ${periodoDesc} · Exportado: ${now}`],
@@ -2197,12 +2220,10 @@ async function exportExcel(){
   const dynHeader=['Flota','Canal',...years.map(yr=>yr+(yr===kpiYear?' YTD (€)':' (€)')),'Proyección FY (€)','Var vs PY (%)','GM% (%)','Estado'];
   const flotaData=[dynHeader];
 
-  const flotasFiltradas=Object.values(flotaMap)
+  Object.values(flotaMap)
     .filter(f=>f.years[kpiYear]?.ns>0 && (f.years[kpiYear]?.ns||0)>=nsMin)
-    .filter(f=>!searchQ||f.name.toLowerCase().includes(searchQ))
-    .sort((a,b)=>(b.years[kpiYear]?.ns||0)-(a.years[kpiYear]?.ns||0));
-
-  flotasFiltradas.forEach(f=>{
+    .sort((a,b)=>(b.years[kpiYear]?.ns||0)-(a.years[kpiYear]?.ns||0))
+    .forEach(f=>{
       const ch=[...f.canals].sort().join('+');
       const latest=f.years[kpiYear]||{ns:0,gm:0,months:new Set([1])};
       const prev=prevYear?(f.years[prevYear]||{ns:0,gm:0}):{ns:0,gm:0};
@@ -2219,7 +2240,6 @@ async function exportExcel(){
   const wsFlota=XLSX.utils.aoa_to_sheet(flotaData);
   wsFlota['!cols']=[{wch:40},{wch:8},...years.map(()=>({wch:14})),{wch:14},{wch:12},{wch:8},{wch:10}];
   XLSX.utils.book_append_sheet(wb,wsFlota,'Flotas');
-  console.log(`Excel: ${flotasFiltradas.length} flotas exportadas (todas las que cumplen el filtro, no solo el Top 20 visible en pantalla)`);
 
   // ── Hoja 3: Datos mensuales — filtrados ──────────────────────────────────
   const rawData=[['Año','Mes','Canal','NS (€)','GM (€)','GM%']];
@@ -2357,10 +2377,12 @@ fileInput.onchange=e=>{handleFiles([...e.target.files]);fileInput.value='';};
 dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag')};
 dropZone.ondragleave=()=>dropZone.classList.remove('drag');
 dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag');handleFiles([...e.dataTransfer.files])};
+function todayISO(){const d=new Date();const tz=d.getTimezoneOffset();const local=new Date(d.getTime()-tz*60000);return local.toISOString().slice(0,10);}
+const uploadDateEl=document.getElementById('upload-date');
+if(uploadDateEl) uploadDateEl.value=todayISO();
 
 function detectMeta(fname){
   const n=fname.toLowerCase();
-  const canal=n.startsWith('eq')?'EQ':n.startsWith('vc')?'VC':null;
   let month=null;
   for(const[k,v] of Object.entries(MMAP)) if(n.includes(k)){month=v;break}
   let year=null;
@@ -2368,8 +2390,17 @@ function detectMeta(fname){
   for(const y of['2024','2025','2026','2027']) if(n.includes(y)){year=+y;break}
   // 2-digit year fallback: match any 24/25/26/27 anywhere in filename
   if(!year){const m2=n.match(/(?:^|[^0-9])(2[4-7])(?:[^0-9]|$)/);if(m2)year=2000+parseInt(m2[1]);}
-  if(!year) year=2026;
-  return{canal,month,year};
+  return{month,year};
+}
+
+// Detecta el tipo de archivo (EQ/VC/ID) por sus columnas, no por el nombre.
+function sniffKind(rows){
+  if(!rows||!rows.length) return null;
+  const cols=Object.keys(rows[0]);
+  if(cols.includes('CLI_RAZON')) return 'VC';
+  if(cols.includes('NOMBRE') && cols.some(c=>c.includes('NS'))) return 'EQ';
+  if(cols.includes('Customer Name') && cols.includes('Docs')) return 'ID';
+  return null;
 }
 
 function toNumber(v){
@@ -2385,20 +2416,36 @@ function toNumber(v){
   return Number.isFinite(n)?n:0;
 }
 
-function parseXLSX(buffer,canal){
+function readWorkbookRows(buffer){
   const wb=XLSX.read(buffer,{type:'array'});
-  const sn=canal==='EQ'&&wb.SheetNames.includes('Export')?'Export':wb.SheetNames[0];
-  const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});
+  const sn=wb.SheetNames.includes('Export')?'Export':wb.SheetNames[0];
+  return XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});
+}
+
+// kind: 'EQ' | 'VC' | 'ID'. Devuelve {raw,norm,ns,gm,opr_id}. opr_id es null si esa fuente no lo trae.
+function parseRowsByKind(rows,kind){
   const out=[];
   for(const row of rows){
-    const name=(canal==='EQ'?row['NOMBRE']:row['CLI_RAZON']||row['NOMBRE']||'')||'';
-    const ns=String(name).trim();
-    if(!ns||['total','subtotal'].includes(ns.toLowerCase())||ns.startsWith('Filtros')) continue;
-    let nsv=0,gmv=0;
-    if(canal==='EQ'){nsv=toNumber(row['NS€']);gmv=toNumber(row['GM€']);}
-    else{const vc=Object.keys(row).find(k=>k.includes('VENTA'))||'TOTAL_VENTA';nsv=toNumber(row[vc]);gmv=toNumber(row['GM_FST']);}
-    if(nsv===0&&gmv===0) continue;
-    out.push({raw:ns,norm:normName(ns),ns:Math.round(nsv*100)/100,gm:Math.round(gmv*100)/100});
+    let name='';
+    if(kind==='EQ') name=row['NOMBRE']||'';
+    else if(kind==='VC') name=row['CLI_RAZON']||row['NOMBRE']||'';
+    else if(kind==='ID') name=row['Customer Name']||'';
+    const ns_=String(name).trim();
+    if(!ns_||['total','subtotal'].includes(ns_.toLowerCase())||ns_.startsWith('Filtros')) continue;
+    let nsv=0,gmv=0,oprv=null;
+    if(kind==='EQ'){
+      nsv=toNumber(row['NS€']);gmv=toNumber(row['GM€']);
+    }else if(kind==='VC'){
+      const vcKey=Object.keys(row).find(k=>k.includes('VENTA'))||'TOTAL_VENTA';
+      nsv=toNumber(row[vcKey]); gmv=toNumber(row['GM_FST']);
+      const idKey=Object.keys(row).find(k=>k.toLowerCase().includes('opr'));
+      if(idKey) oprv=Math.round(toNumber(row[idKey]));
+    }else if(kind==='ID'){
+      oprv=Math.round(toNumber(row['Docs']));
+    }
+    if(kind!=='ID' && nsv===0 && gmv===0) continue;
+    if(kind==='ID' && (oprv===null||!isFinite(oprv))) continue;
+    out.push({raw:ns_,norm:normName(ns_),ns:Math.round(nsv*100)/100,gm:Math.round(gmv*100)/100,opr_id:oprv});
   }
   return out;
 }
@@ -2426,66 +2473,117 @@ async function verifySavedPeriod(year,month,canal){
   return Array.isArray(rows) && rows.length>0;
 }
 
+// Guarda/actualiza el snapshot diario (fleet_data_daily) para una fecha+canal concretos.
+// isOprOnly=true → viene del archivo ID (solo trae opr_id, hay que conservar ns/gm ya guardados ese día).
+// isOprOnly=false → viene de EQ/VC (trae ns/gm; si es EQ hay que conservar el opr_id ya guardado por el archivo ID).
+async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
+  const year=+date.slice(0,4), month=+date.slice(5,7);
+  const existing=await sbSelectAll('fleet_data_daily',
+    `select=fleet_norm,fleet_raw,ns,gm,opr_id&snap_date=eq.${date}&canal=eq.${canal}`);
+  const exMap={};
+  for(const e of (existing||[])) exMap[e.fleet_norm]=e;
+
+  const rowsOut=parsedRows.map(r=>{
+    const prev=exMap[r.norm];
+    if(isOprOnly){
+      return{
+        snap_date:date, year, month, canal,
+        fleet_raw:String(r.raw||'').slice(0,200), fleet_norm:String(r.norm||'').slice(0,100),
+        ns:prev?Number(prev.ns)||0:0, gm:prev?Number(prev.gm)||0:0,
+        opr_id:r.opr_id
+      };
+    }
+    const opr=(r.opr_id!==null&&r.opr_id!==undefined)?r.opr_id:(prev?prev.opr_id:null);
+    return{
+      snap_date:date, year, month, canal,
+      fleet_raw:String(r.raw||'').slice(0,200), fleet_norm:String(r.norm||'').slice(0,100),
+      ns:Number(r.ns)||0, gm:Number(r.gm)||0, opr_id:opr
+    };
+  });
+
+  for(let i=0;i<rowsOut.length;i+=50){
+    const batch=rowsOut.slice(i,i+50);
+    await restJson('fleet_data_daily',{
+      method:'POST',
+      body:JSON.stringify(batch),
+      headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}
+    });
+  }
+  return rowsOut.length;
+}
+
 async function handleFiles(files){
   if(!isAdmin()){alert('Solo el usuario administrador puede subir archivos.');return;}
   const log=document.getElementById('upload-log');
   log.style.display='block';
   log.innerHTML='';
-  
-  for(const file of files){
-    const {canal,month,year}=detectMeta(file.name);
-    const rowId='log_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${file.name}</b> — Procesando ${canal||'?'} ${month?MN[month-1]:''} ${year}...</div>`;
-    log.scrollTop=log.scrollHeight;
+  const pickedDate=document.getElementById('upload-date')?.value || todayISO();
 
-    if(!canal||!month){
-      document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — No se detectó mes o canal. El nombre debe empezar por EQ o VC y contener el mes.`;
-      continue;
-    }
+  for(const file of files){
+    const rowId='log_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${file.name}</b> — Detectando tipo de archivo...</div>`;
+    log.scrollTop=log.scrollHeight;
 
     try{
       const buf=await file.arrayBuffer();
-      const fleets=parseXLSX(new Uint8Array(buf),canal);
-      if(!fleets.length){
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Sin datos válidos. Revisa nombres de columnas: EQ=NOMBRE/NS€/GM€; VC=CLI_RAZON/TOTAL_VENTA/GM_FST.`;
+      const rawRows=readWorkbookRows(new Uint8Array(buf));
+      const kind=sniffKind(rawRows);
+
+      if(!kind){
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — No se reconoce el tipo de archivo. Debe tener columnas CLI_RAZON (VC), NOMBRE+NS€ (EQ) o Customer Name+Docs (ID).`;
         continue;
       }
 
-      const rows=fleets.map(f=>({
-        year:Number(year),
-        month:Number(month),
-        canal:String(canal),
-        fleet_raw:String(f.raw||'').slice(0,200),
-        fleet_norm:String(f.norm||'').slice(0,100),
-        ns:Number(f.ns)||0,
-        gm:Number(f.gm)||0
-      }));
+      const canal = kind==='ID' ? 'EQ' : kind;
+      const fleets=parseRowsByKind(rawRows,kind);
+      if(!fleets.length){
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Detectado como ${kind}, pero sin filas válidas.`;
+        continue;
+      }
 
-      document.getElementById(rowId).innerHTML=`<span class="log-warn">↻</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: borrando datos anteriores...`;
+      // 1) Snapshot diario (siempre) — permite ver la evolución día a día.
+      document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — Detectado ${kind}: guardando snapshot del ${pickedDate}...`;
+      await upsertDailySnapshot(pickedDate,canal,fleets,kind==='ID');
 
-      await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
-        method:'DELETE',
-        headers:{'Prefer':'return=minimal'}
-      });
+      // 2) Los archivos EQ/VC además sobrescriben el mes en curso (comportamiento igual que hasta ahora).
+      if(kind==='EQ'||kind==='VC'){
+        const meta=detectMeta(file.name);
+        const month=meta.month || (+pickedDate.slice(5,7));
+        const year=meta.year || (+pickedDate.slice(0,4));
 
-      let inserted=0;
-      for(let i=0;i<rows.length;i+=50){
-        const batch=rows.slice(i,i+50);
-        await restJson('fleet_data',{
-          method:'POST',
-          body:JSON.stringify(batch),
+        const rows=fleets.map(f=>({
+          year:Number(year), month:Number(month), canal:String(canal),
+          fleet_raw:String(f.raw||'').slice(0,200), fleet_norm:String(f.norm||'').slice(0,100),
+          ns:Number(f.ns)||0, gm:Number(f.gm)||0
+        }));
+
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">↻</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: borrando datos anteriores del mes...`;
+
+        await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
+          method:'DELETE',
           headers:{'Prefer':'return=minimal'}
         });
-        inserted+=batch.length;
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: ${inserted}/${rows.length} filas enviadas...`;
-      }
 
-      const ok = await verifySavedPeriod(year,month,canal);
-      if(!ok){
-        throw new Error('Supabase aceptó la petición, pero al verificar no devuelve filas. Revisa políticas RLS de SELECT/INSERT o permisos de la anon key.');
-      }
+        let inserted=0;
+        for(let i=0;i<rows.length;i+=50){
+          const batch=rows.slice(i,i+50);
+          await restJson('fleet_data',{
+            method:'POST',
+            body:JSON.stringify(batch),
+            headers:{'Prefer':'return=minimal'}
+          });
+          inserted+=batch.length;
+          document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: ${inserted}/${rows.length} filas enviadas...`;
+        }
 
-      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · ${fleets.length} flotas.`;
+        const ok = await verifySavedPeriod(year,month,canal);
+        if(!ok){
+          throw new Error('Supabase aceptó la petición, pero al verificar no devuelve filas. Revisa políticas RLS de SELECT/INSERT o permisos de la anon key.');
+        }
+        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · ${fleets.length} flotas · snapshot diario ${pickedDate}.`;
+      }else{
+        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — OPR-ID guardado para EQ · snapshot diario ${pickedDate} · ${fleets.length} flotas.`;
+      }
     }catch(e){
       const msg=(e.message||'Error desconocido').replace(/[<>]/g,'').slice(0,400);
       document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${file.name}</b> — NO guardado: ${msg}`;
@@ -2543,18 +2641,6 @@ function makeChart(id,type,labels,datasets,cfg){
 // ══════════════════════════════════════════════════════════════════════════════
 function globalSearch(q){
   const res=document.getElementById('global-search-results');
-
-  // Si estamos en la vista "Por flota", sincronizar con el buscador de la tabla
-  // y filtrar directamente la tabla en lugar de (o además de) mostrar el dropdown.
-  const activeView=document.querySelector('.view.active')?.id;
-  if(activeView==='view-flotas'){
-    const fleetQInput=document.getElementById('fleet-q');
-    if(fleetQInput && fleetQInput.value!==q){
-      fleetQInput.value=q;
-      renderFlotasTb();
-    }
-  }
-
   if(!q||q.length<2){res.style.display='none';return;}
   const matches=S.fleetIndex ? S.fleetIndex.filter(f=>f.toLowerCase().includes(q.toLowerCase())).slice(0,10) : [];
   if(!matches.length){res.style.display='none';return;}
@@ -2659,14 +2745,13 @@ async function refreshAlertas(){
   const trAlert=(f,showGm=false)=>{
     const c=f.canal;
     const badge=`<span class="badge ${c.includes('+')?'both':c}">${c}</span>`;
-    const missingBadge=!f.hasLatestMo?`<span title="Sin datos en ${MN[latestMonth-1]}" style="display:inline-block;margin-left:5px;width:7px;height:7px;border-radius:50%;background:#CE93D8;vertical-align:middle"></span>`:'';
     if(showGm) return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\'")}')">
-      <td style="color:var(--bl)">${f.name}${missingBadge}</td><td>${badge}</td>
+      <td style="color:var(--bl)">${f.name}</td><td>${badge}</td>
       <td class="r">${fmtM(f.nsLat)}</td>
       <td class="r ${f.gp<0.05?'dn':f.gp<gmThresh?'warn':''}">${fmtP(f.gp)}</td>
     </tr>`;
     return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\'")}')">
-      <td style="color:var(--bl)">${f.name}${missingBadge}</td><td>${badge}</td>
+      <td style="color:var(--bl)">${f.name}</td><td>${badge}</td>
       <td class="r">${fmtM(f.nsLat)}</td>
       <td class="r"><span style="color:var(--muted)">${f.nsPrev>0?fmtM(f.nsPrev):'—'}</span></td>
       <td class="r ${varCls(f.varV)}">${f.varV!==null?varStr(f.varV):'Sin PY'}</td>
@@ -2846,6 +2931,166 @@ async function exportFleetDetail(){
 // MTD vs MTD-PY en showFleetHist (comparativa mismo mes año anterior)
 // — se inyecta en el título del gráfico histórico
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EVOLUCIÓN DIARIA (fleet_data_daily)
+// ══════════════════════════════════════════════════════════════════════════════
+let diarioChart=null;
+let diarioState={canals:new Set(['EQ','VC']),metrics:new Set(['ns']),fleet:''};
+
+function initDiario(){
+  const toEl=document.getElementById('diario-to');
+  const fromEl=document.getElementById('diario-from');
+  if(!toEl.value){
+    const today=todayISO();
+    toEl.value=today;
+    const d=new Date(today+'T00:00:00');
+    d.setDate(d.getDate()-21); // últimos ~3 semanas por defecto
+    fromEl.value=d.toISOString().slice(0,10);
+  }
+  populateDiarioFleets();
+  refreshDiario();
+}
+
+async function populateDiarioFleets(){
+  try{
+    const rows=await sbSelectAll('fleet_data_daily','select=fleet_norm&order=fleet_norm.asc');
+    const names=[...new Set((rows||[]).map(r=>r.fleet_norm))].sort((a,b)=>a.localeCompare(b,'es'));
+    const sel=document.getElementById('diario-fleet');
+    const cur=sel.value;
+    sel.innerHTML='<option value="">Todas</option>'+names.map(n=>`<option value="${n}">${n}</option>`).join('');
+    sel.value=cur&&names.includes(cur)?cur:'';
+  }catch(e){console.warn('No se pudo cargar el listado de flotas diario',e);}
+}
+
+function toggleDiarioCanal(el){
+  el.classList.toggle('on');
+  diarioState.canals=new Set([...document.querySelectorAll('#diario-canal-chips .chip.on')].map(c=>c.dataset.c));
+  refreshDiario();
+}
+
+function toggleDiarioMetric(el){
+  el.classList.toggle('on');
+  diarioState.metrics=new Set([...document.querySelectorAll('#diario-metric-chips .chip.on')].map(c=>c.dataset.m));
+  refreshDiario();
+}
+
+async function fetchDailyRows(from,to,canals){
+  let params='select=snap_date,canal,fleet_norm,fleet_raw,ns,gm,opr_id&order=snap_date.asc';
+  if(from) params+=`&snap_date=gte.${from}`;
+  if(to) params+=`&snap_date=lte.${to}`;
+  if(canals&&canals.length) params+=`&canal=in.(${canals.join(',')})`;
+  const fleet=document.getElementById('diario-fleet')?.value;
+  if(fleet) params+=`&fleet_norm=eq.${encodeURIComponent(fleet)}`;
+  return sbSelectAll('fleet_data_daily',params);
+}
+
+// Agrupa filas por fecha (sumando canal/flota seleccionados) y calcula la variación
+// respecto al último día con datos anterior (así el hueco de fin de semana no genera huecos falsos).
+function computeDailySeries(rows){
+  const byDate={};
+  for(const r of rows){
+    const d=r.snap_date;
+    if(!byDate[d]) byDate[d]={ns:0,gm:0,oprEQ:0,oprVC:0,hasOprEQ:false,hasOprVC:false};
+    byDate[d].ns+=Number(r.ns)||0;
+    byDate[d].gm+=Number(r.gm)||0;
+    if(r.opr_id!==null&&r.opr_id!==undefined){
+      if(r.canal==='EQ'){byDate[d].oprEQ+=Number(r.opr_id);byDate[d].hasOprEQ=true;}
+      else{byDate[d].oprVC+=Number(r.opr_id);byDate[d].hasOprVC=true;}
+    }
+  }
+  const dates=Object.keys(byDate).sort();
+  const out=[];
+  let prev=null;
+  for(const d of dates){
+    const cur=byDate[d];
+    const delta = prev ? {
+      ns: cur.ns-prev.ns,
+      gm: cur.gm-prev.gm,
+      oprEQ: (cur.hasOprEQ&&prev.hasOprEQ)?cur.oprEQ-prev.oprEQ:null,
+      oprVC: (cur.hasOprVC&&prev.hasOprVC)?cur.oprVC-prev.oprVC:null
+    } : {ns:cur.ns, gm:cur.gm, oprEQ:cur.hasOprEQ?cur.oprEQ:null, oprVC:cur.hasOprVC?cur.oprVC:null};
+    out.push({date:d, cum:cur, delta});
+    prev=cur;
+  }
+  return out;
+}
+
+async function refreshDiario(){
+  const from=document.getElementById('diario-from').value;
+  const to=document.getElementById('diario-to').value;
+  if(!from||!to) return;
+  const canals=[...diarioState.canals];
+  const tb=document.getElementById('diario-tb');
+  tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">Cargando...</td></tr>';
+
+  let rows;
+  try{
+    // Pedimos un día extra antes del rango para poder calcular el delta del primer día visible.
+    const fromExt=new Date(from+'T00:00:00'); fromExt.setDate(fromExt.getDate()-10);
+    rows=await fetchDailyRows(fromExt.toISOString().slice(0,10),to,canals);
+  }catch(e){
+    tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--red)">Error cargando datos: ${(e.message||e)}</td></tr>`;
+    return;
+  }
+
+  if(!rows||!rows.length){
+    tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin snapshots diarios en este rango. Sube archivos desde "Cargar archivos" con la fecha correspondiente.</td></tr>';
+    if(diarioChart){diarioChart.destroy();diarioChart=null;}
+    document.getElementById('diario-kpis').innerHTML='';
+    return;
+  }
+
+  const series=computeDailySeries(rows).filter(s=>s.date>=from && s.date<=to);
+
+  // KPIs del rango visible
+  const totNs=series.reduce((s,r)=>s+r.delta.ns,0);
+  const totGm=series.reduce((s,r)=>s+r.delta.gm,0);
+  const totOprEQ=series.reduce((s,r)=>s+(r.delta.oprEQ||0),0);
+  const totOprVC=series.reduce((s,r)=>s+(r.delta.oprVC||0),0);
+  document.getElementById('diario-kpis').innerHTML=`
+    <div class="kpi"><div class="kpi-lbl">NS€ período</div><div class="kpi-val">${fmtM(totNs)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">GM€ período</div><div class="kpi-val">${fmtM(totGm)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">GM% período</div><div class="kpi-val">${fmtP(totNs?totGm/totNs:null)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">OPR-ID EQ</div><div class="kpi-val">${fmt(totOprEQ)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">OPR-ID VC</div><div class="kpi-val">${fmt(totOprVC)}</div></div>`;
+
+  // Tabla
+  tb.innerHTML=series.map(r=>`<tr>
+      <td>${r.date}</td>
+      <td class="r">${fmtM(r.delta.ns)}</td>
+      <td class="r">${fmtM(r.delta.gm)}</td>
+      <td class="r">${fmtP(r.delta.ns?r.delta.gm/r.delta.ns:null)}</td>
+      <td class="r">${r.delta.oprEQ===null?'—':fmt(r.delta.oprEQ)}</td>
+      <td class="r">${r.delta.oprVC===null?'—':fmt(r.delta.oprVC)}</td>
+      <td class="r" style="color:var(--muted)">${fmtM(r.cum.ns)}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin días con variación en el rango seleccionado.</td></tr>';
+
+  // Gráfico
+  const labels=series.map(r=>r.date.slice(8,10)+'/'+r.date.slice(5,7));
+  const datasets=[];
+  if(diarioState.metrics.has('ns')) datasets.push({label:'NS€',data:series.map(r=>r.delta.ns),borderColor:'#E2001A',backgroundColor:'#E2001A',tension:.25,yAxisID:'y'});
+  if(diarioState.metrics.has('gm')) datasets.push({label:'GM€',data:series.map(r=>r.delta.gm),borderColor:'#1565C0',backgroundColor:'#1565C0',tension:.25,yAxisID:'y'});
+  if(diarioState.metrics.has('opr')){
+    datasets.push({label:'OPR-ID EQ',data:series.map(r=>r.delta.oprEQ),borderColor:'#2E7D32',backgroundColor:'#2E7D32',tension:.25,yAxisID:'y1',borderDash:[4,3]});
+    datasets.push({label:'OPR-ID VC',data:series.map(r=>r.delta.oprVC),borderColor:'#FF8F00',backgroundColor:'#FF8F00',tension:.25,yAxisID:'y1',borderDash:[4,3]});
+  }
+
+  const ctx=document.getElementById('ch-diario').getContext('2d');
+  if(diarioChart) diarioChart.destroy();
+  const baseOpts=chartOpts({});
+  diarioChart=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets},
+    options:{...baseOpts,
+      scales:{
+        x:baseOpts.scales.x,
+        y:{position:'left',grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:v=>fmtM(v)}},
+        y1:{position:'right',grid:{drawOnChartArea:false},display:diarioState.metrics.has('opr'),ticks:{font:{size:10}}}
+      }
+    }
+  });
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMPARAR PERÍODOS

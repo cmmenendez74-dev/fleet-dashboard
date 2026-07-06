@@ -606,7 +606,7 @@ body.present-mode #present-btn{display:none}
         </div>
         <div class="kpi-row" id="diario-kpis" style="margin-bottom:.85rem"></div>
         <div class="card" style="margin-bottom:.85rem">
-          <div class="card-hd">Producción diaria (variación respecto al último día con datos)</div>
+          <div class="card-hd">Producción diaria (dato de cada día tal cual se sube)</div>
           <div class="card-bd"><div class="chart-box tall"><canvas id="ch-diario"></canvas></div></div>
         </div>
         <div class="card">
@@ -3017,8 +3017,10 @@ async function fetchDailyRows(from,to,canals){
   return sbSelectAll('fleet_data_daily',params);
 }
 
-// Agrupa filas por fecha (sumando canal/flota seleccionados) y calcula la variación
-// respecto al último día con datos anterior (así el hueco de fin de semana no genera huecos falsos).
+// Agrupa filas por fecha (sumando canal/flota seleccionados). Cada archivo diario
+// contiene YA el valor de ESE día (no es un acumulado YTD), así que no hay que
+// calcular ninguna variación entre días: se usa el valor guardado tal cual, y
+// para el total del período simplemente se suman los días del rango.
 function computeDailySeries(rows){
   const byDate={};
   for(const r of rows){
@@ -3033,17 +3035,15 @@ function computeDailySeries(rows){
   }
   const dates=Object.keys(byDate).sort();
   const out=[];
-  let prev=null;
+  let cumNs=0;
   for(const d of dates){
     const cur=byDate[d];
-    const delta = prev ? {
-      ns: cur.ns-prev.ns,
-      gm: cur.gm-prev.gm,
-      oprEQ: (cur.hasOprEQ&&prev.hasOprEQ)?cur.oprEQ-prev.oprEQ:null,
-      oprVC: (cur.hasOprVC&&prev.hasOprVC)?cur.oprVC-prev.oprVC:null
-    } : {ns:cur.ns, gm:cur.gm, oprEQ:cur.hasOprEQ?cur.oprEQ:null, oprVC:cur.hasOprVC?cur.oprVC:null};
-    out.push({date:d, cum:cur, delta});
-    prev=cur;
+    cumNs+=cur.ns;
+    out.push({
+      date:d,
+      day:{ns:cur.ns, gm:cur.gm, oprEQ:cur.hasOprEQ?cur.oprEQ:null, oprVC:cur.hasOprVC?cur.oprVC:null},
+      cumNs
+    });
   }
   return out;
 }
@@ -3058,9 +3058,7 @@ async function refreshDiario(){
 
   let rows;
   try{
-    // Pedimos un día extra antes del rango para poder calcular el delta del primer día visible.
-    const fromExt=new Date(from+'T00:00:00'); fromExt.setDate(fromExt.getDate()-10);
-    rows=await fetchDailyRows(fromExt.toISOString().slice(0,10),to,canals);
+    rows=await fetchDailyRows(from,to,canals);
   }catch(e){
     tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--red)">Error cargando datos: ${(e.message||e)}</td></tr>`;
     return;
@@ -3073,13 +3071,13 @@ async function refreshDiario(){
     return;
   }
 
-  const series=computeDailySeries(rows).filter(s=>s.date>=from && s.date<=to);
+  const series=computeDailySeries(rows);
 
-  // KPIs del rango visible
-  const totNs=series.reduce((s,r)=>s+r.delta.ns,0);
-  const totGm=series.reduce((s,r)=>s+r.delta.gm,0);
-  const totOprEQ=series.reduce((s,r)=>s+(r.delta.oprEQ||0),0);
-  const totOprVC=series.reduce((s,r)=>s+(r.delta.oprVC||0),0);
+  // KPIs del rango visible: suma directa de los valores de cada día (no delta).
+  const totNs=series.reduce((s,r)=>s+r.day.ns,0);
+  const totGm=series.reduce((s,r)=>s+r.day.gm,0);
+  const totOprEQ=series.reduce((s,r)=>s+(r.day.oprEQ||0),0);
+  const totOprVC=series.reduce((s,r)=>s+(r.day.oprVC||0),0);
   document.getElementById('diario-kpis').innerHTML=`
     <div class="kpi"><div class="kpi-lbl">NS€ período</div><div class="kpi-val">${fmtM(totNs)}</div></div>
     <div class="kpi"><div class="kpi-lbl">GM€ período</div><div class="kpi-val">${fmtM(totGm)}</div></div>
@@ -3090,22 +3088,22 @@ async function refreshDiario(){
   // Tabla
   tb.innerHTML=series.map(r=>`<tr>
       <td>${r.date}</td>
-      <td class="r">${fmtM(r.delta.ns)}</td>
-      <td class="r">${fmtM(r.delta.gm)}</td>
-      <td class="r">${fmtP(r.delta.ns?r.delta.gm/r.delta.ns:null)}</td>
-      <td class="r">${r.delta.oprEQ===null?'—':fmt(r.delta.oprEQ)}</td>
-      <td class="r">${r.delta.oprVC===null?'—':fmt(r.delta.oprVC)}</td>
-      <td class="r" style="color:var(--muted)">${fmtM(r.cum.ns)}</td>
-    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin días con variación en el rango seleccionado.</td></tr>';
+      <td class="r">${fmtM(r.day.ns)}</td>
+      <td class="r">${fmtM(r.day.gm)}</td>
+      <td class="r">${fmtP(r.day.ns?r.day.gm/r.day.ns:null)}</td>
+      <td class="r">${r.day.oprEQ===null?'—':fmt(r.day.oprEQ)}</td>
+      <td class="r">${r.day.oprVC===null?'—':fmt(r.day.oprVC)}</td>
+      <td class="r" style="color:var(--muted)">${fmtM(r.cumNs)}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin días en el rango seleccionado.</td></tr>';
 
   // Gráfico
   const labels=series.map(r=>r.date.slice(8,10)+'/'+r.date.slice(5,7));
   const datasets=[];
-  if(diarioState.metrics.has('ns')) datasets.push({label:'NS€',data:series.map(r=>r.delta.ns),borderColor:'#E2001A',backgroundColor:'#E2001A',tension:.25,yAxisID:'y'});
-  if(diarioState.metrics.has('gm')) datasets.push({label:'GM€',data:series.map(r=>r.delta.gm),borderColor:'#1565C0',backgroundColor:'#1565C0',tension:.25,yAxisID:'y'});
+  if(diarioState.metrics.has('ns')) datasets.push({label:'NS€',data:series.map(r=>r.day.ns),borderColor:'#E2001A',backgroundColor:'#E2001A',tension:.25,yAxisID:'y'});
+  if(diarioState.metrics.has('gm')) datasets.push({label:'GM€',data:series.map(r=>r.day.gm),borderColor:'#1565C0',backgroundColor:'#1565C0',tension:.25,yAxisID:'y'});
   if(diarioState.metrics.has('opr')){
-    datasets.push({label:'OPR-ID EQ',data:series.map(r=>r.delta.oprEQ),borderColor:'#2E7D32',backgroundColor:'#2E7D32',tension:.25,yAxisID:'y1',borderDash:[4,3]});
-    datasets.push({label:'OPR-ID VC',data:series.map(r=>r.delta.oprVC),borderColor:'#FF8F00',backgroundColor:'#FF8F00',tension:.25,yAxisID:'y1',borderDash:[4,3]});
+    datasets.push({label:'OPR-ID EQ',data:series.map(r=>r.day.oprEQ),borderColor:'#2E7D32',backgroundColor:'#2E7D32',tension:.25,yAxisID:'y1',borderDash:[4,3]});
+    datasets.push({label:'OPR-ID VC',data:series.map(r=>r.day.oprVC),borderColor:'#FF8F00',backgroundColor:'#FF8F00',tension:.25,yAxisID:'y1',borderDash:[4,3]});
   }
 
   const ctx=document.getElementById('ch-diario').getContext('2d');

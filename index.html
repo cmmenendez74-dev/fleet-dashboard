@@ -2562,34 +2562,40 @@ async function handleFiles(files){
       document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — Detectado ${kind}: guardando snapshot del ${pickedDate}...`;
       await upsertDailySnapshot(pickedDate,canal,fleets,kind==='ID');
 
-      // 2) Los archivos EQ/VC además sobrescriben el mes en curso (comportamiento igual que hasta ahora).
+      // 2) Los archivos EQ/VC además RECALCULAN el acumulado del mes en curso,
+      //    sumando TODOS los snapshots diarios guardados de ese mes/canal (no solo
+      //    el archivo recién subido). Así el mes va acumulando día a día, y cada
+      //    subida simplemente actualiza el total con los días que ya hay guardados.
       if(kind==='EQ'||kind==='VC'){
         const meta=detectMeta(file.name);
         const month=meta.month || (+pickedDate.slice(5,7));
         const year=meta.year || (+pickedDate.slice(0,4));
 
-        // Fusionamos posibles duplicados de fleet_norm (misma razón por la que
-        // se dedupe en upsertDailySnapshot) para no sumar dos veces la misma flota.
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">Σ</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: recalculando acumulado del mes con todos los días guardados...`;
+
+        const dailyRows=await sbSelectAll('fleet_data_daily',
+          `select=fleet_norm,fleet_raw,ns,gm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+
+        // Fusionamos por fleet_norm sumando NS/GM de todos los días de ese mes.
         const monthMap=new Map();
-        for(const f of fleets){
-          const norm=String(f.norm||'').slice(0,100);
-          const rowObj={
-            year:Number(year), month:Number(month), canal:String(canal),
-            fleet_raw:String(f.raw||'').slice(0,200), fleet_norm:norm,
-            ns:Number(f.ns)||0, gm:Number(f.gm)||0
-          };
+        for(const r of (dailyRows||[])){
+          const norm=String(r.fleet_norm||'').slice(0,100);
           if(monthMap.has(norm)){
             const ex=monthMap.get(norm);
-            ex.ns+=rowObj.ns;
-            ex.gm+=rowObj.gm;
-            if(String(rowObj.fleet_raw||'').length>String(ex.fleet_raw||'').length) ex.fleet_raw=rowObj.fleet_raw;
+            ex.ns+=Number(r.ns)||0;
+            ex.gm+=Number(r.gm)||0;
+            if(String(r.fleet_raw||'').length>String(ex.fleet_raw||'').length) ex.fleet_raw=r.fleet_raw;
           } else {
-            monthMap.set(norm,rowObj);
+            monthMap.set(norm,{
+              year:Number(year), month:Number(month), canal:String(canal),
+              fleet_raw:String(r.fleet_raw||'').slice(0,200), fleet_norm:norm,
+              ns:Number(r.ns)||0, gm:Number(r.gm)||0
+            });
           }
         }
         const rows=[...monthMap.values()];
 
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">↻</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: borrando datos anteriores del mes...`;
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">↻</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: guardando acumulado recalculado...`;
 
         await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
           method:'DELETE',
@@ -2612,7 +2618,7 @@ async function handleFiles(files){
         if(!ok){
           throw new Error('Supabase aceptó la petición, pero al verificar no devuelve filas. Revisa políticas RLS de SELECT/INSERT o permisos de la anon key.');
         }
-        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · ${fleets.length} flotas · snapshot diario ${pickedDate}.`;
+        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · acumulado de ${rows.length} flotas (todos los días subidos) · snapshot diario ${pickedDate}.`;
       }else{
         document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — OPR-ID guardado para EQ · snapshot diario ${pickedDate} · ${fleets.length} flotas.`;
       }
@@ -3325,3 +3331,5 @@ bootAccess();
 </script>
 </body>
 </html>
+
+

@@ -428,7 +428,7 @@ body.present-mode #present-btn{display:none}
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
           <span class="filter-label">Fecha de estos archivos</span>
           <input type="date" id="upload-date" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;background:#fff;font-family:inherit">
-          <span style="font-size:11px;color:var(--muted)">Se usa para guardar la evolución diaria (NS, GM, OPR-ID por día). Por defecto, hoy.</span>
+          <span style="font-size:11px;color:var(--muted)">Se usa para guardar la evolución diaria (NS, GM, OPR-ID por día). Por defecto, ayer (los archivos llegan a día vencido).</span>
         </div>
         <label class="upload-zone" id="drop-zone">
           <input type="file" id="file-input" multiple accept=".xlsx,.xls">
@@ -2458,8 +2458,13 @@ dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag')};
 dropZone.ondragleave=()=>dropZone.classList.remove('drag');
 dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag');handleFiles([...e.dataTransfer.files])};
 function todayISO(){const d=new Date();const tz=d.getTimezoneOffset();const local=new Date(d.getTime()-tz*60000);return local.toISOString().slice(0,10);}
+// Los archivos de NEXT FLEET llegan siempre "a día vencido" (hoy se recibe el
+// dato de ayer), así que el valor por defecto del campo de fecha debe ser el
+// día anterior, no el de hoy — evita el error de guardar el snapshot con la
+// fecha equivocada si no se cambia el campo manualmente.
+function yesterdayISO(){const d=new Date(todayISO()+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 const uploadDateEl=document.getElementById('upload-date');
-if(uploadDateEl) uploadDateEl.value=todayISO();
+if(uploadDateEl) uploadDateEl.value=yesterdayISO();
 
 function detectMeta(fname){
   const n=fname.toLowerCase();
@@ -2614,7 +2619,7 @@ async function handleFiles(files){
   const log=document.getElementById('upload-log');
   log.style.display='block';
   log.innerHTML='';
-  const pickedDate=document.getElementById('upload-date')?.value || todayISO();
+  const pickedDate=document.getElementById('upload-date')?.value || yesterdayISO();
 
   for(const file of files){
     const rowId='log_'+Date.now()+'_'+Math.random().toString(36).slice(2);
@@ -3372,4 +3377,3 @@ bootAccess();
 </script>
 </body>
 </html>
-

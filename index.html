@@ -453,7 +453,10 @@ body.present-mode #present-btn{display:none}
 
     <!-- PERIODOS -->
     <div class="view" id="view-periodos">
-      <div class="card"><div class="card-hd">Períodos en base de datos <span id="period-count" style="font-weight:400;color:var(--muted)"></span></div>
+      <div class="card"><div class="card-hd" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Períodos en base de datos <span id="period-count" style="font-weight:400;color:var(--muted)"></span></span>
+        <span class="chip" style="cursor:pointer" onclick="recalcAllPeriods()">Recalcular todos ⟳</span>
+      </div>
       <div class="card-bd"><div id="period-grid" class="period-grid"><div class="no-data">Sin datos</div></div></div></div>
     </div>
 
@@ -2345,6 +2348,47 @@ async function refreshCanal(){
 // ══════════════════════════════════════════════════════════════════════════════
 // PERÍODOS
 // ══════════════════════════════════════════════════════════════════════════════
+// Recalcula el acumulado de un mes/canal en fleet_data sumando TODOS los
+// snapshots diarios guardados en fleet_data_daily para ese mes/canal.
+// Se usa tanto al subir un archivo como manualmente desde "Períodos".
+async function recalcMonthFromDaily(year,month,canal){
+  const dailyRows=await sbSelectAll('fleet_data_daily',
+    `select=fleet_norm,fleet_raw,ns,gm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+
+  const monthMap=new Map();
+  for(const r of (dailyRows||[])){
+    const norm=String(r.fleet_norm||'').slice(0,100);
+    if(monthMap.has(norm)){
+      const ex=monthMap.get(norm);
+      ex.ns+=Number(r.ns)||0;
+      ex.gm+=Number(r.gm)||0;
+      if(String(r.fleet_raw||'').length>String(ex.fleet_raw||'').length) ex.fleet_raw=r.fleet_raw;
+    } else {
+      monthMap.set(norm,{
+        year:Number(year), month:Number(month), canal:String(canal),
+        fleet_raw:String(r.fleet_raw||'').slice(0,200), fleet_norm:norm,
+        ns:Number(r.ns)||0, gm:Number(r.gm)||0
+      });
+    }
+  }
+  const rows=[...monthMap.values()];
+
+  await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
+    method:'DELETE',
+    headers:{'Prefer':'return=minimal'}
+  });
+
+  for(let i=0;i<rows.length;i+=50){
+    const batch=rows.slice(i,i+50);
+    await restJson('fleet_data',{
+      method:'POST',
+      body:JSON.stringify(batch),
+      headers:{'Prefer':'return=minimal'}
+    });
+  }
+  return rows.length;
+}
+
 async function refreshPeriodos(){
   const rows=await sbSelectAll('fleet_data',
     'select=year,month,canal&order=year.asc,month.asc');
@@ -2355,9 +2399,45 @@ async function refreshPeriodos(){
   document.getElementById('period-grid').innerHTML=items.length?items.map(p=>
     `<div class="period-item">
       <span>${MN[p.month-1]} ${p.year} <span class="badge ${p.canal}">${p.canal}</span></span>
-      <span class="del-btn" onclick="delPeriod(${p.year},${p.month},'${p.canal}')">✕</span>
+      <span>
+        <span class="del-btn" style="margin-right:8px" title="Recalcular sumando todos los días guardados" onclick="recalcPeriod(${p.year},${p.month},'${p.canal}')">⟳</span>
+        <span class="del-btn" onclick="delPeriod(${p.year},${p.month},'${p.canal}')">✕</span>
+      </span>
     </div>`).join(''):
     '<div class="no-data">Sin datos cargados.</div>';
+}
+
+async function recalcPeriod(year,month,canal){
+  if(!isAdmin()){alert('Solo el usuario administrador puede recalcular períodos.');return;}
+  if(!confirm(`¿Recalcular ${MN[month-1]} ${year} ${canal} sumando todos los snapshots diarios guardados?`)) return;
+  try{
+    const n=await recalcMonthFromDaily(year,month,canal);
+    alert(`Recalculado: ${n} flotas.`);
+  }catch(e){
+    alert('Error al recalcular: '+(e.message||e));
+    return;
+  }
+  await loadSummary();
+  refreshPeriodos();
+  try{refreshResumen();}catch(e){}
+}
+
+async function recalcAllPeriods(){
+  if(!isAdmin()){alert('Solo el usuario administrador puede recalcular períodos.');return;}
+  const rows=await sbSelectAll('fleet_data','select=year,month,canal&order=year.asc,month.asc');
+  const uniq={};
+  for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
+  const items=Object.values(uniq);
+  if(!items.length){alert('No hay períodos guardados.');return;}
+  if(!confirm(`¿Recalcular los ${items.length} períodos sumando todos los snapshots diarios guardados de cada uno? Puede tardar unos segundos.`)) return;
+  for(const p of items){
+    try{ await recalcMonthFromDaily(p.year,p.month,p.canal); }
+    catch(e){ console.error('Error recalculando',p,e); }
+  }
+  await loadSummary();
+  refreshPeriodos();
+  try{refreshResumen();}catch(e){}
+  alert('Recálculo completo.');
 }
 
 async function delPeriod(year,month,canal){
@@ -2573,52 +2653,13 @@ async function handleFiles(files){
 
         document.getElementById(rowId).innerHTML=`<span class="log-warn">Σ</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: recalculando acumulado del mes con todos los días guardados...`;
 
-        const dailyRows=await sbSelectAll('fleet_data_daily',
-          `select=fleet_norm,fleet_raw,ns,gm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
-
-        // Fusionamos por fleet_norm sumando NS/GM de todos los días de ese mes.
-        const monthMap=new Map();
-        for(const r of (dailyRows||[])){
-          const norm=String(r.fleet_norm||'').slice(0,100);
-          if(monthMap.has(norm)){
-            const ex=monthMap.get(norm);
-            ex.ns+=Number(r.ns)||0;
-            ex.gm+=Number(r.gm)||0;
-            if(String(r.fleet_raw||'').length>String(ex.fleet_raw||'').length) ex.fleet_raw=r.fleet_raw;
-          } else {
-            monthMap.set(norm,{
-              year:Number(year), month:Number(month), canal:String(canal),
-              fleet_raw:String(r.fleet_raw||'').slice(0,200), fleet_norm:norm,
-              ns:Number(r.ns)||0, gm:Number(r.gm)||0
-            });
-          }
-        }
-        const rows=[...monthMap.values()];
-
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">↻</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: guardando acumulado recalculado...`;
-
-        await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
-          method:'DELETE',
-          headers:{'Prefer':'return=minimal'}
-        });
-
-        let inserted=0;
-        for(let i=0;i<rows.length;i+=50){
-          const batch=rows.slice(i,i+50);
-          await restJson('fleet_data',{
-            method:'POST',
-            body:JSON.stringify(batch),
-            headers:{'Prefer':'return=minimal'}
-          });
-          inserted+=batch.length;
-          document.getElementById(rowId).innerHTML=`<span class="log-warn">↑</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: ${inserted}/${rows.length} filas enviadas...`;
-        }
+        const nFlotas=await recalcMonthFromDaily(year,month,canal);
 
         const ok = await verifySavedPeriod(year,month,canal);
         if(!ok){
           throw new Error('Supabase aceptó la petición, pero al verificar no devuelve filas. Revisa políticas RLS de SELECT/INSERT o permisos de la anon key.');
         }
-        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · acumulado de ${rows.length} flotas (todos los días subidos) · snapshot diario ${pickedDate}.`;
+        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · acumulado de ${nFlotas} flotas (todos los días subidos) · snapshot diario ${pickedDate}.`;
       }else{
         document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — OPR-ID guardado para EQ · snapshot diario ${pickedDate} · ${fleets.length} flotas.`;
       }
@@ -3331,5 +3372,4 @@ bootAccess();
 </script>
 </body>
 </html>
-
 

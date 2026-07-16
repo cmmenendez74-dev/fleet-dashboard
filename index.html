@@ -423,8 +423,11 @@ body.present-mode #present-btn{display:none}
 
     <!-- UPLOAD -->
     <div class="view" id="view-upload">
-      <div class="card"><div class="card-hd">Cargar archivos Navision</div>
-      <div class="card-bd">
+      <div class="card"><div class="card-hd" style="display:flex;align-items:center;gap:.6rem">
+        <span class="chip on" id="upload-mode-normal" onclick="setUploadMode('normal')" style="cursor:pointer">Carga normal</span>
+        <span class="chip" id="upload-mode-bulk" onclick="setUploadMode('bulk')" style="cursor:pointer">Carga masiva histórica</span>
+      </div>
+      <div class="card-bd" id="upload-normal-panel">
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
           <span class="filter-label">Fecha de estos archivos</span>
           <input type="date" id="upload-date" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;background:#fff;font-family:inherit">
@@ -439,7 +442,34 @@ body.present-mode #present-btn{display:none}
         </label>
         <div id="upload-log" class="upload-log"></div>
         <button class="btn primary" onclick="document.getElementById('file-input').click()">Seleccionar archivos</button>
-      </div></div>
+      </div>
+      <div class="card-bd" id="upload-bulk-panel" style="display:none">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:.85rem;line-height:1.7">
+          Para rellenar histórico día a día (2024/2025/inicios de 2026). Suelta de golpe todos los archivos de un mismo canal
+          exportados de Power BI un día cada uno, en el mismo orden en que los exportaste (normalmente el orden de descarga se
+          conserva). Se les asignará automáticamente una fecha consecutiva saltando sábados y domingos — revisa la tabla antes
+          de confirmar y corrige a mano cualquier fecha que no cuadre (festivos, días sueltos que falten, etc.).
+        </p>
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
+          <span class="filter-label">Fecha del primer archivo</span>
+          <input type="date" id="bulk-start-date" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;background:#fff;font-family:inherit">
+          <button class="btn" style="font-size:12px" onclick="bulkReassignDates()">Reasignar fechas ↻</button>
+        </div>
+        <label class="upload-zone" id="bulk-drop-zone">
+          <input type="file" id="bulk-file-input" multiple accept=".xlsx,.xls">
+          <svg style="width:36px;height:36px;color:#ccc;margin-bottom:.5rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <h3>Arrastra aquí todos los archivos de un mes/canal, en orden</h3>
+          <p style="margin-top:.3rem">Uno por día hábil. Se detecta EQ/VC automáticamente por columnas.</p>
+        </label>
+        <div id="bulk-preview" style="margin-top:1rem"></div>
+        <div style="margin-top:.85rem;display:flex;gap:.6rem;align-items:center">
+          <button class="btn" onclick="document.getElementById('bulk-file-input').click()">Añadir archivos</button>
+          <button class="btn primary" id="bulk-confirm-btn" onclick="processBulkUpload()" disabled>Confirmar y subir todo el lote</button>
+          <button class="btn" onclick="bulkClear()">Vaciar lote</button>
+        </div>
+        <div id="bulk-log" class="upload-log"></div>
+      </div>
+      </div>
       <div class="card"><div class="card-hd">Formato de archivos</div>
       <div class="card-bd" style="font-size:12px;color:var(--muted);line-height:1.9">
         <b style="color:var(--text)">EQ (resultados):</b> Hoja Export · Columnas NOMBRE, NS€, GM€<br>
@@ -2351,9 +2381,23 @@ async function refreshCanal(){
 // Recalcula el acumulado de un mes/canal en fleet_data sumando TODOS los
 // snapshots diarios guardados en fleet_data_daily para ese mes/canal.
 // Se usa tanto al subir un archivo como manualmente desde "Períodos".
+//
+// IMPORTANTE (fallo de datos del 07/07/2026): el snapshot diario es una
+// funcionalidad reciente. Los períodos antiguos (o cualquier mes/canal que
+// nunca se haya subido con snapshot diario) NO tienen filas en
+// fleet_data_daily. Si se dejara continuar, se borraría fleet_data de ese
+// período y se insertaría un array vacío, PERDIENDO esos datos sin remedio.
+// Por eso: si no hay ninguna fila diaria para ese año/mes/canal, abortamos
+// SIN TOCAR fleet_data.
 async function recalcMonthFromDaily(year,month,canal){
   const dailyRows=await sbSelectAll('fleet_data_daily',
     `select=fleet_norm,fleet_raw,ns,gm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+
+  if(!dailyRows || !dailyRows.length){
+    const e=new Error(`Sin snapshots diarios guardados para ${MN[month-1]} ${year} ${canal} — no se puede recalcular sin perder los datos existentes. No se ha modificado nada.`);
+    e.noDailyData=true;
+    throw e;
+  }
 
   const monthMap=new Map();
   for(const r of (dailyRows||[])){
@@ -2414,7 +2458,11 @@ async function recalcPeriod(year,month,canal){
     const n=await recalcMonthFromDaily(year,month,canal);
     alert(`Recalculado: ${n} flotas.`);
   }catch(e){
-    alert('Error al recalcular: '+(e.message||e));
+    if(e.noDailyData){
+      alert(`No se ha tocado nada: ${e.message}`);
+    }else{
+      alert('Error al recalcular: '+(e.message||e));
+    }
     return;
   }
   await loadSummary();
@@ -2429,15 +2477,23 @@ async function recalcAllPeriods(){
   for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
   const items=Object.values(uniq);
   if(!items.length){alert('No hay períodos guardados.');return;}
-  if(!confirm(`¿Recalcular los ${items.length} períodos sumando todos los snapshots diarios guardados de cada uno? Puede tardar unos segundos.`)) return;
+  if(!confirm(`¿Recalcular los ${items.length} períodos? Solo se tocarán los que tengan snapshots diarios guardados — el resto se dejará intacto.`)) return;
+  let okCount=0, skipped=[];
   for(const p of items){
-    try{ await recalcMonthFromDaily(p.year,p.month,p.canal); }
-    catch(e){ console.error('Error recalculando',p,e); }
+    try{
+      await recalcMonthFromDaily(p.year,p.month,p.canal);
+      okCount++;
+    }catch(e){
+      if(e.noDailyData) skipped.push(`${MN[p.month-1]} ${p.year} ${p.canal}`);
+      else console.error('Error recalculando',p,e);
+    }
   }
   await loadSummary();
   refreshPeriodos();
   try{refreshResumen();}catch(e){}
-  alert('Recálculo completo.');
+  let msg=`Recalculados: ${okCount} período(s).`;
+  if(skipped.length) msg+=`\n\nSin snapshots diarios (NO tocados, se han dejado como estaban):\n${skipped.join('\n')}`;
+  alert(msg);
 }
 
 async function delPeriod(year,month,canal){
@@ -2465,6 +2521,191 @@ function todayISO(){const d=new Date();const tz=d.getTimezoneOffset();const loca
 function yesterdayISO(){const d=new Date(todayISO()+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 const uploadDateEl=document.getElementById('upload-date');
 if(uploadDateEl) uploadDateEl.value=yesterdayISO();
+
+function setUploadMode(mode){
+  document.getElementById('upload-mode-normal').classList.toggle('on',mode==='normal');
+  document.getElementById('upload-mode-bulk').classList.toggle('on',mode==='bulk');
+  document.getElementById('upload-normal-panel').style.display=mode==='normal'?'':'none';
+  document.getElementById('upload-bulk-panel').style.display=mode==='bulk'?'':'none';
+}
+
+// ── CARGA MASIVA HISTÓRICA ──────────────────────────────────────────────────
+let bulkItems=[]; // {id,file,date,kind,fleets,error}
+
+function nextBusinessDay(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  d.setDate(d.getDate()+1);
+  while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()+1); // 0=domingo,6=sábado
+  return d.toISOString().slice(0,10);
+}
+function isBusinessDay(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  return d.getDay()!==0 && d.getDay()!==6;
+}
+
+async function handleBulkFiles(files){
+  const startEl=document.getElementById('bulk-start-date');
+  if(!startEl.value) startEl.value=yesterdayISO();
+
+  for(const file of files){
+    const id='bulk_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const item={id,file,date:null,kind:null,fleets:null,error:null};
+    try{
+      const buf=await file.arrayBuffer();
+      const rawRows=readWorkbookRows(new Uint8Array(buf));
+      const kind=sniffKind(rawRows);
+      if(!kind){
+        item.error='Tipo de archivo no reconocido';
+      }else{
+        item.kind=kind;
+        item.fleets=parseRowsByKind(rawRows,kind);
+        if(!item.fleets.length) item.error='Detectado como '+kind+' pero sin filas válidas';
+      }
+    }catch(e){
+      item.error=(e.message||'Error leyendo el archivo').slice(0,200);
+    }
+    bulkItems.push(item);
+  }
+  bulkReassignDates();
+}
+
+// Reasigna fechas consecutivas (saltando fines de semana) a TODOS los archivos
+// del lote, en el orden en que están en la lista, empezando por la fecha elegida.
+function bulkReassignDates(){
+  const startEl=document.getElementById('bulk-start-date');
+  let cur=startEl.value||yesterdayISO();
+  if(!isBusinessDay(cur)){
+    // si cae en fin de semana, avisamos pero seguimos igualmente desde ahí hacia adelante
+  }
+  for(let i=0;i<bulkItems.length;i++){
+    if(i===0){ bulkItems[i].date=cur; }
+    else{ cur=nextBusinessDay(cur); bulkItems[i].date=cur; }
+  }
+  renderBulkPreview();
+}
+
+function bulkSetDate(id,newDate){
+  const it=bulkItems.find(x=>x.id===id);
+  if(it) it.date=newDate;
+  renderBulkPreview();
+}
+
+function bulkRemove(id){
+  bulkItems=bulkItems.filter(x=>x.id!==id);
+  renderBulkPreview();
+}
+
+function bulkClear(){
+  bulkItems=[];
+  document.getElementById('bulk-log').innerHTML='';
+  renderBulkPreview();
+}
+
+function renderBulkPreview(){
+  const el=document.getElementById('bulk-preview');
+  const btn=document.getElementById('bulk-confirm-btn');
+  if(!bulkItems.length){
+    el.innerHTML='';
+    btn.disabled=true;
+    return;
+  }
+  // Aviso de fechas duplicadas (mismo canal+fecha), típico si el orden de los archivos no era el esperado.
+  const seen={};
+  for(const it of bulkItems){
+    if(it.error||!it.kind) continue;
+    const canal=it.kind==='ID'?'EQ':it.kind;
+    const key=canal+'_'+it.date;
+    seen[key]=(seen[key]||0)+1;
+  }
+  el.innerHTML=`
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+        <th style="padding:6px 4px">Archivo</th><th style="padding:6px 4px">Tipo</th>
+        <th style="padding:6px 4px">Fecha asignada</th><th style="padding:6px 4px">Flotas</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${bulkItems.map(it=>{
+          const canal=it.kind==='ID'?'EQ':it.kind;
+          const dupKey=canal+'_'+it.date;
+          const isDup=!it.error && seen[dupKey]>1;
+          return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">${it.file.name}</td>
+            <td style="padding:6px 4px">${it.error?`<span class="log-err">${it.error}</span>`:`<span class="badge ${canal}">${it.kind}</span>`}</td>
+            <td style="padding:6px 4px">
+              <input type="date" value="${it.date||''}" style="font-size:12px;border:1px solid ${isDup?'#E2001A':'var(--border)'};border-radius:6px;padding:3px 6px"
+                onchange="bulkSetDate('${it.id}',this.value)">
+              ${isDup?'<span class="log-err" style="margin-left:6px">⚠ fecha duplicada</span>':''}
+            </td>
+            <td style="padding:6px 4px">${it.fleets?it.fleets.length:'—'}</td>
+            <td style="padding:6px 4px"><span class="del-btn" onclick="bulkRemove('${it.id}')">✕</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  btn.disabled=bulkItems.every(it=>it.error)||bulkItems.length===0;
+}
+
+async function processBulkUpload(){
+  if(!isAdmin()){alert('Solo el usuario administrador puede subir archivos.');return;}
+  const valid=bulkItems.filter(it=>!it.error && it.date && it.kind);
+  if(!valid.length){alert('No hay archivos válidos en el lote.');return;}
+  if(!confirm(`¿Subir ${valid.length} archivo(s)? Se guardará un snapshot diario por cada uno y al final se recalcularán los meses afectados.`)) return;
+
+  const log=document.getElementById('bulk-log');
+  log.style.display='block';
+  log.innerHTML='';
+  document.getElementById('bulk-confirm-btn').disabled=true;
+
+  const touchedPeriods=new Set(); // "year_month_canal"
+  let ok=0, fail=0;
+
+  // Subimos en orden de fecha, para que el log sea fácil de seguir.
+  valid.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+
+  for(const it of valid){
+    const rowId='blog_'+it.id;
+    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${it.file.name}</b> — guardando snapshot del ${it.date}...</div>`;
+    log.scrollTop=log.scrollHeight;
+    try{
+      const canal=it.kind==='ID'?'EQ':it.kind;
+      await upsertDailySnapshot(it.date,canal,it.fleets,it.kind==='ID');
+      if(it.kind==='EQ'||it.kind==='VC'){
+        const meta=detectMeta(it.file.name);
+        const month=meta.month || (+it.date.slice(5,7));
+        const year=meta.year || (+it.date.slice(0,4));
+        touchedPeriods.add(`${year}_${month}_${canal}`);
+      }
+      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${it.file.name}</b> — snapshot ${it.date} guardado (${it.fleets.length} flotas).`;
+      ok++;
+    }catch(e){
+      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${it.file.name}</b> — error: ${(e.message||e).toString().slice(0,200)}`;
+      fail++;
+    }
+  }
+
+  if(touchedPeriods.size){
+    log.innerHTML+=`<div class="log-row"><span class="spinner"></span>Recalculando ${touchedPeriods.size} mes(es)/canal afectados...</div>`;
+    for(const key of touchedPeriods){
+      const [year,month,canal]=key.split('_');
+      try{ await recalcMonthFromDaily(+year,+month,canal); }
+      catch(e){ console.error('Error recalculando',key,e); }
+    }
+  }
+
+  await loadSummary();
+  refreshPeriodos();
+  try{refreshResumen();}catch(e){}
+
+  log.innerHTML+=`<div class="log-row"><span class="log-ok">✓</span><b>Lote completo:</b> ${ok} guardados, ${fail} con error, ${touchedPeriods.size} período(s) recalculado(s).</div>`;
+  document.getElementById('bulk-confirm-btn').disabled=false;
+}
+
+const bulkDropZone=document.getElementById('bulk-drop-zone');
+const bulkFileInput=document.getElementById('bulk-file-input');
+bulkFileInput.onchange=e=>{handleBulkFiles([...e.target.files]);bulkFileInput.value='';};
+bulkDropZone.ondragover=e=>{e.preventDefault();bulkDropZone.classList.add('drag')};
+bulkDropZone.ondragleave=()=>bulkDropZone.classList.remove('drag');
+bulkDropZone.ondrop=e=>{e.preventDefault();bulkDropZone.classList.remove('drag');handleBulkFiles([...e.dataTransfer.files])};
 
 function detectMeta(fname){
   const n=fname.toLowerCase();
@@ -2571,11 +2812,21 @@ async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
   // Nota: si dos filas del archivo normalizan al mismo fleet_norm, Postgres
   // rechaza el lote entero al hacer upsert ("cannot affect row a second time").
   // Por eso fusionamos aquí cualquier duplicado (sumando NS/GM) antes de enviar.
+  //
+  // OPR-ID requiere cuidado especial: en VC/ID cada fila trae su propio recuento
+  // real, así que si dos filas colapsan en la misma flota hay que SUMARLOS
+  // (p.ej. ARVAL + ARVAL "Integración GT" → 25+19=44 operaciones, no 19).
+  // En EQ, en cambio, no hay columna propia de OPR-ID: el valor se hereda del
+  // archivo ID ya guardado ese día para esa flota. Si dos filas EQ colapsan en
+  // la misma flota, ambas heredan el MISMO valor guardado — sumarlas lo
+  // duplicaría. Por eso solo sumamos cuando el valor viene realmente de la fila
+  // (fresco), no cuando es heredado del snapshot previo.
   const rowsMap=new Map();
   for(const r of parsedRows){
     const prev=exMap[r.norm];
-    let rowObj;
+    let rowObj, oprFresh;
     if(isOprOnly){
+      oprFresh=(r.opr_id!==null&&r.opr_id!==undefined);
       rowObj={
         snap_date:date, year, month, canal,
         fleet_raw:String(r.raw||'').slice(0,200), fleet_norm:String(r.norm||'').slice(0,100),
@@ -2583,25 +2834,38 @@ async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
         opr_id:r.opr_id
       };
     } else {
-      const opr=(r.opr_id!==null&&r.opr_id!==undefined)?r.opr_id:(prev?prev.opr_id:null);
+      const hasOwnOpr=(r.opr_id!==null&&r.opr_id!==undefined);
+      oprFresh=hasOwnOpr;
+      const opr=hasOwnOpr?r.opr_id:(prev?prev.opr_id:null);
       rowObj={
         snap_date:date, year, month, canal,
         fleet_raw:String(r.raw||'').slice(0,200), fleet_norm:String(r.norm||'').slice(0,100),
         ns:Number(r.ns)||0, gm:Number(r.gm)||0, opr_id:opr
       };
     }
+    rowObj._oprFresh=oprFresh;
     const key=rowObj.fleet_norm;
     if(rowsMap.has(key)){
       const ex=rowsMap.get(key);
       ex.ns+=rowObj.ns;
       ex.gm+=rowObj.gm;
-      if(rowObj.opr_id!==null && rowObj.opr_id!==undefined) ex.opr_id=rowObj.opr_id;
+      if(rowObj.opr_id!==null && rowObj.opr_id!==undefined){
+        if(rowObj._oprFresh && ex._oprFresh){
+          // ambos son recuentos reales de este archivo (VC/ID) -> se suman
+          ex.opr_id=(Number(ex.opr_id)||0)+Number(rowObj.opr_id);
+        } else if(rowObj._oprFresh && !ex._oprFresh){
+          // el existente era un valor heredado; este trae uno fresco -> lo sustituye (no se suma con el heredado)
+          ex.opr_id=rowObj.opr_id;
+          ex._oprFresh=true;
+        }
+        // si ex ya es fresco y este no, o ninguno es fresco (ambos heredados, mismo valor): no tocar, evita duplicar
+      }
       if(String(rowObj.fleet_raw||'').length>String(ex.fleet_raw||'').length) ex.fleet_raw=rowObj.fleet_raw;
     } else {
       rowsMap.set(key,rowObj);
     }
   }
-  const rowsOut=[...rowsMap.values()];
+  const rowsOut=[...rowsMap.values()].map(({_oprFresh,...rest})=>rest);
 
   for(let i=0;i<rowsOut.length;i+=50){
     const batch=rowsOut.slice(i,i+50);
@@ -3050,330 +3314,4 @@ async function populateDiarioFleets(){
 function toggleDiarioCanal(el){
   el.classList.toggle('on');
   diarioState.canals=new Set([...document.querySelectorAll('#diario-canal-chips .chip.on')].map(c=>c.dataset.c));
-  refreshDiario();
-}
-
-function toggleDiarioMetric(el){
-  el.classList.toggle('on');
-  diarioState.metrics=new Set([...document.querySelectorAll('#diario-metric-chips .chip.on')].map(c=>c.dataset.m));
-  refreshDiario();
-}
-
-async function fetchDailyRows(from,to,canals){
-  let params='select=snap_date,canal,fleet_norm,fleet_raw,ns,gm,opr_id&order=snap_date.asc';
-  if(from) params+=`&snap_date=gte.${from}`;
-  if(to) params+=`&snap_date=lte.${to}`;
-  if(canals&&canals.length) params+=`&canal=in.(${canals.join(',')})`;
-  const fleet=document.getElementById('diario-fleet')?.value;
-  if(fleet) params+=`&fleet_norm=eq.${encodeURIComponent(fleet)}`;
-  return sbSelectAll('fleet_data_daily',params);
-}
-
-// Agrupa filas por fecha (sumando canal/flota seleccionados). Cada archivo diario
-// contiene YA el valor de ESE día (no es un acumulado YTD), así que no hay que
-// calcular ninguna variación entre días: se usa el valor guardado tal cual, y
-// para el total del período simplemente se suman los días del rango.
-function computeDailySeries(rows){
-  const byDate={};
-  for(const r of rows){
-    const d=r.snap_date;
-    if(!byDate[d]) byDate[d]={ns:0,gm:0,oprEQ:0,oprVC:0,hasOprEQ:false,hasOprVC:false};
-    byDate[d].ns+=Number(r.ns)||0;
-    byDate[d].gm+=Number(r.gm)||0;
-    if(r.opr_id!==null&&r.opr_id!==undefined){
-      if(r.canal==='EQ'){byDate[d].oprEQ+=Number(r.opr_id);byDate[d].hasOprEQ=true;}
-      else{byDate[d].oprVC+=Number(r.opr_id);byDate[d].hasOprVC=true;}
-    }
-  }
-  const dates=Object.keys(byDate).sort();
-  const out=[];
-  let cumNs=0;
-  for(const d of dates){
-    const cur=byDate[d];
-    cumNs+=cur.ns;
-    out.push({
-      date:d,
-      day:{ns:cur.ns, gm:cur.gm, oprEQ:cur.hasOprEQ?cur.oprEQ:null, oprVC:cur.hasOprVC?cur.oprVC:null},
-      cumNs
-    });
-  }
-  return out;
-}
-
-async function refreshDiario(){
-  const from=document.getElementById('diario-from').value;
-  const to=document.getElementById('diario-to').value;
-  if(!from||!to) return;
-  const canals=[...diarioState.canals];
-  const tb=document.getElementById('diario-tb');
-  tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">Cargando...</td></tr>';
-
-  let rows;
-  try{
-    rows=await fetchDailyRows(from,to,canals);
-  }catch(e){
-    tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--red)">Error cargando datos: ${(e.message||e)}</td></tr>`;
-    return;
-  }
-
-  if(!rows||!rows.length){
-    tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin snapshots diarios en este rango. Sube archivos desde "Cargar archivos" con la fecha correspondiente.</td></tr>';
-    if(diarioChart){diarioChart.destroy();diarioChart=null;}
-    document.getElementById('diario-kpis').innerHTML='';
-    return;
-  }
-
-  const series=computeDailySeries(rows);
-
-  // KPIs del rango visible: suma directa de los valores de cada día (no delta).
-  const totNs=series.reduce((s,r)=>s+r.day.ns,0);
-  const totGm=series.reduce((s,r)=>s+r.day.gm,0);
-  const totOprEQ=series.reduce((s,r)=>s+(r.day.oprEQ||0),0);
-  const totOprVC=series.reduce((s,r)=>s+(r.day.oprVC||0),0);
-  document.getElementById('diario-kpis').innerHTML=`
-    <div class="kpi"><div class="kpi-lbl">NS€ período</div><div class="kpi-val">${fmtM(totNs)}</div></div>
-    <div class="kpi"><div class="kpi-lbl">GM€ período</div><div class="kpi-val">${fmtM(totGm)}</div></div>
-    <div class="kpi"><div class="kpi-lbl">GM% período</div><div class="kpi-val">${fmtP(totNs?totGm/totNs:null)}</div></div>
-    <div class="kpi"><div class="kpi-lbl">OPR-ID EQ</div><div class="kpi-val">${fmt(totOprEQ)}</div></div>
-    <div class="kpi"><div class="kpi-lbl">OPR-ID VC</div><div class="kpi-val">${fmt(totOprVC)}</div></div>`;
-
-  // Tabla
-  tb.innerHTML=series.map(r=>`<tr>
-      <td>${r.date}</td>
-      <td class="r">${fmtM(r.day.ns)}</td>
-      <td class="r">${fmtM(r.day.gm)}</td>
-      <td class="r">${fmtP(r.day.ns?r.day.gm/r.day.ns:null)}</td>
-      <td class="r">${r.day.oprEQ===null?'—':fmt(r.day.oprEQ)}</td>
-      <td class="r">${r.day.oprVC===null?'—':fmt(r.day.oprVC)}</td>
-      <td class="r" style="color:var(--muted)">${fmtM(r.cumNs)}</td>
-    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin días en el rango seleccionado.</td></tr>';
-
-  // Gráfico
-  const labels=series.map(r=>r.date.slice(8,10)+'/'+r.date.slice(5,7));
-  const datasets=[];
-  if(diarioState.metrics.has('ns')) datasets.push({label:'NS€',data:series.map(r=>r.day.ns),borderColor:'#E2001A',backgroundColor:'#E2001A',tension:.25,yAxisID:'y'});
-  if(diarioState.metrics.has('gm')) datasets.push({label:'GM€',data:series.map(r=>r.day.gm),borderColor:'#1565C0',backgroundColor:'#1565C0',tension:.25,yAxisID:'y'});
-  if(diarioState.metrics.has('opr')){
-    datasets.push({label:'OPR-ID EQ',data:series.map(r=>r.day.oprEQ),borderColor:'#2E7D32',backgroundColor:'#2E7D32',tension:.25,yAxisID:'y1',borderDash:[4,3]});
-    datasets.push({label:'OPR-ID VC',data:series.map(r=>r.day.oprVC),borderColor:'#FF8F00',backgroundColor:'#FF8F00',tension:.25,yAxisID:'y1',borderDash:[4,3]});
-  }
-
-  const ctx=document.getElementById('ch-diario').getContext('2d');
-  if(diarioChart) diarioChart.destroy();
-  const baseOpts=chartOpts({});
-  diarioChart=new Chart(ctx,{
-    type:'line',
-    data:{labels,datasets},
-    options:{...baseOpts,
-      scales:{
-        x:baseOpts.scales.x,
-        y:{position:'left',grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:v=>fmtM(v)}},
-        y1:{position:'right',grid:{drawOnChartArea:false},display:diarioState.metrics.has('opr'),ticks:{font:{size:10}}}
-      }
-    }
-  });
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// COMPARAR PERÍODOS
-// ══════════════════════════════════════════════════════════════════════════════
-let cmpChartNS=null, cmpChartGM=null;
-let cmpState={
-  a:{year:null,months:new Set(),canals:new Set(['EQ','VC'])},
-  b:{year:null,months:new Set(),canals:new Set(['EQ','VC'])}
-};
-
-function initComparar(){
-  const years=[...new Set(S.summary.map(r=>r.year))].sort((a,b)=>a-b);
-  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
-  // Defaults: A = año más reciente YTD, B = año anterior mismo período
-  const latY=Math.max(...years);
-  const prevY=years.length>1?years[years.indexOf(latY)-1]:latY;
-  const latestMo=Math.max(...months);
-  const ytdMos=months.filter(m=>m<=latestMo);
-
-  if(!cmpState.a.year) cmpState.a={year:latY,months:new Set(ytdMos),canals:new Set(['EQ','VC'])};
-  if(!cmpState.b.year) cmpState.b={year:prevY,months:new Set(ytdMos),canals:new Set(['EQ','VC'])};
-
-  buildCmpChips('a', years, months);
-  buildCmpChips('b', years, months);
-}
-
-function buildCmpChips(ab, years, months){
-  const st=cmpState[ab];
-  // Años (radio — solo uno)
-  const yrEl=document.getElementById(`cmp-yr-${ab}`);
-  if(yrEl) yrEl.innerHTML=years.map(y=>`<span class="chip${st.year===y?' on':''}" data-y="${y}"
-    onclick="setCmpYear('${ab}',${y},this)">${y}</span>`).join('');
-  // Meses (multi)
-  const moEl=document.getElementById(`cmp-mo-${ab}`);
-  if(moEl) moEl.innerHTML=months.map(m=>`<span class="chip${st.months.has(m)?' on':''}" data-m="${m}"
-    onclick="toggleCmpMo('${ab}',${m},this)">${MN[m-1]}</span>`).join('');
-  // Canal (multi)
-  const cEl=document.getElementById(`cmp-canal-${ab}`);
-  if(cEl) cEl.innerHTML=['EQ','VC'].map(c=>`<span class="chip${st.canals.has(c)?' on':''}" data-c="${c}"
-    onclick="toggleCmpCanal('${ab}','${c}',this)">${c}</span>`).join('');
-}
-
-function setCmpYear(ab,yr,el){
-  cmpState[ab].year=yr;
-  document.querySelectorAll(`#cmp-yr-${ab} .chip`).forEach(c=>c.classList.remove('on'));
-  el.classList.add('on');
-}
-function toggleCmpMo(ab,m,el){
-  el.classList.toggle('on');
-  if(el.classList.contains('on')) cmpState[ab].months.add(m);
-  else cmpState[ab].months.delete(m);
-}
-function toggleCmpCanal(ab,c,el){
-  el.classList.toggle('on');
-  if(el.classList.contains('on')) cmpState[ab].canals.add(c);
-  else cmpState[ab].canals.delete(c);
-}
-
-async function runComparacion(){
-  const sa=cmpState.a, sb=cmpState.b;
-  if(!sa.year||!sb.year){alert('Selecciona un año para cada período.');return;}
-  if(!sa.months.size||!sb.months.size){alert('Selecciona al menos un mes en cada período.');return;}
-
-  const allYears=[...new Set([sa.year,sb.year])];
-  const allMonths=[...new Set([...sa.months,...sb.months])].sort((a,b)=>a-b);
-  const rows=await fetchData(allYears,allMonths);
-  if(!rows?.length){alert('Sin datos para los períodos seleccionados.');return;}
-
-  // Agregar por período
-  function agg(year,months,canals){
-    const r=rows.filter(x=>x.year===year&&months.has(x.month)&&canals.has(x.canal));
-    let ns=0,gm=0,eqns=0,eqgm=0,vcns=0,vcgm=0;
-    for(const x of r){ns+=x.ns;gm+=x.gm;if(x.canal==='EQ'){eqns+=x.ns;eqgm+=x.gm;}else{vcns+=x.ns;vcgm+=x.gm;}}
-    return{ns,gm,eqns,eqgm,vcns,vcgm};
-  }
-  const A=agg(sa.year,sa.months,sa.canals);
-  const B=agg(sb.year,sb.months,sb.canals);
-
-  const labelA=`${sa.year} ${[...sa.months].sort((a,b)=>a-b).map(m=>MN[m-1]).join('-')} [${[...sa.canals].sort().join('+')}]`;
-  const labelB=`${sb.year} ${[...sb.months].sort((a,b)=>a-b).map(m=>MN[m-1]).join('-')} [${[...sb.canals].sort().join('+')}]`;
-
-  const vNS=B.ns>0?(A.ns-B.ns)/B.ns:null;
-  const vGM=B.gm>0?(A.gm-B.gm)/B.gm:null;
-  const vEQ=B.eqns>0?(A.eqns-B.eqns)/B.eqns:null;
-  const vVC=B.vcns>0?(A.vcns-B.vcns)/B.vcns:null;
-  const gmPctA=A.ns>0?A.gm/A.ns:0, gmPctB=B.ns>0?B.gm/B.ns:0;
-  const vGmPct=gmPctB>0?gmPctA-gmPctB:null;
-
-  const varCl=v=>v===null?'':v>0.005?' up':v<-0.005?' dn':'';
-
-  // KPIs
-  document.getElementById('cmp-kpis').innerHTML=[
-    {l:'NS Total',va:fmtM(A.ns),vb:fmtM(B.ns),vr:vNS},
-    {l:'GM Total',va:fmtM(A.gm),vb:fmtM(B.gm),vr:vGM},
-    {l:'GM%',va:fmtP(gmPctA),vb:fmtP(gmPctB),vr:vGmPct,pp:true},
-    {l:'NS EQ',va:fmtM(A.eqns),vb:fmtM(B.eqns),vr:vEQ},
-    {l:'NS VC',va:fmtM(A.vcns),vb:fmtM(B.vcns),vr:vVC},
-    {l:'GM% EQ',va:fmtP(A.eqns>0?A.eqgm/A.eqns:0),vb:fmtP(B.eqns>0?B.eqgm/B.eqns:0),vr:A.eqns>0&&B.eqns>0?A.eqgm/A.eqns-B.eqgm/B.eqns:null,pp:true},
-  ].map(k=>{
-    const cls=varCl(k.vr);
-    const delta=k.vr===null?'—':k.pp?(k.vr>=0?'+':'')+( k.vr*100).toFixed(1)+' pp':varStr(k.vr);
-    return`<div class="cmp-kpi">
-      <div class="cmp-kpi-lbl">${k.l}</div>
-      <div class="cmp-kpi-vals">
-        <span class="cmp-kpi-a">${k.va}</span>
-        <span style="color:var(--muted);font-size:11px">vs</span>
-        <span class="cmp-kpi-b">${k.vb}</span>
-        <span class="cmp-kpi-var${cls}">${delta}</span>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Gráfico NS mensual A vs B
-  const mosA=[...sa.months].sort((a,b)=>a-b);
-  const mosB=[...sb.months].sort((a,b)=>a-b);
-  const allMos=[...new Set([...mosA,...mosB])].sort((a,b)=>a-b);
-  const nsA=allMos.map(m=>{
-    const r=rows.filter(x=>x.year===sa.year&&x.month===m&&sa.canals.has(x.canal));
-    const n=r.reduce((s,x)=>s+x.ns,0); return n>0?Math.round(n):null;
-  });
-  const nsB=allMos.map(m=>{
-    const r=rows.filter(x=>x.year===sb.year&&x.month===m&&sb.canals.has(x.canal));
-    const n=r.reduce((s,x)=>s+x.ns,0); return n>0?Math.round(n):null;
-  });
-  const gmPctAm=allMos.map(m=>{
-    const r=rows.filter(x=>x.year===sa.year&&x.month===m&&sa.canals.has(x.canal));
-    const ns=r.reduce((s,x)=>s+x.ns,0), gm=r.reduce((s,x)=>s+x.gm,0);
-    return ns>0?+(gm/ns*100).toFixed(1):null;
-  });
-  const gmPctBm=allMos.map(m=>{
-    const r=rows.filter(x=>x.year===sb.year&&x.month===m&&sb.canals.has(x.canal));
-    const ns=r.reduce((s,x)=>s+x.ns,0), gm=r.reduce((s,x)=>s+x.gm,0);
-    return ns>0?+(gm/ns*100).toFixed(1):null;
-  });
-
-  document.getElementById('cmp-ns-title').textContent=`NS€ mensual — ${labelA} vs ${labelB}`;
-  document.getElementById('cmp-gm-title').textContent=`GM% mensual — ${labelA} vs ${labelB}`;
-  document.getElementById('cmp-fleet-title').textContent=`Top flotas — A vs B`;
-
-  if(cmpChartNS) cmpChartNS.destroy();
-  const ctx1=document.getElementById('ch-cmp-ns')?.getContext('2d');
-  if(ctx1) cmpChartNS=new Chart(ctx1,{type:'bar',
-    data:{labels:allMos.map(m=>MN[m-1]),datasets:[
-      {label:labelA,data:nsA,backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
-      {label:labelB,data:nsB,backgroundColor:'rgba(21,101,192,0.6)',borderRadius:3},
-    ]},options:chartOpts({stacked:false})
-  });
-
-  if(cmpChartGM) cmpChartGM.destroy();
-  const ctx2=document.getElementById('ch-cmp-gm')?.getContext('2d');
-  if(ctx2) cmpChartGM=new Chart(ctx2,{type:'line',
-    data:{labels:allMos.map(m=>MN[m-1]),datasets:[
-      {label:labelA,data:gmPctAm,borderColor:'#E2001A',backgroundColor:'rgba(226,0,26,0.08)',tension:.3,pointRadius:5,borderWidth:2,fill:true},
-      {label:labelB,data:gmPctBm,borderColor:'#1565C0',backgroundColor:'rgba(21,101,192,0.08)',tension:.3,pointRadius:5,borderWidth:2,borderDash:[5,3],fill:true},
-    ]},options:chartOpts({pct:true})
-  });
-
-  // Tabla flotas
-  const byFleet={};
-  for(const r of rows){
-    if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={name:r.fleet_norm,canals:new Set(),a:{ns:0,gm:0},b:{ns:0,gm:0}};
-    const inA=r.year===sa.year&&sa.months.has(r.month)&&sa.canals.has(r.canal);
-    const inB=r.year===sb.year&&sb.months.has(r.month)&&sb.canals.has(r.canal);
-    if(inA){byFleet[r.fleet_norm].a.ns+=r.ns;byFleet[r.fleet_norm].a.gm+=r.gm;}
-    if(inB){byFleet[r.fleet_norm].b.ns+=r.ns;byFleet[r.fleet_norm].b.gm+=r.gm;}
-    byFleet[r.fleet_norm].canals.add(r.canal);
-  }
-  const fleetList=Object.values(byFleet)
-    .filter(f=>f.a.ns>0||f.b.ns>0)
-    .sort((x,y)=>y.a.ns-x.a.ns).slice(0,30);
-
-  const head=document.getElementById('cmp-tb-head');
-  if(head) head.innerHTML=`<th>Flota</th><th>Canal</th>
-    <th class="r" style="color:#E2001A">NS A</th>
-    <th class="r" style="color:#1565C0">NS B</th>
-    <th class="r">Var A/B</th>
-    <th class="r">GM% A</th><th class="r">GM% B</th>`;
-
-  document.getElementById('cmp-tb').innerHTML=fleetList.map(f=>{
-    const c=[...f.canals].sort().join('+');
-    const vr=f.b.ns>0?(f.a.ns-f.b.ns)/f.b.ns:null;
-    const gmA=f.a.ns>0?f.a.gm/f.a.ns:0, gmB=f.b.ns>0?f.b.gm/f.b.ns:0;
-    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')">
-      <td style="color:var(--bl)">${f.name}</td>
-      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
-      <td class="r" style="font-weight:600;color:#E2001A">${f.a.ns>0?fmtM(f.a.ns):'—'}</td>
-      <td class="r" style="font-weight:600;color:#1565C0">${f.b.ns>0?fmtM(f.b.ns):'—'}</td>
-      <td class="r ${varCls(vr)}">${varStr(vr)}</td>
-      <td class="r">${f.a.ns>0?fmtP(gmA):'—'}</td>
-      <td class="r">${f.b.ns>0?fmtP(gmB):'—'}</td>
-    </tr>`;
-  }).join('');
-
-  document.getElementById('cmp-results').style.display='block';
-  document.getElementById('cmp-empty').style.display='none';
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// START
-// ══════════════════════════════════════════════════════════════════════════════
-bootAccess();
-</script>
-</body>
-</html>
+  ref

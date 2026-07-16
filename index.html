@@ -3314,4 +3314,330 @@ async function populateDiarioFleets(){
 function toggleDiarioCanal(el){
   el.classList.toggle('on');
   diarioState.canals=new Set([...document.querySelectorAll('#diario-canal-chips .chip.on')].map(c=>c.dataset.c));
-  ref
+  refreshDiario();
+}
+
+function toggleDiarioMetric(el){
+  el.classList.toggle('on');
+  diarioState.metrics=new Set([...document.querySelectorAll('#diario-metric-chips .chip.on')].map(c=>c.dataset.m));
+  refreshDiario();
+}
+
+async function fetchDailyRows(from,to,canals){
+  let params='select=snap_date,canal,fleet_norm,fleet_raw,ns,gm,opr_id&order=snap_date.asc';
+  if(from) params+=`&snap_date=gte.${from}`;
+  if(to) params+=`&snap_date=lte.${to}`;
+  if(canals&&canals.length) params+=`&canal=in.(${canals.join(',')})`;
+  const fleet=document.getElementById('diario-fleet')?.value;
+  if(fleet) params+=`&fleet_norm=eq.${encodeURIComponent(fleet)}`;
+  return sbSelectAll('fleet_data_daily',params);
+}
+
+// Agrupa filas por fecha (sumando canal/flota seleccionados). Cada archivo diario
+// contiene YA el valor de ESE día (no es un acumulado YTD), así que no hay que
+// calcular ninguna variación entre días: se usa el valor guardado tal cual, y
+// para el total del período simplemente se suman los días del rango.
+function computeDailySeries(rows){
+  const byDate={};
+  for(const r of rows){
+    const d=r.snap_date;
+    if(!byDate[d]) byDate[d]={ns:0,gm:0,oprEQ:0,oprVC:0,hasOprEQ:false,hasOprVC:false};
+    byDate[d].ns+=Number(r.ns)||0;
+    byDate[d].gm+=Number(r.gm)||0;
+    if(r.opr_id!==null&&r.opr_id!==undefined){
+      if(r.canal==='EQ'){byDate[d].oprEQ+=Number(r.opr_id);byDate[d].hasOprEQ=true;}
+      else{byDate[d].oprVC+=Number(r.opr_id);byDate[d].hasOprVC=true;}
+    }
+  }
+  const dates=Object.keys(byDate).sort();
+  const out=[];
+  let cumNs=0;
+  for(const d of dates){
+    const cur=byDate[d];
+    cumNs+=cur.ns;
+    out.push({
+      date:d,
+      day:{ns:cur.ns, gm:cur.gm, oprEQ:cur.hasOprEQ?cur.oprEQ:null, oprVC:cur.hasOprVC?cur.oprVC:null},
+      cumNs
+    });
+  }
+  return out;
+}
+
+async function refreshDiario(){
+  const from=document.getElementById('diario-from').value;
+  const to=document.getElementById('diario-to').value;
+  if(!from||!to) return;
+  const canals=[...diarioState.canals];
+  const tb=document.getElementById('diario-tb');
+  tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">Cargando...</td></tr>';
+
+  let rows;
+  try{
+    rows=await fetchDailyRows(from,to,canals);
+  }catch(e){
+    tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--red)">Error cargando datos: ${(e.message||e)}</td></tr>`;
+    return;
+  }
+
+  if(!rows||!rows.length){
+    tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin snapshots diarios en este rango. Sube archivos desde "Cargar archivos" con la fecha correspondiente.</td></tr>';
+    if(diarioChart){diarioChart.destroy();diarioChart=null;}
+    document.getElementById('diario-kpis').innerHTML='';
+    return;
+  }
+
+  const series=computeDailySeries(rows);
+
+  // KPIs del rango visible: suma directa de los valores de cada día (no delta).
+  const totNs=series.reduce((s,r)=>s+r.day.ns,0);
+  const totGm=series.reduce((s,r)=>s+r.day.gm,0);
+  const totOprEQ=series.reduce((s,r)=>s+(r.day.oprEQ||0),0);
+  const totOprVC=series.reduce((s,r)=>s+(r.day.oprVC||0),0);
+  document.getElementById('diario-kpis').innerHTML=`
+    <div class="kpi"><div class="kpi-lbl">NS€ período</div><div class="kpi-val">${fmtM(totNs)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">GM€ período</div><div class="kpi-val">${fmtM(totGm)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">GM% período</div><div class="kpi-val">${fmtP(totNs?totGm/totNs:null)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">OPR-ID EQ</div><div class="kpi-val">${fmt(totOprEQ)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">OPR-ID VC</div><div class="kpi-val">${fmt(totOprVC)}</div></div>`;
+
+  // Tabla
+  tb.innerHTML=series.map(r=>`<tr>
+      <td>${r.date}</td>
+      <td class="r">${fmtM(r.day.ns)}</td>
+      <td class="r">${fmtM(r.day.gm)}</td>
+      <td class="r">${fmtP(r.day.ns?r.day.gm/r.day.ns:null)}</td>
+      <td class="r">${r.day.oprEQ===null?'—':fmt(r.day.oprEQ)}</td>
+      <td class="r">${r.day.oprVC===null?'—':fmt(r.day.oprVC)}</td>
+      <td class="r" style="color:var(--muted)">${fmtM(r.cumNs)}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Sin días en el rango seleccionado.</td></tr>';
+
+  // Gráfico
+  const labels=series.map(r=>r.date.slice(8,10)+'/'+r.date.slice(5,7));
+  const datasets=[];
+  if(diarioState.metrics.has('ns')) datasets.push({label:'NS€',data:series.map(r=>r.day.ns),borderColor:'#E2001A',backgroundColor:'#E2001A',tension:.25,yAxisID:'y'});
+  if(diarioState.metrics.has('gm')) datasets.push({label:'GM€',data:series.map(r=>r.day.gm),borderColor:'#1565C0',backgroundColor:'#1565C0',tension:.25,yAxisID:'y'});
+  if(diarioState.metrics.has('opr')){
+    datasets.push({label:'OPR-ID EQ',data:series.map(r=>r.day.oprEQ),borderColor:'#2E7D32',backgroundColor:'#2E7D32',tension:.25,yAxisID:'y1',borderDash:[4,3]});
+    datasets.push({label:'OPR-ID VC',data:series.map(r=>r.day.oprVC),borderColor:'#FF8F00',backgroundColor:'#FF8F00',tension:.25,yAxisID:'y1',borderDash:[4,3]});
+  }
+
+  const ctx=document.getElementById('ch-diario').getContext('2d');
+  if(diarioChart) diarioChart.destroy();
+  const baseOpts=chartOpts({});
+  diarioChart=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets},
+    options:{...baseOpts,
+      scales:{
+        x:baseOpts.scales.x,
+        y:{position:'left',grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:v=>fmtM(v)}},
+        y1:{position:'right',grid:{drawOnChartArea:false},display:diarioState.metrics.has('opr'),ticks:{font:{size:10}}}
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPARAR PERÍODOS
+// ══════════════════════════════════════════════════════════════════════════════
+let cmpChartNS=null, cmpChartGM=null;
+let cmpState={
+  a:{year:null,months:new Set(),canals:new Set(['EQ','VC'])},
+  b:{year:null,months:new Set(),canals:new Set(['EQ','VC'])}
+};
+
+function initComparar(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort((a,b)=>a-b);
+  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
+  // Defaults: A = año más reciente YTD, B = año anterior mismo período
+  const latY=Math.max(...years);
+  const prevY=years.length>1?years[years.indexOf(latY)-1]:latY;
+  const latestMo=Math.max(...months);
+  const ytdMos=months.filter(m=>m<=latestMo);
+
+  if(!cmpState.a.year) cmpState.a={year:latY,months:new Set(ytdMos),canals:new Set(['EQ','VC'])};
+  if(!cmpState.b.year) cmpState.b={year:prevY,months:new Set(ytdMos),canals:new Set(['EQ','VC'])};
+
+  buildCmpChips('a', years, months);
+  buildCmpChips('b', years, months);
+}
+
+function buildCmpChips(ab, years, months){
+  const st=cmpState[ab];
+  // Años (radio — solo uno)
+  const yrEl=document.getElementById(`cmp-yr-${ab}`);
+  if(yrEl) yrEl.innerHTML=years.map(y=>`<span class="chip${st.year===y?' on':''}" data-y="${y}"
+    onclick="setCmpYear('${ab}',${y},this)">${y}</span>`).join('');
+  // Meses (multi)
+  const moEl=document.getElementById(`cmp-mo-${ab}`);
+  if(moEl) moEl.innerHTML=months.map(m=>`<span class="chip${st.months.has(m)?' on':''}" data-m="${m}"
+    onclick="toggleCmpMo('${ab}',${m},this)">${MN[m-1]}</span>`).join('');
+  // Canal (multi)
+  const cEl=document.getElementById(`cmp-canal-${ab}`);
+  if(cEl) cEl.innerHTML=['EQ','VC'].map(c=>`<span class="chip${st.canals.has(c)?' on':''}" data-c="${c}"
+    onclick="toggleCmpCanal('${ab}','${c}',this)">${c}</span>`).join('');
+}
+
+function setCmpYear(ab,yr,el){
+  cmpState[ab].year=yr;
+  document.querySelectorAll(`#cmp-yr-${ab} .chip`).forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+function toggleCmpMo(ab,m,el){
+  el.classList.toggle('on');
+  if(el.classList.contains('on')) cmpState[ab].months.add(m);
+  else cmpState[ab].months.delete(m);
+}
+function toggleCmpCanal(ab,c,el){
+  el.classList.toggle('on');
+  if(el.classList.contains('on')) cmpState[ab].canals.add(c);
+  else cmpState[ab].canals.delete(c);
+}
+
+async function runComparacion(){
+  const sa=cmpState.a, sb=cmpState.b;
+  if(!sa.year||!sb.year){alert('Selecciona un año para cada período.');return;}
+  if(!sa.months.size||!sb.months.size){alert('Selecciona al menos un mes en cada período.');return;}
+
+  const allYears=[...new Set([sa.year,sb.year])];
+  const allMonths=[...new Set([...sa.months,...sb.months])].sort((a,b)=>a-b);
+  const rows=await fetchData(allYears,allMonths);
+  if(!rows?.length){alert('Sin datos para los períodos seleccionados.');return;}
+
+  // Agregar por período
+  function agg(year,months,canals){
+    const r=rows.filter(x=>x.year===year&&months.has(x.month)&&canals.has(x.canal));
+    let ns=0,gm=0,eqns=0,eqgm=0,vcns=0,vcgm=0;
+    for(const x of r){ns+=x.ns;gm+=x.gm;if(x.canal==='EQ'){eqns+=x.ns;eqgm+=x.gm;}else{vcns+=x.ns;vcgm+=x.gm;}}
+    return{ns,gm,eqns,eqgm,vcns,vcgm};
+  }
+  const A=agg(sa.year,sa.months,sa.canals);
+  const B=agg(sb.year,sb.months,sb.canals);
+
+  const labelA=`${sa.year} ${[...sa.months].sort((a,b)=>a-b).map(m=>MN[m-1]).join('-')} [${[...sa.canals].sort().join('+')}]`;
+  const labelB=`${sb.year} ${[...sb.months].sort((a,b)=>a-b).map(m=>MN[m-1]).join('-')} [${[...sb.canals].sort().join('+')}]`;
+
+  const vNS=B.ns>0?(A.ns-B.ns)/B.ns:null;
+  const vGM=B.gm>0?(A.gm-B.gm)/B.gm:null;
+  const vEQ=B.eqns>0?(A.eqns-B.eqns)/B.eqns:null;
+  const vVC=B.vcns>0?(A.vcns-B.vcns)/B.vcns:null;
+  const gmPctA=A.ns>0?A.gm/A.ns:0, gmPctB=B.ns>0?B.gm/B.ns:0;
+  const vGmPct=gmPctB>0?gmPctA-gmPctB:null;
+
+  const varCl=v=>v===null?'':v>0.005?' up':v<-0.005?' dn':'';
+
+  // KPIs
+  document.getElementById('cmp-kpis').innerHTML=[
+    {l:'NS Total',va:fmtM(A.ns),vb:fmtM(B.ns),vr:vNS},
+    {l:'GM Total',va:fmtM(A.gm),vb:fmtM(B.gm),vr:vGM},
+    {l:'GM%',va:fmtP(gmPctA),vb:fmtP(gmPctB),vr:vGmPct,pp:true},
+    {l:'NS EQ',va:fmtM(A.eqns),vb:fmtM(B.eqns),vr:vEQ},
+    {l:'NS VC',va:fmtM(A.vcns),vb:fmtM(B.vcns),vr:vVC},
+    {l:'GM% EQ',va:fmtP(A.eqns>0?A.eqgm/A.eqns:0),vb:fmtP(B.eqns>0?B.eqgm/B.eqns:0),vr:A.eqns>0&&B.eqns>0?A.eqgm/A.eqns-B.eqgm/B.eqns:null,pp:true},
+  ].map(k=>{
+    const cls=varCl(k.vr);
+    const delta=k.vr===null?'—':k.pp?(k.vr>=0?'+':'')+( k.vr*100).toFixed(1)+' pp':varStr(k.vr);
+    return`<div class="cmp-kpi">
+      <div class="cmp-kpi-lbl">${k.l}</div>
+      <div class="cmp-kpi-vals">
+        <span class="cmp-kpi-a">${k.va}</span>
+        <span style="color:var(--muted);font-size:11px">vs</span>
+        <span class="cmp-kpi-b">${k.vb}</span>
+        <span class="cmp-kpi-var${cls}">${delta}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Gráfico NS mensual A vs B
+  const mosA=[...sa.months].sort((a,b)=>a-b);
+  const mosB=[...sb.months].sort((a,b)=>a-b);
+  const allMos=[...new Set([...mosA,...mosB])].sort((a,b)=>a-b);
+  const nsA=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sa.year&&x.month===m&&sa.canals.has(x.canal));
+    const n=r.reduce((s,x)=>s+x.ns,0); return n>0?Math.round(n):null;
+  });
+  const nsB=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sb.year&&x.month===m&&sb.canals.has(x.canal));
+    const n=r.reduce((s,x)=>s+x.ns,0); return n>0?Math.round(n):null;
+  });
+  const gmPctAm=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sa.year&&x.month===m&&sa.canals.has(x.canal));
+    const ns=r.reduce((s,x)=>s+x.ns,0), gm=r.reduce((s,x)=>s+x.gm,0);
+    return ns>0?+(gm/ns*100).toFixed(1):null;
+  });
+  const gmPctBm=allMos.map(m=>{
+    const r=rows.filter(x=>x.year===sb.year&&x.month===m&&sb.canals.has(x.canal));
+    const ns=r.reduce((s,x)=>s+x.ns,0), gm=r.reduce((s,x)=>s+x.gm,0);
+    return ns>0?+(gm/ns*100).toFixed(1):null;
+  });
+
+  document.getElementById('cmp-ns-title').textContent=`NS€ mensual — ${labelA} vs ${labelB}`;
+  document.getElementById('cmp-gm-title').textContent=`GM% mensual — ${labelA} vs ${labelB}`;
+  document.getElementById('cmp-fleet-title').textContent=`Top flotas — A vs B`;
+
+  if(cmpChartNS) cmpChartNS.destroy();
+  const ctx1=document.getElementById('ch-cmp-ns')?.getContext('2d');
+  if(ctx1) cmpChartNS=new Chart(ctx1,{type:'bar',
+    data:{labels:allMos.map(m=>MN[m-1]),datasets:[
+      {label:labelA,data:nsA,backgroundColor:'rgba(226,0,26,0.8)',borderRadius:3},
+      {label:labelB,data:nsB,backgroundColor:'rgba(21,101,192,0.6)',borderRadius:3},
+    ]},options:chartOpts({stacked:false})
+  });
+
+  if(cmpChartGM) cmpChartGM.destroy();
+  const ctx2=document.getElementById('ch-cmp-gm')?.getContext('2d');
+  if(ctx2) cmpChartGM=new Chart(ctx2,{type:'line',
+    data:{labels:allMos.map(m=>MN[m-1]),datasets:[
+      {label:labelA,data:gmPctAm,borderColor:'#E2001A',backgroundColor:'rgba(226,0,26,0.08)',tension:.3,pointRadius:5,borderWidth:2,fill:true},
+      {label:labelB,data:gmPctBm,borderColor:'#1565C0',backgroundColor:'rgba(21,101,192,0.08)',tension:.3,pointRadius:5,borderWidth:2,borderDash:[5,3],fill:true},
+    ]},options:chartOpts({pct:true})
+  });
+
+  // Tabla flotas
+  const byFleet={};
+  for(const r of rows){
+    if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={name:r.fleet_norm,canals:new Set(),a:{ns:0,gm:0},b:{ns:0,gm:0}};
+    const inA=r.year===sa.year&&sa.months.has(r.month)&&sa.canals.has(r.canal);
+    const inB=r.year===sb.year&&sb.months.has(r.month)&&sb.canals.has(r.canal);
+    if(inA){byFleet[r.fleet_norm].a.ns+=r.ns;byFleet[r.fleet_norm].a.gm+=r.gm;}
+    if(inB){byFleet[r.fleet_norm].b.ns+=r.ns;byFleet[r.fleet_norm].b.gm+=r.gm;}
+    byFleet[r.fleet_norm].canals.add(r.canal);
+  }
+  const fleetList=Object.values(byFleet)
+    .filter(f=>f.a.ns>0||f.b.ns>0)
+    .sort((x,y)=>y.a.ns-x.a.ns).slice(0,30);
+
+  const head=document.getElementById('cmp-tb-head');
+  if(head) head.innerHTML=`<th>Flota</th><th>Canal</th>
+    <th class="r" style="color:#E2001A">NS A</th>
+    <th class="r" style="color:#1565C0">NS B</th>
+    <th class="r">Var A/B</th>
+    <th class="r">GM% A</th><th class="r">GM% B</th>`;
+
+  document.getElementById('cmp-tb').innerHTML=fleetList.map(f=>{
+    const c=[...f.canals].sort().join('+');
+    const vr=f.b.ns>0?(f.a.ns-f.b.ns)/f.b.ns:null;
+    const gmA=f.a.ns>0?f.a.gm/f.a.ns:0, gmB=f.b.ns>0?f.b.gm/f.b.ns:0;
+    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')">
+      <td style="color:var(--bl)">${f.name}</td>
+      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      <td class="r" style="font-weight:600;color:#E2001A">${f.a.ns>0?fmtM(f.a.ns):'—'}</td>
+      <td class="r" style="font-weight:600;color:#1565C0">${f.b.ns>0?fmtM(f.b.ns):'—'}</td>
+      <td class="r ${varCls(vr)}">${varStr(vr)}</td>
+      <td class="r">${f.a.ns>0?fmtP(gmA):'—'}</td>
+      <td class="r">${f.b.ns>0?fmtP(gmB):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cmp-results').style.display='block';
+  document.getElementById('cmp-empty').style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════════════════
+bootAccess();
+</script>
+</body>
+</html>

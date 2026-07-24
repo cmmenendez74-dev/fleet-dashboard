@@ -456,11 +456,13 @@ body.present-mode #exact-euros-btn{display:none}
       <div class="card-bd" id="upload-bulk-panel" style="display:none">
         <p style="font-size:12px;color:var(--muted);margin-bottom:.85rem;line-height:1.7">
           Para rellenar histórico día a día (2024/2025/inicios de 2026). Suelta de golpe todos los archivos de un mismo canal
-          exportados de Power BI, un día cada uno. Recomendado: nombra cada archivo con la fecha en formato <b>AAAA-MM-DD</b>
-          (ej. <code>EQ_2026-07-04.xlsx</code>) — la app la detecta automáticamente (📄) y no depende del orden en que los sueltes.
-          Los archivos sin fecha reconocible en el nombre se numeran por orden a partir de "Fecha del primer archivo", saltando
-          sábados y domingos. Los sábados/domingos que sí subas se <b>fusionan automáticamente con el viernes anterior</b>
-          (sumando NS/GM/OPR-ID), en vez de guardarse como día suelto. Revisa siempre la tabla antes de confirmar.
+          exportados de Power BI, un día cada uno. <b>No hace falta renombrarlos</b>: si el archivo trae la fila de "Filtros
+          aplicados" con Año/Mes/Día de un único día, la app detecta la fecha sola (✅) directamente del contenido. Si no la
+          trae, también reconoce la fecha en el nombre del archivo si sigue el formato AAAA-MM-DD (📄). Los que no tengan
+          fecha detectable se numeran por orden a partir de "Fecha del primer archivo", saltando sábados y domingos. Los
+          sábados/domingos que subas se <b>fusionan automáticamente con el viernes anterior</b> (sumando NS/GM/OPR-ID) —
+          salvo que ese viernes caiga en otro mes (ej. sábado día 1), en cuyo caso se fusionan con el <b>lunes siguiente</b>
+          para no mover ventas al mes equivocado. Revisa siempre la tabla antes de confirmar.
         </p>
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
           <span class="filter-label">Fecha del primer archivo</span>
@@ -2570,12 +2572,28 @@ fileInput.onchange=e=>{handleFiles([...e.target.files]);fileInput.value='';};
 dropZone.ondragover=e=>{e.preventDefault();dropZone.classList.add('drag')};
 dropZone.ondragleave=()=>dropZone.classList.remove('drag');
 dropZone.ondrop=e=>{e.preventDefault();dropZone.classList.remove('drag');handleFiles([...e.dataTransfer.files])};
-function todayISO(){const d=new Date();const tz=d.getTimezoneOffset();const local=new Date(d.getTime()-tz*60000);return local.toISOString().slice(0,10);}
+// Formatea un Date a "AAAA-MM-DD" usando SIEMPRE los componentes locales
+// (getFullYear/getMonth/getDate), nunca toISOString() — toISOString() convierte
+// a UTC, y en zonas horarias por delante de UTC (España) eso puede restar un
+// día al formatear medianoche local (bug real: el 23/07 salía como 22/07).
+function localDateStr(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function todayISO(){ return localDateStr(new Date()); }
 // Los archivos de NEXT FLEET llegan siempre "a día vencido" (hoy se recibe el
 // dato de ayer), así que el valor por defecto del campo de fecha debe ser el
-// día anterior, no el de hoy — evita el error de guardar el snapshot con la
-// fecha equivocada si no se cambia el campo manualmente.
-function yesterdayISO(){const d=new Date(todayISO()+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
+// día hábil anterior: el lunes debe proponer el VIERNES anterior (no el
+// domingo, que no tiene datos), el resto de días propone el día natural
+// anterior (que entre semana siempre es hábil).
+function yesterdayISO(){
+  const d=new Date();
+  d.setDate(d.getDate()-1);
+  while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); // 0=domingo,6=sábado
+  return localDateStr(d);
+}
 const uploadDateEl=document.getElementById('upload-date');
 if(uploadDateEl) uploadDateEl.value=yesterdayISO();
 
@@ -2593,7 +2611,7 @@ function nextBusinessDay(dateStr){
   const d=new Date(dateStr+'T00:00:00');
   d.setDate(d.getDate()+1);
   while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()+1); // 0=domingo,6=sábado
-  return d.toISOString().slice(0,10);
+  return localDateStr(d);
 }
 function isBusinessDay(dateStr){
   const d=new Date(dateStr+'T00:00:00');
@@ -2603,8 +2621,14 @@ function isWeekend(dateStr){ return !isBusinessDay(dateStr); }
 function precedingFriday(dateStr){
   const d=new Date(dateStr+'T00:00:00');
   while(d.getDay()!==5) d.setDate(d.getDate()-1); // 5=viernes
-  return d.toISOString().slice(0,10);
+  return localDateStr(d);
 }
+function followingMonday(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  do{ d.setDate(d.getDate()+1); }while(d.getDay()!==1); // 1=lunes
+  return localDateStr(d);
+}
+function sameMonth(a,b){ return a && b && a.slice(0,7)===b.slice(0,7); }
 
 // Intenta extraer una fecha del nombre del archivo. Soporta AAAA-MM-DD,
 // AAAA_MM_DD, AAAAMMDD y DD-MM-AAAA/DD_MM_AAAA. Si no reconoce nada, null
@@ -2630,6 +2654,44 @@ function parseDateFromFilename(name){
   return null;
 }
 
+// Los exports de Power BI incluyen, al final del archivo, una fila con el
+// resumen de filtros aplicados (ej. "Año es 2024 / Mes es junio / Día es
+// mayor o igual que 3 y es menor o igual que 3", o bien "2026 (Año) + julio
+// (Mes) + 15 (Día)"). Si podemos leer ahí la fecha exacta, es MÁS FIABLE que
+// el nombre del archivo (no depende de que el usuario renombre nada) y
+// funciona con los exports tal cual salen de Power BI.
+function parseDateFromFooter(rawRows){
+  let text=null;
+  for(const row of rawRows){
+    for(const v of Object.values(row)){
+      if(typeof v==='string' && v.includes('Filtros aplicados')){ text=v; break; }
+    }
+    if(text) break;
+  }
+  if(!text) return null;
+
+  let year=null, month=null, day=null;
+
+  let m=text.match(/Año es (\d{4})/) || text.match(/(\d{4})\s*\(Año\)/);
+  if(m) year=+m[1];
+
+  m=text.match(/Mes es ([A-Za-zÀ-ÿ]+)/) || text.match(/([A-Za-zÀ-ÿ]+)\s*\(Mes\)/);
+  if(m) month=MMAP[m[1].toLowerCase()]||null;
+
+  m=text.match(/Día es mayor o igual que (\d{1,2}) y es menor o igual que (\d{1,2})/);
+  if(m){
+    const a=+m[1], b=+m[2];
+    if(a===b) day=a; // filtro de un solo día expresado como rango a=b -> válido
+    // si es un rango real (a!==b) no asignamos día automáticamente: ambiguo
+  } else {
+    m=text.match(/(\d{1,2})\s*\(Día\)/) || text.match(/Día es (\d{1,2})(?!\s*mayor)/);
+    if(m) day=+m[1];
+  }
+
+  if(year && month && day) return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  return null;
+}
+
 async function handleBulkFiles(files){
   const startEl=document.getElementById('bulk-start-date');
   if(!startEl.value) startEl.value=yesterdayISO();
@@ -2637,8 +2699,6 @@ async function handleBulkFiles(files){
   for(const file of files){
     const id='bulk_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     const item={id,file,date:null,dateSource:null,kind:null,fleets:null,error:null,mergeInto:null};
-    const fnameDate=parseDateFromFilename(file.name);
-    if(fnameDate){ item.date=fnameDate; item.dateSource='filename'; }
     try{
       const buf=await file.arrayBuffer();
       const rawRows=readWorkbookRows(new Uint8Array(buf));
@@ -2649,6 +2709,15 @@ async function handleBulkFiles(files){
         item.kind=kind;
         item.fleets=parseRowsByKind(rawRows,kind);
         if(!item.fleets.length) item.error='Detectado como '+kind+' pero sin filas válidas';
+      }
+      // Prioridad de detección de fecha: 1) filtros del propio archivo (más fiable),
+      // 2) nombre del archivo, 3) asignación automática por orden (más abajo).
+      const footerDate=parseDateFromFooter(rawRows);
+      if(footerDate){
+        item.date=footerDate; item.dateSource='footer';
+      }else{
+        const fnameDate=parseDateFromFilename(file.name);
+        if(fnameDate){ item.date=fnameDate; item.dateSource='filename'; }
       }
     }catch(e){
       item.error=(e.message||'Error leyendo el archivo').slice(0,200);
@@ -2669,7 +2738,7 @@ function bulkReassignDates(force){
   let started=false;
   for(let i=0;i<bulkItems.length;i++){
     const it=bulkItems[i];
-    if(!force && it.dateSource==='filename'){
+    if(!force && (it.dateSource==='filename'||it.dateSource==='footer')){
       cur=it.date;
       started=true;
       continue;
@@ -2684,9 +2753,16 @@ function bulkReassignDates(force){
 
 // Marca qué archivos caen en sábado/domingo para fusionarlos automáticamente
 // con el viernes anterior en vez de guardarlos como día suelto.
+// Fusiona el fin de semana con el viernes anterior — SALVO que ese viernes
+// caiga en un mes distinto (ej. sábado día 1 del mes: el viernes anterior es
+// del mes pasado). En ese caso se fusiona con el lunes siguiente, que siempre
+// cae en el mismo mes que el propio fin de semana, para no mover ventas de
+// un mes al acumulado del mes equivocado.
 function detectWeekendMerges(){
   for(const it of bulkItems){
-    it.mergeInto = (it.date && isWeekend(it.date)) ? precedingFriday(it.date) : null;
+    if(!it.date || !isWeekend(it.date)){ it.mergeInto=null; continue; }
+    const fri=precedingFriday(it.date);
+    it.mergeInto = sameMonth(fri,it.date) ? fri : followingMonday(it.date);
   }
 }
 
@@ -2737,7 +2813,7 @@ function renderBulkPreview(){
           const canal=it.kind==='ID'?'EQ':it.kind;
           const dupKey=canal+'_'+it.date;
           const isDup=!it.error && !it.mergeInto && seen[dupKey]>1;
-          const srcTag=it.dateSource==='filename'?'<span title="Fecha detectada por el nombre del archivo" style="margin-left:4px">📄</span>':'';
+          const srcTag=it.dateSource==='footer'?'<span title="Fecha detectada automáticamente del propio archivo (fila de Filtros aplicados) — no depende del nombre" style="margin-left:4px">✅</span>':it.dateSource==='filename'?'<span title="Fecha detectada por el nombre del archivo" style="margin-left:4px">📄</span>':'';
           return `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 4px">${it.file.name}</td>
             <td style="padding:6px 4px">${it.error?`<span class="log-err">${it.error}</span>`:`<span class="badge ${canal}">${it.kind}</span>`}</td>
@@ -2745,7 +2821,7 @@ function renderBulkPreview(){
               <input type="date" value="${it.date||''}" style="font-size:12px;border:1px solid ${isDup?'#E2001A':'var(--border)'};border-radius:6px;padding:3px 6px"
                 onchange="bulkSetDate('${it.id}',this.value)">${srcTag}
               ${isDup?'<span class="log-err" style="margin-left:6px">⚠ fecha duplicada</span>':''}
-              ${it.mergeInto?`<span class="log-warn" style="margin-left:6px">↳ se fusiona con el viernes ${it.mergeInto.slice(8,10)}/${it.mergeInto.slice(5,7)}</span>`:''}
+              ${it.mergeInto?`<span class="log-warn" style="margin-left:6px">↳ se fusiona con el ${new Date(it.mergeInto+'T00:00:00').getDay()===1?'lunes':'viernes'} ${it.mergeInto.slice(8,10)}/${it.mergeInto.slice(5,7)}</span>`:''}
             </td>
             <td style="padding:6px 4px">${it.fleets?it.fleets.length:'—'}</td>
             <td style="padding:6px 4px"><span class="del-btn" onclick="bulkRemove('${it.id}')">✕</span></td>
@@ -2762,7 +2838,7 @@ async function processBulkUpload(){
   if(!valid.length){alert('No hay archivos válidos en el lote.');return;}
   const mergeCount=valid.filter(it=>it.mergeInto).length;
   const msg=mergeCount
-    ? `¿Subir ${valid.length} archivo(s)? ${mergeCount} de fin de semana se fusionarán con su viernes correspondiente (sumando NS/GM/OPR-ID). Al final se recalcularán los meses afectados.`
+    ? `¿Subir ${valid.length} archivo(s)? ${mergeCount} de fin de semana se fusionarán con el día laborable adyacente correspondiente (viernes, o lunes si el viernes cae en otro mes), sumando NS/GM/OPR-ID. Al final se recalcularán los meses afectados.`
     : `¿Subir ${valid.length} archivo(s)? Se guardará un snapshot diario por cada uno y al final se recalcularán los meses afectados.`;
   if(!confirm(msg)) return;
 
@@ -3421,7 +3497,7 @@ function initDiario(){
     toEl.value=today;
     const d=new Date(today+'T00:00:00');
     d.setDate(d.getDate()-21); // últimos ~3 semanas por defecto
-    fromEl.value=d.toISOString().slice(0,10);
+    fromEl.value=localDateStr(d);
   }
   populateDiarioFleets();
   refreshDiario();

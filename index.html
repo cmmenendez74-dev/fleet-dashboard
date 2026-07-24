@@ -218,6 +218,12 @@ body.present-mode #present-exit{display:flex!important}
   cursor:pointer;color:var(--dg);transition:background .15s}
 #present-btn:hover{background:var(--bg2)}
 body.present-mode #present-btn{display:none}
+#exact-euros-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;
+  border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;
+  cursor:pointer;color:var(--dg);transition:background .15s,color .15s,border-color .15s}
+#exact-euros-btn:hover{background:var(--bg2)}
+#exact-euros-btn.on{background:var(--dg);border-color:var(--dg);color:#fff}
+body.present-mode #exact-euros-btn{display:none}
 /* ── COMPARADOR DE PERÍODOS ─────────────────────────────────────────────────── */
 .cmp-selectors{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
 .cmp-box{background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem}
@@ -395,6 +401,10 @@ body.present-mode #present-btn{display:none}
       <span class="pill r" id="pill-eq">EQ</span>
       <span class="pill b" id="pill-vc">VC</span>
       <div style="margin-left:.75rem;display:flex;gap:.4rem">
+        <button id="exact-euros-btn" onclick="toggleExactEuros()" title="Alternar entre k€/M€ abreviado y el importe exacto en euros">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span id="exact-euros-label">€ exactos</span>
+        </button>
         <button id="present-btn" onclick="togglePresent()" title="Modo presentación">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           Presentar
@@ -446,14 +456,16 @@ body.present-mode #present-btn{display:none}
       <div class="card-bd" id="upload-bulk-panel" style="display:none">
         <p style="font-size:12px;color:var(--muted);margin-bottom:.85rem;line-height:1.7">
           Para rellenar histórico día a día (2024/2025/inicios de 2026). Suelta de golpe todos los archivos de un mismo canal
-          exportados de Power BI un día cada uno, en el mismo orden en que los exportaste (normalmente el orden de descarga se
-          conserva). Se les asignará automáticamente una fecha consecutiva saltando sábados y domingos — revisa la tabla antes
-          de confirmar y corrige a mano cualquier fecha que no cuadre (festivos, días sueltos que falten, etc.).
+          exportados de Power BI, un día cada uno. Recomendado: nombra cada archivo con la fecha en formato <b>AAAA-MM-DD</b>
+          (ej. <code>EQ_2026-07-04.xlsx</code>) — la app la detecta automáticamente (📄) y no depende del orden en que los sueltes.
+          Los archivos sin fecha reconocible en el nombre se numeran por orden a partir de "Fecha del primer archivo", saltando
+          sábados y domingos. Los sábados/domingos que sí subas se <b>fusionan automáticamente con el viernes anterior</b>
+          (sumando NS/GM/OPR-ID), en vez de guardarse como día suelto. Revisa siempre la tabla antes de confirmar.
         </p>
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
           <span class="filter-label">Fecha del primer archivo</span>
           <input type="date" id="bulk-start-date" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;background:#fff;font-family:inherit">
-          <button class="btn" style="font-size:12px" onclick="bulkReassignDates()">Reasignar fechas ↻</button>
+          <button class="btn" style="font-size:12px" onclick="bulkReassignDates(true)" title="Ignora las fechas detectadas por el nombre del archivo y reasigna todo por orden desde la fecha de inicio">Reasignar fechas ↻</button>
         </div>
         <label class="upload-zone" id="bulk-drop-zone">
           <input type="file" id="bulk-file-input" multiple accept=".xlsx,.xls">
@@ -1232,8 +1244,53 @@ function normName(n){
   return n.trim().slice(0,50);
 }
 function fmt(n){return Math.round(n).toLocaleString('es-ES')}
-function fmtM(n){return n>=1e6?(n/1e6).toFixed(2)+'M€':n>=1000?(n/1000).toFixed(0)+'k€':Math.round(n)+'€'}
+// Modo "€ exactos": alterna entre el formato abreviado (k€/M€) y el importe
+// exacto en euros, para poder hacer cálculos precisos sin tener que ir a Supabase.
+// Afecta a fmtM en TODOS los sitios (KPIs, tablas, tooltips y ejes de gráficos),
+// porque fmtM se usa también dentro de callbacks de Chart.js donde no se puede
+// insertar HTML — por eso es un simple cambio de formato de texto, no un tooltip.
+let showExactEuros=false;
+try{ showExactEuros=localStorage.getItem('ffd_exact_euros')==='1'; }catch(e){}
+function fmtM(n){
+  if(showExactEuros) return Math.round(n).toLocaleString('es-ES')+'€';
+  return n>=1e6?(n/1e6).toFixed(2)+'M€':n>=1000?(n/1000).toFixed(0)+'k€':Math.round(n)+'€';
+}
 function fmtP(n){return(!n||!isFinite(n))?'—':(n*100).toFixed(1)+'%'}
+
+function updateExactEurosBtn(){
+  const btn=document.getElementById('exact-euros-btn');
+  const lbl=document.getElementById('exact-euros-label');
+  if(btn) btn.classList.toggle('on',showExactEuros);
+  if(lbl) lbl.textContent=showExactEuros?'k€/M€':'€ exactos';
+}
+
+// Vuelve a pintar lo que esté visible ahora mismo, para que el cambio de
+// formato se refleje al instante en KPIs, tablas y gráficos sin recargar la página.
+function refreshCurrentView(){
+  const activeView=document.querySelector('.view.active');
+  if(!activeView) return;
+  const id=activeView.id.replace('view-','');
+  try{
+    if(id==='resumen') refreshResumen();
+    else if(id==='historico'){
+      if(S.histMode==='mtd') refreshMTD();
+      else if(S.histMode==='diario') refreshDiario();
+      else if(S.histMode==='heatmap') refreshHeatmap();
+      else if(S.histMode!=='comparar') refreshHistorico();
+      // en modo "comparar" no se re-ejecuta solo: hay que pulsar "Comparar" de nuevo
+    }
+    else if(id==='flotas') refreshFlotas();
+    else if(id==='alertas') refreshAlertas();
+  }catch(e){ console.error('Error refrescando vista tras cambiar formato de € :',e); }
+}
+
+function toggleExactEuros(){
+  showExactEuros=!showExactEuros;
+  try{ localStorage.setItem('ffd_exact_euros', showExactEuros?'1':'0'); }catch(e){}
+  updateExactEurosBtn();
+  refreshCurrentView();
+}
+updateExactEurosBtn();
 function sem(c){return c>=1?'🟢':c>=0.95?'🟡':'🔴'}
 function growthSem(v){if(v===null||v===undefined||!isFinite(v))return '—';return v>=0.05?'🟢':v>=-0.05?'🟡':'🔴'}
 function growthLabel(v){if(v===null||v===undefined||!isFinite(v))return 'Sin PY';return v>=0.05?'Crece':v>=-0.05?'Estable':'Cae'}
@@ -2530,7 +2587,7 @@ function setUploadMode(mode){
 }
 
 // ── CARGA MASIVA HISTÓRICA ──────────────────────────────────────────────────
-let bulkItems=[]; // {id,file,date,kind,fleets,error}
+let bulkItems=[]; // {id,file,date,dateSource,kind,fleets,error,mergeInto}
 
 function nextBusinessDay(dateStr){
   const d=new Date(dateStr+'T00:00:00');
@@ -2542,6 +2599,36 @@ function isBusinessDay(dateStr){
   const d=new Date(dateStr+'T00:00:00');
   return d.getDay()!==0 && d.getDay()!==6;
 }
+function isWeekend(dateStr){ return !isBusinessDay(dateStr); }
+function precedingFriday(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  while(d.getDay()!==5) d.setDate(d.getDate()-1); // 5=viernes
+  return d.toISOString().slice(0,10);
+}
+
+// Intenta extraer una fecha del nombre del archivo. Soporta AAAA-MM-DD,
+// AAAA_MM_DD, AAAAMMDD y DD-MM-AAAA/DD_MM_AAAA. Si no reconoce nada, null
+// (y esa fecha se asignará automáticamente por orden).
+function parseDateFromFilename(name){
+  const base=name.replace(/\.[^.]+$/,'');
+  let m;
+  m=base.match(/(20\d{2})[-_](\d{1,2})[-_](\d{1,2})(?!\d)/);
+  if(m){
+    const y=+m[1],mo=+m[2],d=+m[3];
+    if(mo>=1&&mo<=12&&d>=1&&d<=31) return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  m=base.match(/(20\d{2})(\d{2})(\d{2})(?!\d)/);
+  if(m){
+    const y=+m[1],mo=+m[2],d=+m[3];
+    if(mo>=1&&mo<=12&&d>=1&&d<=31) return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  m=base.match(/(?<!\d)(\d{1,2})[-_](\d{1,2})[-_](20\d{2})/);
+  if(m){
+    const d=+m[1],mo=+m[2],y=+m[3];
+    if(mo>=1&&mo<=12&&d>=1&&d<=31) return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return null;
+}
 
 async function handleBulkFiles(files){
   const startEl=document.getElementById('bulk-start-date');
@@ -2549,7 +2636,9 @@ async function handleBulkFiles(files){
 
   for(const file of files){
     const id='bulk_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const item={id,file,date:null,kind:null,fleets:null,error:null};
+    const item={id,file,date:null,dateSource:null,kind:null,fleets:null,error:null,mergeInto:null};
+    const fnameDate=parseDateFromFilename(file.name);
+    if(fnameDate){ item.date=fnameDate; item.dateSource='filename'; }
     try{
       const buf=await file.arrayBuffer();
       const rawRows=readWorkbookRows(new Uint8Array(buf));
@@ -2566,27 +2655,45 @@ async function handleBulkFiles(files){
     }
     bulkItems.push(item);
   }
-  bulkReassignDates();
+  bulkReassignDates(false);
 }
 
-// Reasigna fechas consecutivas (saltando fines de semana) a TODOS los archivos
-// del lote, en el orden en que están en la lista, empezando por la fecha elegida.
-function bulkReassignDates(){
+// Reasigna fechas. Por defecto (force=false) respeta las fechas ya detectadas
+// por el nombre del archivo y solo va rellenando huecos consecutivos (saltando
+// fines de semana) para los que no traen fecha reconocible en el nombre.
+// Con force=true (botón "Reasignar fechas") ignora lo detectado y reasigna
+// todo desde cero por orden, a partir de la fecha de inicio elegida.
+function bulkReassignDates(force){
   const startEl=document.getElementById('bulk-start-date');
   let cur=startEl.value||yesterdayISO();
-  if(!isBusinessDay(cur)){
-    // si cae en fin de semana, avisamos pero seguimos igualmente desde ahí hacia adelante
-  }
+  let started=false;
   for(let i=0;i<bulkItems.length;i++){
-    if(i===0){ bulkItems[i].date=cur; }
-    else{ cur=nextBusinessDay(cur); bulkItems[i].date=cur; }
+    const it=bulkItems[i];
+    if(!force && it.dateSource==='filename'){
+      cur=it.date;
+      started=true;
+      continue;
+    }
+    if(!started){ it.date=cur; started=true; }
+    else{ cur=nextBusinessDay(cur); it.date=cur; }
+    it.dateSource='auto';
   }
+  detectWeekendMerges();
   renderBulkPreview();
+}
+
+// Marca qué archivos caen en sábado/domingo para fusionarlos automáticamente
+// con el viernes anterior en vez de guardarlos como día suelto.
+function detectWeekendMerges(){
+  for(const it of bulkItems){
+    it.mergeInto = (it.date && isWeekend(it.date)) ? precedingFriday(it.date) : null;
+  }
 }
 
 function bulkSetDate(id,newDate){
   const it=bulkItems.find(x=>x.id===id);
-  if(it) it.date=newDate;
+  if(it){ it.date=newDate; it.dateSource='manual'; }
+  detectWeekendMerges();
   renderBulkPreview();
 }
 
@@ -2609,10 +2716,12 @@ function renderBulkPreview(){
     btn.disabled=true;
     return;
   }
-  // Aviso de fechas duplicadas (mismo canal+fecha), típico si el orden de los archivos no era el esperado.
+  // Aviso de fechas duplicadas (mismo canal+fecha efectiva) entre archivos que
+  // NO son de fin de semana — un sábado/domingo fusionándose con su viernes es
+  // intencionado y no cuenta como duplicado.
   const seen={};
   for(const it of bulkItems){
-    if(it.error||!it.kind) continue;
+    if(it.error||!it.kind||it.mergeInto) continue;
     const canal=it.kind==='ID'?'EQ':it.kind;
     const key=canal+'_'+it.date;
     seen[key]=(seen[key]||0)+1;
@@ -2627,14 +2736,16 @@ function renderBulkPreview(){
         ${bulkItems.map(it=>{
           const canal=it.kind==='ID'?'EQ':it.kind;
           const dupKey=canal+'_'+it.date;
-          const isDup=!it.error && seen[dupKey]>1;
+          const isDup=!it.error && !it.mergeInto && seen[dupKey]>1;
+          const srcTag=it.dateSource==='filename'?'<span title="Fecha detectada por el nombre del archivo" style="margin-left:4px">📄</span>':'';
           return `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 4px">${it.file.name}</td>
             <td style="padding:6px 4px">${it.error?`<span class="log-err">${it.error}</span>`:`<span class="badge ${canal}">${it.kind}</span>`}</td>
             <td style="padding:6px 4px">
               <input type="date" value="${it.date||''}" style="font-size:12px;border:1px solid ${isDup?'#E2001A':'var(--border)'};border-radius:6px;padding:3px 6px"
-                onchange="bulkSetDate('${it.id}',this.value)">
+                onchange="bulkSetDate('${it.id}',this.value)">${srcTag}
               ${isDup?'<span class="log-err" style="margin-left:6px">⚠ fecha duplicada</span>':''}
+              ${it.mergeInto?`<span class="log-warn" style="margin-left:6px">↳ se fusiona con el viernes ${it.mergeInto.slice(8,10)}/${it.mergeInto.slice(5,7)}</span>`:''}
             </td>
             <td style="padding:6px 4px">${it.fleets?it.fleets.length:'—'}</td>
             <td style="padding:6px 4px"><span class="del-btn" onclick="bulkRemove('${it.id}')">✕</span></td>
@@ -2649,37 +2760,53 @@ async function processBulkUpload(){
   if(!isAdmin()){alert('Solo el usuario administrador puede subir archivos.');return;}
   const valid=bulkItems.filter(it=>!it.error && it.date && it.kind);
   if(!valid.length){alert('No hay archivos válidos en el lote.');return;}
-  if(!confirm(`¿Subir ${valid.length} archivo(s)? Se guardará un snapshot diario por cada uno y al final se recalcularán los meses afectados.`)) return;
+  const mergeCount=valid.filter(it=>it.mergeInto).length;
+  const msg=mergeCount
+    ? `¿Subir ${valid.length} archivo(s)? ${mergeCount} de fin de semana se fusionarán con su viernes correspondiente (sumando NS/GM/OPR-ID). Al final se recalcularán los meses afectados.`
+    : `¿Subir ${valid.length} archivo(s)? Se guardará un snapshot diario por cada uno y al final se recalcularán los meses afectados.`;
+  if(!confirm(msg)) return;
 
   const log=document.getElementById('bulk-log');
   log.style.display='block';
   log.innerHTML='';
   document.getElementById('bulk-confirm-btn').disabled=true;
 
+  // Agrupamos por fecha EFECTIVA (fin de semana fusionado con su viernes) + canal,
+  // para hacer un único upsert por grupo — upsertDailySnapshot ya fusiona por
+  // fleet_norm sumando NS/GM y tratando OPR-ID correctamente (fresco vs heredado).
+  const groups=new Map();
+  for(const it of valid){
+    const canal=it.kind==='ID'?'EQ':it.kind;
+    const effDate=it.mergeInto||it.date;
+    const key=effDate+'_'+canal;
+    if(!groups.has(key)) groups.set(key,{date:effDate,canal,items:[]});
+    groups.get(key).items.push(it);
+  }
+  const sortedGroups=[...groups.values()].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+
   const touchedPeriods=new Set(); // "year_month_canal"
   let ok=0, fail=0;
 
-  // Subimos en orden de fecha, para que el log sea fácil de seguir.
-  valid.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-
-  for(const it of valid){
-    const rowId='blog_'+it.id;
-    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${it.file.name}</b> — guardando snapshot del ${it.date}...</div>`;
+  for(const g of sortedGroups){
+    const rowId='blog_'+g.date+'_'+g.canal;
+    const label=g.items.map(x=>x.file.name).join(' + ');
+    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${label}</b> — guardando snapshot del ${g.date}${g.items.length>1?' (fusionado)':''}...</div>`;
     log.scrollTop=log.scrollHeight;
     try{
-      const canal=it.kind==='ID'?'EQ':it.kind;
-      await upsertDailySnapshot(it.date,canal,it.fleets,it.kind==='ID');
-      if(it.kind==='EQ'||it.kind==='VC'){
-        const meta=detectMeta(it.file.name);
-        const month=meta.month || (+it.date.slice(5,7));
-        const year=meta.year || (+it.date.slice(0,4));
-        touchedPeriods.add(`${year}_${month}_${canal}`);
+      const combinedFleets=[].concat(...g.items.map(x=>x.fleets));
+      const isOprOnly=g.items.every(x=>x.kind==='ID');
+      await upsertDailySnapshot(g.date,g.canal,combinedFleets,isOprOnly);
+      if(g.canal==='EQ'||g.canal==='VC'){
+        const meta=detectMeta(g.items[0].file.name);
+        const month=meta.month || (+g.date.slice(5,7));
+        const year=meta.year || (+g.date.slice(0,4));
+        touchedPeriods.add(`${year}_${month}_${g.canal}`);
       }
-      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${it.file.name}</b> — snapshot ${it.date} guardado (${it.fleets.length} flotas).`;
-      ok++;
+      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${label}</b> — snapshot ${g.date} guardado (${combinedFleets.length} filas de origen).`;
+      ok+=g.items.length;
     }catch(e){
-      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${it.file.name}</b> — error: ${(e.message||e).toString().slice(0,200)}`;
-      fail++;
+      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${label}</b> — error: ${(e.message||e).toString().slice(0,200)}`;
+      fail+=g.items.length;
     }
   }
 
@@ -2696,7 +2823,7 @@ async function processBulkUpload(){
   refreshPeriodos();
   try{refreshResumen();}catch(e){}
 
-  log.innerHTML+=`<div class="log-row"><span class="log-ok">✓</span><b>Lote completo:</b> ${ok} guardados, ${fail} con error, ${touchedPeriods.size} período(s) recalculado(s).</div>`;
+  log.innerHTML+=`<div class="log-row"><span class="log-ok">✓</span><b>Lote completo:</b> ${ok} archivo(s) procesados, ${fail} con error, ${sortedGroups.length} snapshot(s) guardados, ${touchedPeriods.size} período(s) recalculado(s).</div>`;
   document.getElementById('bulk-confirm-btn').disabled=false;
 }
 

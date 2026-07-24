@@ -2887,11 +2887,20 @@ async function processBulkUpload(){
   }
 
   if(touchedPeriods.size){
-    log.innerHTML+=`<div class="log-row"><span class="spinner"></span>Recalculando ${touchedPeriods.size} mes(es)/canal afectados...</div>`;
+    const recalcRowId='blog_recalc';
+    log.innerHTML+=`<div class="log-row" id="${recalcRowId}"><span class="spinner"></span>Recalculando ${touchedPeriods.size} mes(es)/canal afectados...</div>`;
+    log.scrollTop=log.scrollHeight;
+    let recalcOk=0, recalcFail=0;
     for(const key of touchedPeriods){
       const [year,month,canal]=key.split('_');
-      try{ await recalcMonthFromDaily(+year,+month,canal); }
-      catch(e){ console.error('Error recalculando',key,e); }
+      try{ await recalcMonthFromDaily(+year,+month,canal); recalcOk++; }
+      catch(e){ console.error('Error recalculando',key,e); recalcFail++; }
+    }
+    const recalcRow=document.getElementById(recalcRowId);
+    if(recalcRow){
+      recalcRow.innerHTML=recalcFail
+        ? `<span class="log-err">✗</span>Recalculado ${recalcOk}/${touchedPeriods.size} período(s) — ${recalcFail} con error (revisa la consola).`
+        : `<span class="log-ok">✓</span>Recalculados ${recalcOk} período(s) afectados.`;
     }
   }
 
@@ -2900,6 +2909,14 @@ async function processBulkUpload(){
   try{refreshResumen();}catch(e){}
 
   log.innerHTML+=`<div class="log-row"><span class="log-ok">✓</span><b>Lote completo:</b> ${ok} archivo(s) procesados, ${fail} con error, ${sortedGroups.length} snapshot(s) guardados, ${touchedPeriods.size} período(s) recalculado(s).</div>`;
+
+  // Quitamos de la lista los archivos ya intentados (con éxito o con error real
+  // de subida) para que no se queden "fantasma" chocando con la siguiente tanda
+  // que añadas sin haber vaciado el lote antes.
+  const attemptedIds=new Set(valid.map(it=>it.id));
+  bulkItems=bulkItems.filter(it=>!attemptedIds.has(it.id));
+  renderBulkPreview();
+
   document.getElementById('bulk-confirm-btn').disabled=false;
 }
 

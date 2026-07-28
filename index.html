@@ -3064,13 +3064,23 @@ async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
   // Docs puede tener una lista de clientes ligeramente distinta a la de NS/GM
   // (visitas sin coste, etc.), así que usarlo para "podar" borraría clientes
   // de EQ que sí son legítimos pero no tienen documento ese día.
+  //
+  // Corregido 28/07/2026: la primera versión de esto montaba un filtro
+  // not.in.("A","B","C",...) a mano dentro de la URL, sin codificar — con
+  // nombres de cliente reales (comas, puntos, "S.A.U.", etc.) la URL se
+  // rompía y Supabase devolvía "failed to parse filter". Ahora se calcula
+  // la lista de huérfanos en JS a partir de "existing" (que ya se había
+  // leído antes, sin coste extra) y se borra cada uno por separado con
+  // encodeURIComponent, que sí escapa bien cualquier carácter especial.
   if(!isOprOnly && rowsOut.length){
-    const keepNorms=rowsOut.map(r=>r.fleet_norm);
-    const notInList=keepNorms.map(n=>`"${String(n).replace(/"/g,'""')}"`).join(',');
-    await restJson(`fleet_data_daily?snap_date=eq.${date}&canal=eq.${canal}&fleet_norm=not.in.(${notInList})`,{
-      method:'DELETE',
-      headers:{'Prefer':'return=minimal'}
-    });
+    const keepSet=new Set(rowsOut.map(r=>r.fleet_norm));
+    const orphans=(existing||[]).filter(e=>!keepSet.has(e.fleet_norm));
+    for(const o of orphans){
+      await restJson(`fleet_data_daily?snap_date=eq.${date}&canal=eq.${canal}&fleet_norm=eq.${encodeURIComponent(o.fleet_norm)}`,{
+        method:'DELETE',
+        headers:{'Prefer':'return=minimal'}
+      });
+    }
   }
 
   for(let i=0;i<rowsOut.length;i+=50){

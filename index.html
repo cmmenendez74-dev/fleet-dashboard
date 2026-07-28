@@ -2437,59 +2437,30 @@ async function refreshCanal(){
 // ══════════════════════════════════════════════════════════════════════════════
 // PERÍODOS
 // ══════════════════════════════════════════════════════════════════════════════
-// Recalcula el acumulado de un mes/canal en fleet_data sumando TODOS los
-// snapshots diarios guardados en fleet_data_daily para ese mes/canal.
-// Se usa tanto al subir un archivo como manualmente desde "Períodos".
+// ══════════════════════════════════════════════════════════════════════════════
+// OPCIÓN A (27/07/2026): fleet_data ha pasado de ser una TABLA que había que
+// recalcular a mano a ser una VISTA (view) de Postgres calculada en directo a
+// partir de fleet_data_daily (ver migración SQL). Con esto es IMPOSIBLE que
+// el resumen mensual y el detalle diario queden desincronizados, borres lo
+// que borres y por donde lo borres (app o SQL directo) — ya no hay dos
+// fuentes de verdad, solo una.
 //
-// IMPORTANTE (fallo de datos del 07/07/2026): el snapshot diario es una
-// funcionalidad reciente. Los períodos antiguos (o cualquier mes/canal que
-// nunca se haya subido con snapshot diario) NO tienen filas en
-// fleet_data_daily. Si se dejara continuar, se borraría fleet_data de ese
-// período y se insertaría un array vacío, PERDIENDO esos datos sin remedio.
-// Por eso: si no hay ninguna fila diaria para ese año/mes/canal, abortamos
-// SIN TOCAR fleet_data.
+// Esta función YA NO ESCRIBE nada (una vista no admite INSERT/DELETE). Se
+// mantiene con el mismo nombre y la misma firma para no tener que tocar el
+// resto de sitios donde se llama — ahora solo CUENTA cuántas flotas hay en
+// fleet_data_daily para ese año/mes/canal, a modo de verificación, y lanza
+// el mismo error noDailyData si no hay nada, para que la UI que avisaba de
+// "períodos sin snapshots diarios" se siga comportando igual.
 async function recalcMonthFromDaily(year,month,canal){
   const dailyRows=await sbSelectAll('fleet_data_daily',
-    `select=fleet_norm,fleet_raw,ns,gm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+    `select=fleet_norm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
 
   if(!dailyRows || !dailyRows.length){
-    const e=new Error(`Sin snapshots diarios guardados para ${MN[month-1]} ${year} ${canal} — no se puede recalcular sin perder los datos existentes. No se ha modificado nada.`);
+    const e=new Error(`Sin snapshots diarios guardados para ${MN[month-1]} ${year} ${canal}.`);
     e.noDailyData=true;
     throw e;
   }
-
-  const monthMap=new Map();
-  for(const r of (dailyRows||[])){
-    const norm=String(r.fleet_norm||'').slice(0,100);
-    if(monthMap.has(norm)){
-      const ex=monthMap.get(norm);
-      ex.ns+=Number(r.ns)||0;
-      ex.gm+=Number(r.gm)||0;
-      if(String(r.fleet_raw||'').length>String(ex.fleet_raw||'').length) ex.fleet_raw=r.fleet_raw;
-    } else {
-      monthMap.set(norm,{
-        year:Number(year), month:Number(month), canal:String(canal),
-        fleet_raw:String(r.fleet_raw||'').slice(0,200), fleet_norm:norm,
-        ns:Number(r.ns)||0, gm:Number(r.gm)||0
-      });
-    }
-  }
-  const rows=[...monthMap.values()];
-
-  await restJson(`fleet_data?year=eq.${year}&month=eq.${month}&canal=eq.${canal}`,{
-    method:'DELETE',
-    headers:{'Prefer':'return=minimal'}
-  });
-
-  for(let i=0;i<rows.length;i+=50){
-    const batch=rows.slice(i,i+50);
-    await restJson('fleet_data',{
-      method:'POST',
-      body:JSON.stringify(batch),
-      headers:{'Prefer':'return=minimal'}
-    });
-  }
-  return rows.length;
+  return new Set(dailyRows.map(r=>r.fleet_norm)).size;
 }
 
 async function refreshPeriodos(){
@@ -2536,7 +2507,7 @@ async function recalcAllPeriods(){
   for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
   const items=Object.values(uniq);
   if(!items.length){alert('No hay períodos guardados.');return;}
-  if(!confirm(`¿Recalcular los ${items.length} períodos? Solo se tocarán los que tengan snapshots diarios guardados — el resto se dejará intacto.`)) return;
+  if(!confirm(`¿Verificar los ${items.length} períodos? El resumen mensual es una vista y ya está siempre al día solo — esto solo comprueba qué meses/canales tienen snapshots diarios guardados.`)) return;
   let okCount=0, skipped=[];
   for(const p of items){
     try{
@@ -2544,21 +2515,21 @@ async function recalcAllPeriods(){
       okCount++;
     }catch(e){
       if(e.noDailyData) skipped.push(`${MN[p.month-1]} ${p.year} ${p.canal}`);
-      else console.error('Error recalculando',p,e);
+      else console.error('Error verificando',p,e);
     }
   }
   await loadSummary();
   refreshPeriodos();
   try{refreshResumen();}catch(e){}
-  let msg=`Recalculados: ${okCount} período(s).`;
-  if(skipped.length) msg+=`\n\nSin snapshots diarios (NO tocados, se han dejado como estaban):\n${skipped.join('\n')}`;
+  let msg=`Con snapshots diarios: ${okCount} período(s).`;
+  if(skipped.length) msg+=`\n\nSin snapshots diarios (el resumen de esos meses mostrará 0€, no hay datos que agregar):\n${skipped.join('\n')}`;
   alert(msg);
 }
 
 async function delPeriod(year,month,canal){
   if(!isAdmin()){alert('Solo el usuario administrador puede eliminar períodos.');return;}
-  if(!confirm(`¿Eliminar ${MN[month-1]} ${year} ${canal}?`)) return;
-  await sbDelete('fleet_data',`year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+  if(!confirm(`¿Eliminar ${MN[month-1]} ${year} ${canal}? Se borran los snapshots diarios (fleet_data_daily); el resumen mensual es una vista y se queda a 0 automáticamente, sin pasos adicionales.`)) return;
+  await sbDelete('fleet_data_daily',`year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
   await loadSummary();
   refreshPeriodos();
 }
@@ -2796,8 +2767,11 @@ function renderBulkPreview(){
   const seen={};
   for(const it of bulkItems){
     if(it.error||!it.kind||it.mergeInto) continue;
-    const canal=it.kind==='ID'?'EQ':it.kind;
-    const key=canal+'_'+it.date;
+    // OJO: aquí NO se pliega ID dentro de EQ. Un EQ y su ID de la misma
+    // fecha son pareja normal (se fusionan más tarde en processBulkUpload),
+    // no un duplicado. Solo es duplicado si hay DOS archivos del MISMO tipo
+    // (dos EQ, o dos ID) apuntando a la misma fecha.
+    const key=it.kind+'_'+it.date;
     seen[key]=(seen[key]||0)+1;
   }
   let hasDup=false;
@@ -2809,9 +2783,9 @@ function renderBulkPreview(){
       </tr></thead>
       <tbody>
         ${bulkItems.map(it=>{
-          const canal=it.kind==='ID'?'EQ':it.kind;
-          const dupKey=canal+'_'+it.date;
+          const dupKey=it.kind+'_'+it.date;
           const isDup=!it.error && !it.mergeInto && seen[dupKey]>1;
+          const canal=it.kind==='ID'?'EQ':it.kind; // solo para el color del badge
           if(isDup) hasDup=true;
           const srcTag=it.dateSource==='filtro'
             ?'<span title="Fecha leída dentro del propio Excel (fila Filtros aplicados) — fuente fiable" style="margin-left:4px">✅</span>'
@@ -3098,6 +3072,32 @@ async function handleFiles(files){
   log.innerHTML='';
   const pickedDate=document.getElementById('upload-date')?.value || yesterdayISO();
 
+  // "Carga normal" aplica UNA sola fecha a TODO lo que se suelte aquí — está
+  // pensada para 1 EQ + 1 VC + 1 ID de un único día. Si se detectan dos
+  // archivos del MISMO tipo (dos EQ, por ejemplo), casi seguro es una carga
+  // de varios días hecha por esta vía por error — los dos acabarían con la
+  // misma fecha sin ningún aviso. Se bloquea todo el lote ANTES de escribir
+  // nada, y se remite a "Carga masiva histórica" (que sí asigna una fecha
+  // distinta por archivo, leída del propio Excel).
+  const sniffed=[];
+  for(const file of files){
+    try{
+      const buf=await file.arrayBuffer();
+      const rawRows=readWorkbookRows(new Uint8Array(buf));
+      sniffed.push({file,kind:sniffKind(rawRows)});
+    }catch(e){
+      sniffed.push({file,kind:null});
+    }
+  }
+  const countByKind={};
+  for(const s of sniffed) if(s.kind) countByKind[s.kind]=(countByKind[s.kind]||0)+1;
+  const repeated=Object.entries(countByKind).filter(([,n])=>n>1);
+  if(repeated.length){
+    const detalle=repeated.map(([k,n])=>`${n} archivos de tipo ${k}`).join(', ');
+    alert(`"Carga normal" es para UN solo día (1 EQ + 1 VC + 1 ID como mucho) — todo lo que sueltes aquí se guarda con la misma fecha (${pickedDate}).\n\nHas soltado ${detalle}, lo que sugiere que son de días distintos. No se ha subido nada.\n\nSi son varios días de histórico, usa "Carga masiva histórica" — ahí cada archivo saca su propia fecha del contenido del Excel.`);
+    return;
+  }
+
   for(const file of files){
     const rowId='log_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${file.name}</b> — Detectando tipo de archivo...</div>`;
@@ -3128,12 +3128,16 @@ async function handleFiles(files){
       //    sumando TODOS los snapshots diarios guardados de ese mes/canal (no solo
       //    el archivo recién subido). Así el mes va acumulando día a día, y cada
       //    subida simplemente actualiza el total con los días que ya hay guardados.
+      // 2) Los archivos EQ/VC no necesitan "recalcular" nada más: fleet_data
+      //    es una vista calculada en directo sobre fleet_data_daily, así que
+      //    el acumulado mensual ya refleja este snapshot automáticamente.
+      //    Aquí solo se verifica que las filas diarias han quedado guardadas.
       if(kind==='EQ'||kind==='VC'){
         const meta=detectMeta(file.name);
         const month=meta.month || (+pickedDate.slice(5,7));
         const year=meta.year || (+pickedDate.slice(0,4));
 
-        document.getElementById(rowId).innerHTML=`<span class="log-warn">Σ</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: recalculando acumulado del mes con todos los días guardados...`;
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">✓</span><b>${file.name}</b> — ${MN[month-1]} ${year} ${canal}: verificando snapshot guardado...`;
 
         const nFlotas=await recalcMonthFromDaily(year,month,canal);
 
@@ -3141,7 +3145,7 @@ async function handleFiles(files){
         if(!ok){
           throw new Error('Supabase aceptó la petición, pero al verificar no devuelve filas. Revisa políticas RLS de SELECT/INSERT o permisos de la anon key.');
         }
-        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · acumulado de ${nFlotas} flotas (todos los días subidos) · snapshot diario ${pickedDate}.`;
+        document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Guardado OK: ${MN[month-1]} ${year} ${canal} · ${nFlotas} flotas distintas en el histórico diario · snapshot del ${pickedDate}.`;
       }else{
         document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — OPR-ID guardado para EQ · snapshot diario ${pickedDate} · ${fleets.length} flotas.`;
       }

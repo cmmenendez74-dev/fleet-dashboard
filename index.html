@@ -2507,7 +2507,7 @@ function todayISO(){const d=new Date();const tz=d.getTimezoneOffset();const loca
 // dato de ayer), así que el valor por defecto del campo de fecha debe ser el
 // día anterior, no el de hoy — evita el error de guardar el snapshot con la
 // fecha equivocada si no se cambia el campo manualmente.
-function yesterdayISO(){const d=new Date(todayISO()+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
+function yesterdayISO(){const d=new Date(todayISO()+'T00:00:00');d.setDate(d.getDate()-1);return localDateStr(d);}
 const uploadDateEl=document.getElementById('upload-date');
 if(uploadDateEl) uploadDateEl.value=yesterdayISO();
 
@@ -2525,7 +2525,7 @@ function nextBusinessDay(dateStr){
   const d=new Date(dateStr+'T00:00:00');
   d.setDate(d.getDate()+1);
   while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()+1); // 0=domingo,6=sábado
-  return d.toISOString().slice(0,10);
+  return localDateStr(d);
 }
 function isBusinessDay(dateStr){
   const d=new Date(dateStr+'T00:00:00');
@@ -2535,7 +2535,7 @@ function isWeekend(dateStr){ return !isBusinessDay(dateStr); }
 function precedingFriday(dateStr){
   const d=new Date(dateStr+'T00:00:00');
   while(d.getDay()!==5) d.setDate(d.getDate()-1); // 5=viernes
-  return d.toISOString().slice(0,10);
+  return localDateStr(d);
 }
 // Restaurado 27/07/2026: esta lógica ya existía en la versión original y se
 // había perdido al reescribir la detección de fechas hoy. Necesaria para la
@@ -3427,7 +3427,7 @@ function initDiario(){
     toEl.value=today;
     const d=new Date(today+'T00:00:00');
     d.setDate(d.getDate()-21); // últimos ~3 semanas por defecto
-    fromEl.value=d.toISOString().slice(0,10);
+    fromEl.value=localDateStr(d);
   }
   populateDiarioFleets();
   refreshDiario();

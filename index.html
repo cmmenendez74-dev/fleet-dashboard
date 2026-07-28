@@ -180,11 +180,6 @@ tr:hover td{background:var(--lg)}
 .export-btn.pdf:hover{background:var(--lred)}
 .export-btn.xl{border-color:#1D6F42;color:#1D6F42}
 .export-btn.xl:hover{background:#E8F5E9}
-/* Heatmap */
-.hm-table{border-collapse:collapse;font-size:11px}
-.hm-table th{padding:4px 8px;background:var(--bg2);font-weight:600;text-align:center;white-space:nowrap;border:1px solid var(--border)}
-.hm-table td{padding:4px 10px;text-align:right;border:1px solid var(--border);white-space:nowrap;min-width:72px;font-variant-numeric:tabular-nums}
-.hm-cell-0{background:#fff}.hm-cell-1{background:#FFF9C4}.hm-cell-2{background:#FFE082}.hm-cell-3{background:#FFB300}.hm-cell-4{background:#FF8F00;color:#fff}.hm-cell-5{background:#E65100;color:#fff}
 /* Sort arrows */
 th.sortable{cursor:pointer;user-select:none}
 th.sortable:hover{color:var(--dg)}
@@ -512,12 +507,9 @@ body.present-mode #exact-euros-btn{display:none}
         <span class="filter-label">Mes</span>
         <div class="chip-group" id="mo-chips"></div>
         <div style="margin-left:auto;display:flex;gap:4px">
-          <span class="chip on" id="res-tab-resumen" onclick="setResumenTab('resumen',this)">Resumen</span>
-          <span class="chip" id="res-tab-canal" onclick="setResumenTab('canal',this)">EQ vs VC</span>
         </div>
       </div>
-      <!-- Sub-vista Resumen -->
-      <div id="res-view-resumen">
+      <div>
       <div class="kpi-row" id="kpis-r"></div>
       <div class="obj-grid" id="objective-cards"></div>
       <div class="g2">
@@ -526,6 +518,27 @@ body.present-mode #exact-euros-btn{display:none}
         <div class="card"><div class="card-hd">GM% por canal</div>
           <div class="card-bd"><div class="chart-box"><canvas id="ch-gmpct"></canvas></div></div></div>
       </div>
+
+      <!-- EQ vs VC: antes era una pestaña aparte, ahora va siempre visible aquí -->
+      <div class="g2">
+        <div class="card" style="border-top:3px solid var(--red)">
+          <div class="card-hd" style="color:var(--red)">EQ — Equity</div>
+          <div class="card-bd">
+            <div class="kpi-row" id="kpis-eq" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
+            <div class="chart-box"><canvas id="ch-eq"></canvas></div>
+          </div>
+        </div>
+        <div class="card" style="border-top:3px solid var(--bl)">
+          <div class="card-hd" style="color:var(--bl)">VC — Partners</div>
+          <div class="card-bd">
+            <div class="kpi-row" id="kpis-vc" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
+            <div class="chart-box"><canvas id="ch-vc"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="card"><div class="card-hd">EQ vs VC — comparativa mensual</div>
+      <div class="card-bd"><div class="chart-box tall"><canvas id="ch-canal"></canvas></div></div></div>
+
       <div class="g2">
         <div class="card"><div class="card-hd">Top subidas — vs año anterior</div>
           <div class="card-bd"><div class="tbl-wrap"><table><thead><tr><th>Flota</th><th class="r">Actual</th><th class="r">Anterior</th><th class="r">Var.</th></tr></thead><tbody id="top-up-tb"></tbody></table></div></div></div>
@@ -539,29 +552,7 @@ body.present-mode #exact-euros-btn{display:none}
           <th class="r">GM YTD</th><th class="r">GM%</th><th class="r">Proy FY</th><th>Estado</th>
         </tr></thead><tbody id="top-tb"></tbody></table>
       </div></div></div>
-      </div><!-- /res-view-resumen -->
-
-      <!-- Sub-vista Canal (EQ vs VC) embebida en Resumen -->
-      <div id="res-view-canal" style="display:none">
-        <div class="g2">
-          <div class="card" style="border-top:3px solid var(--red)">
-            <div class="card-hd" style="color:var(--red)">EQ — Equity</div>
-            <div class="card-bd">
-              <div class="kpi-row" id="kpis-eq" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
-              <div class="chart-box"><canvas id="ch-eq"></canvas></div>
-            </div>
-          </div>
-          <div class="card" style="border-top:3px solid var(--bl)">
-            <div class="card-hd" style="color:var(--bl)">VC — Partners</div>
-            <div class="card-bd">
-              <div class="kpi-row" id="kpis-vc" style="grid-template-columns:1fr 1fr;margin-bottom:.75rem"></div>
-              <div class="chart-box"><canvas id="ch-vc"></canvas></div>
-            </div>
-          </div>
-        </div>
-        <div class="card"><div class="card-hd">EQ vs VC — comparativa mensual</div>
-        <div class="card-bd"><div class="chart-box tall"><canvas id="ch-canal"></canvas></div></div></div>
-      </div><!-- /res-view-canal -->
+      </div><!-- /view-resumen contenido -->
     </div><!-- /view-resumen -->
 
     <!-- HISTORICO -->
@@ -574,7 +565,6 @@ body.present-mode #exact-euros-btn{display:none}
           <span class="chip on" id="hist-mode-anual" onclick="setHistMode('anual')">Anual</span>
           <span class="chip" id="hist-mode-mtd" onclick="setHistMode('mtd')">Mes vs Mes</span>
           <span class="chip" id="hist-mode-diario" onclick="setHistMode('diario')">Evolución diaria</span>
-          <span class="chip" id="hist-mode-heatmap" onclick="setHistMode('heatmap')">Heatmap</span>
           <span class="chip" id="hist-mode-comparar" onclick="setHistMode('comparar')">Comparar</span>
         </div>
         <span class="filter-label" id="hist-mes-label" style="margin-left:.5rem;display:none">Mes</span>
@@ -667,29 +657,7 @@ body.present-mode #exact-euros-btn{display:none}
         </div>
       </div>
 
-      <!-- Modo Heatmap -->
-      <div id="hist-view-heatmap" style="display:none">
-        <div class="filter-bar" style="margin-bottom:.85rem">
-          <span class="filter-label">Métrica</span>
-          <div class="chip-group" id="heatmap-metric-chips">
-            <span class="chip on" data-m="ns" onclick="toggleHeatmapMetric(this)">NS€</span>
-            <span class="chip" data-m="gm" onclick="toggleHeatmapMetric(this)">GM€</span>
-            <span class="chip" data-m="gmpct" onclick="toggleHeatmapMetric(this)">GM%</span>
-          </div>
-          <span class="filter-label" style="margin-left:.5rem">Canal</span>
-          <div class="chip-group" id="heatmap-canal-chips">
-            <span class="chip on" data-c="all" onclick="toggleHeatmapCanal(this)">EQ+VC</span>
-            <span class="chip" data-c="EQ" onclick="toggleHeatmapCanal(this)">EQ</span>
-            <span class="chip" data-c="VC" onclick="toggleHeatmapCanal(this)">VC</span>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hd" id="heatmap-title">Heatmap NS€ — Año × Mes</div>
-          <div class="card-bd" style="overflow-x:auto"><div id="heatmap-grid"></div></div>
-        </div>
-      </div>
 
-      <!-- Modo Comparar períodos -->
       <div id="hist-view-comparar" style="display:none">
         <div class="cmp-selectors">
           <div class="cmp-box cmp-box-a">
@@ -1277,7 +1245,6 @@ function refreshCurrentView(){
     else if(id==='historico'){
       if(S.histMode==='mtd') refreshMTD();
       else if(S.histMode==='diario') refreshDiario();
-      else if(S.histMode==='heatmap') refreshHeatmap();
       else if(S.histMode!=='comparar') refreshHistorico();
       // en modo "comparar" no se re-ejecuta solo: hay que pulsar "Comparar" de nuevo
     }
@@ -1457,16 +1424,7 @@ function updatePills(){
 const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',
                alertas:'Alertas',upload:'Cargar archivos',periodos:'Períodos'};
 
-// ── Resumen: tab Canal embebido ───────────────────────────────────────────────
-let _resumenTab='resumen';
-function setResumenTab(tab,el){
-  _resumenTab=tab;
-  document.querySelectorAll('#view-resumen .chip[id^="res-tab-"]').forEach(c=>c.classList.remove('on'));
-  el.classList.add('on');
-  document.getElementById('res-view-resumen').style.display=tab==='resumen'?'block':'none';
-  document.getElementById('res-view-canal').style.display=tab==='canal'?'block':'none';
-  if(tab==='canal') refreshCanal();
-}
+// ── Resumen: EQ vs VC ahora siempre visible, sin pestaña (ver refreshResumen) ──
 
 function nav(id,el){
   if((id==='upload'||id==='periodos')&&!isAdmin()){alert('Solo el usuario administrador puede acceder a esta sección.');return;}
@@ -1480,7 +1438,6 @@ function nav(id,el){
     buildChipsH(); buildChipsMesH(); applyHistMode();
     if(S.histMode==='mtd') refreshMTD();
     else if(S.histMode==='diario') initDiario();
-    else if(S.histMode==='heatmap') refreshHeatmap();
     else if(S.histMode==='comparar') initComparar();
     else refreshHistorico();
   }
@@ -1658,6 +1615,11 @@ async function refreshResumen(){
       <td class="r">${fmtP(p)}</td><td class="r">${fmtM(pr)}</td>
       <td title="${st.txt}">${st.dot}</td></tr>`;
   }).join('');
+
+  // Simplificación 27/07/2026: EQ vs VC ya no es una pestaña aparte que había
+  // que abrir a propósito — se ve siempre, de un vistazo, en la misma
+  // pantalla. Por eso se refresca aquí también, no solo al hacer clic.
+  try{ await refreshCanal(); }catch(e){ console.error('Error refrescando EQ vs VC',e); }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1689,13 +1651,11 @@ function setHistMode(mode){
   document.getElementById('hist-mode-anual').classList.toggle('on', mode==='anual');
   document.getElementById('hist-mode-mtd').classList.toggle('on', mode==='mtd');
   document.getElementById('hist-mode-diario').classList.toggle('on', mode==='diario');
-  document.getElementById('hist-mode-heatmap').classList.toggle('on', mode==='heatmap');
   document.getElementById('hist-mode-comparar').classList.toggle('on', mode==='comparar');
   applyHistMode();
   if(mode==='anual') refreshHistorico();
   else if(mode==='mtd') refreshMTD();
   else if(mode==='diario') initDiario();
-  else if(mode==='heatmap') refreshHeatmap();
   else if(mode==='comparar') initComparar();
 }
 
@@ -1704,7 +1664,6 @@ function applyHistMode(){
   document.getElementById('hist-view-anual').style.display=mode==='anual'?'block':'none';
   document.getElementById('hist-view-mtd').style.display=mode==='mtd'?'block':'none';
   document.getElementById('hist-view-diario').style.display=mode==='diario'?'block':'none';
-  document.getElementById('hist-view-heatmap').style.display=mode==='heatmap'?'block':'none';
   document.getElementById('hist-view-comparar').style.display=mode==='comparar'?'block':'none';
   document.getElementById('hist-mes-label').style.display=mode==='mtd'?'':'none';
   document.getElementById('hist-mes-chips').style.display=mode==='mtd'?'flex':'none';
@@ -2578,6 +2537,23 @@ function precedingFriday(dateStr){
   while(d.getDay()!==5) d.setDate(d.getDate()-1); // 5=viernes
   return d.toISOString().slice(0,10);
 }
+// Restaurado 27/07/2026: esta lógica ya existía en la versión original y se
+// había perdido al reescribir la detección de fechas hoy. Necesaria para la
+// excepción de "cambio de mes" del fin de semana: si el viernes anterior cae
+// en el mes pasado, el sábado/domingo se pliegan al LUNES siguiente en vez
+// de al viernes.
+function localDateStr(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function followingMonday(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  do{ d.setDate(d.getDate()+1); }while(d.getDay()!==1); // 1=lunes
+  return localDateStr(d);
+}
+function sameMonth(a,b){ return a && b && a.slice(0,7)===b.slice(0,7); }
 
 // Intenta extraer una fecha del nombre del archivo. Soporta AAAA-MM-DD,
 // AAAA_MM_DD, AAAAMMDD y DD-MM-AAAA/DD_MM_AAAA. Si no reconoce nada, null
@@ -2657,6 +2633,11 @@ function extractDateFromFilterRow(rawRows){
       }
       const mDesde=text.match(/Día es mayor o igual que (\d{1,2})(?!\s*y)/i);
       if(mDesde) return {range:true}; // sin límite superior -> rango abierto, no es un snapshot diario
+      // Formato suelto "Día es N" (sin "mayor/menor que"), por si algún
+      // export de Power BI lo expresa así — cubre el mismo caso que el
+      // formato original.
+      const mSuelto=text.match(/Día es (\d{1,2})(?!\s*mayor)/i);
+      if(mSuelto) return {date:`${y}-${String(mo).padStart(2,'0')}-${String(+mSuelto[1]).padStart(2,'0')}`};
     }
   }
   return null;
@@ -2668,7 +2649,7 @@ async function handleBulkFiles(files){
 
   for(const file of files){
     const id='bulk_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const item={id,file,date:null,dateSource:null,kind:null,fleets:null,error:null,mergeInto:null};
+    const item={id,file,date:null,dateSource:null,kind:null,fleets:null,error:null,dateError:null,mergeInto:null};
     try{
       const buf=await file.arrayBuffer();
       const rawRows=readWorkbookRows(new Uint8Array(buf));
@@ -2684,7 +2665,13 @@ async function handleBulkFiles(files){
       // 1) Prioridad máxima: fecha leída del propio contenido del Excel.
       const filterDate=extractDateFromFilterRow(rawRows);
       if(filterDate && filterDate.range){
-        item.error=(item.error?item.error+' — ':'')+'Este archivo cubre varios días (no es un snapshot de un solo día). Revísalo manualmente.';
+        // OJO: esto NO es un error de contenido (item.error) — el archivo es
+        // válido, solo que representa varios días en uno (p.ej. un export ya
+        // sumado de viernes+sábado). Se marca aparte (dateError) para que
+        // poner la fecha a mano en la vista previa lo desbloquee de verdad;
+        // si fuera item.error se quedaría excluido del lote para siempre por
+        // mucho que se le ponga fecha después.
+        item.dateError='Este archivo cubre varios días (no es un snapshot de un solo día). Ponle la fecha a mano si sabes a qué día efectivo corresponde (p.ej. un export ya sumado de viernes+sábado va en la fecha del viernes).';
       }else if(filterDate && filterDate.date){
         item.date=filterDate.date; item.dateSource='filtro';
       }else{
@@ -2719,6 +2706,10 @@ function bulkReassignDates(force){
       started=true;
       continue;
     }
+    // Los archivos de rango (dateError) sin fecha manual todavía no
+    // participan en la secuencia automática ni la desplazan — se dejan en
+    // blanco a propósito para forzar a revisarlos uno a uno.
+    if(it.dateError && !it.date) continue;
     if(!started){ it.date=cur; started=true; }
     else{ cur=nextBusinessDay(cur); it.date=cur; }
     it.dateSource='auto';
@@ -2731,13 +2722,17 @@ function bulkReassignDates(force){
 // con el viernes anterior en vez de guardarlos como día suelto.
 function detectWeekendMerges(){
   for(const it of bulkItems){
-    it.mergeInto = (it.date && isWeekend(it.date)) ? precedingFriday(it.date) : null;
+    if(!it.date || !isWeekend(it.date)){ it.mergeInto=null; continue; }
+    const fri=precedingFriday(it.date);
+    // Si el viernes anterior está en el mismo mes, se pliega ahí (caso normal).
+    // Si no (el fin de semana cae justo al cambiar de mes), se pliega al lunes siguiente.
+    it.mergeInto = sameMonth(fri,it.date) ? fri : followingMonday(it.date);
   }
 }
 
 function bulkSetDate(id,newDate){
   const it=bulkItems.find(x=>x.id===id);
-  if(it){ it.date=newDate; it.dateSource='manual'; }
+  if(it){ it.date=newDate; it.dateSource='manual'; it.dateError=null; }
   detectWeekendMerges();
   renderBulkPreview();
 }
@@ -2798,9 +2793,10 @@ function renderBulkPreview(){
             <td style="padding:6px 4px">${it.file.name}</td>
             <td style="padding:6px 4px">${it.error?`<span class="log-err">${it.error}</span>`:`<span class="badge ${canal}">${it.kind}</span>`}</td>
             <td style="padding:6px 4px">
-              <input type="date" value="${it.date||''}" style="font-size:12px;border:1px solid ${isDup?'#E2001A':'var(--border)'};border-radius:6px;padding:3px 6px"
+              <input type="date" value="${it.date||''}" style="font-size:12px;border:1px solid ${isDup||it.dateError?'#E2001A':'var(--border)'};border-radius:6px;padding:3px 6px"
                 onchange="bulkSetDate('${it.id}',this.value)">${srcTag}
               ${isDup?'<span class="log-err" style="margin-left:6px">⚠ fecha duplicada — corrígela para poder subir el lote</span>':''}
+              ${it.dateError?`<span class="log-err" style="margin-left:6px">⚠ ${it.dateError}</span>`:''}
               ${it.mergeInto?`<span class="log-warn" style="margin-left:6px">↳ se fusiona con el viernes ${it.mergeInto.slice(8,10)}/${it.mergeInto.slice(5,7)}</span>`:''}
             </td>
             <td style="padding:6px 4px">${it.fleets?it.fleets.length:'—'}</td>
@@ -3053,6 +3049,29 @@ async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
     }
   }
   const rowsOut=[...rowsMap.values()].map(({_oprFresh,...rest})=>rest);
+
+  // Limpieza de huérfanos (27/07/2026): hasta ahora esta función solo hacía
+  // upsert (añade/actualiza), nunca borraba. Si un día se contaminó alguna
+  // vez con clientes que no le pertenecen, esos clientes se quedaban PARA
+  // SIEMPRE aunque volvieras a subir el archivo correcto encima — la
+  // "corrección" nunca limpiaba lo que sobraba, solo confirmaba lo que
+  // faltaba. Por eso, al subir el archivo EQ/VC (la fuente de verdad de qué
+  // clientes tuvieron actividad ese día), se borra cualquier fila que ya
+  // estuviera guardada para esta fecha+canal y que NO esté en el archivo
+  // recién subido — así cada subida reemplaza el día entero de verdad.
+  //
+  // Restringido a EQ/VC (isOprOnly=false), no al archivo ID: el informe de
+  // Docs puede tener una lista de clientes ligeramente distinta a la de NS/GM
+  // (visitas sin coste, etc.), así que usarlo para "podar" borraría clientes
+  // de EQ que sí son legítimos pero no tienen documento ese día.
+  if(!isOprOnly && rowsOut.length){
+    const keepNorms=rowsOut.map(r=>r.fleet_norm);
+    const notInList=keepNorms.map(n=>`"${String(n).replace(/"/g,'""')}"`).join(',');
+    await restJson(`fleet_data_daily?snap_date=eq.${date}&canal=eq.${canal}&fleet_norm=not.in.(${notInList})`,{
+      method:'DELETE',
+      headers:{'Prefer':'return=minimal'}
+    });
+  }
 
   for(let i=0;i<rowsOut.length;i+=50){
     const batch=rowsOut.slice(i,i+50);
@@ -3344,109 +3363,6 @@ async function refreshAlertas(){
     : '<tr><td colspan="5" class="no-data">Sin flotas con crecimiento significativo</td></tr>';
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// HEATMAP
-// ══════════════════════════════════════════════════════════════════════════════
-let heatmapMetric='ns';
-let heatmapCanal='all';
-
-function toggleHeatmapMetric(el){
-  document.querySelectorAll('#heatmap-metric-chips .chip').forEach(c=>c.classList.remove('on'));
-  el.classList.add('on');
-  heatmapMetric=el.dataset.m;
-  refreshHeatmap();
-}
-function toggleHeatmapCanal(el){
-  document.querySelectorAll('#heatmap-canal-chips .chip').forEach(c=>c.classList.remove('on'));
-  el.classList.add('on');
-  heatmapCanal=el.dataset.c;
-  refreshHeatmap();
-}
-
-async function refreshHeatmap(){
-  const allYears=[...new Set(S.summary.map(r=>r.year))].sort((a,b)=>a-b);
-  const rows=await fetchData(allYears,[1,2,3,4,5,6,7,8,9,10,11,12]);
-  if(!rows?.length) return;
-
-  const metricLabels={ns:'NS€',gm:'GM€',gmpct:'GM%'};
-  const canalLabel=heatmapCanal==='all'?'EQ+VC':heatmapCanal;
-  document.getElementById('heatmap-title').textContent=`Heatmap ${metricLabels[heatmapMetric]} — ${canalLabel} · Año × Mes`;
-
-  // Agrupar
-  const cell={};
-  for(const r of rows){
-    if(heatmapCanal!=='all'&&r.canal!==heatmapCanal) continue;
-    const k=`${r.year}_${r.month}`;
-    if(!cell[k]) cell[k]={ns:0,gm:0};
-    cell[k].ns+=r.ns; cell[k].gm+=r.gm;
-  }
-
-  // Valores por métrica
-  const vals=Object.values(cell).map(c=>heatmapMetric==='ns'?c.ns:heatmapMetric==='gm'?c.gm:c.ns>0?c.gm/c.ns:0).filter(v=>v>0);
-  const maxVal=vals.length?Math.max(...vals):1;
-  const minVal=vals.length?Math.min(...vals):0;
-
-  function heatClass(v){
-    if(!v||v<=0) return 'hm-cell-0';
-    const pct=(v-minVal)/(maxVal-minVal||1);
-    return 'hm-cell-'+Math.min(5,Math.floor(pct*5)+1);
-  }
-  function cellFmt(v){
-    if(!v||v<=0) return '—';
-    if(heatmapMetric==='gmpct') return fmtP(v);
-    return fmtM(v);
-  }
-
-  // Totales fila (por año)
-  const yearTotals={};
-  for(const yr of allYears){
-    let t=0;
-    for(let m=1;m<=12;m++){
-      const c=cell[`${yr}_${m}`];
-      if(!c) continue;
-      const v=heatmapMetric==='ns'?c.ns:heatmapMetric==='gm'?c.gm:c.ns>0?c.gm/c.ns:0;
-      t+=v;
-    }
-    yearTotals[yr]=t;
-  }
-
-  let html='<table class="hm-table"><thead><tr><th>Año</th>';
-  MN.forEach(m=>{ html+=`<th>${m}</th>`; });
-  html+='<th>Total/Prom</th></tr></thead><tbody>';
-
-  for(const yr of allYears){
-    html+=`<tr><td style="font-weight:600;text-align:left;padding:4px 10px">${yr}</td>`;
-    let rowVals=[];
-    for(let m=1;m<=12;m++){
-      const c=cell[`${yr}_${m}`];
-      const v=c?(heatmapMetric==='ns'?c.ns:heatmapMetric==='gm'?c.gm:c.ns>0?c.gm/c.ns:0):0;
-      rowVals.push(v);
-      html+=`<td class="${heatClass(v)}">${cellFmt(v)}</td>`;
-    }
-    const tot=heatmapMetric==='gmpct'
-      ? rowVals.filter(v=>v>0).reduce((s,v,_,a)=>s+v/a.length,0)
-      : yearTotals[yr];
-    html+=`<td style="font-weight:600;background:var(--bg2)">${cellFmt(tot)}</td>`;
-    html+='</tr>';
-  }
-
-  // Fila totales columna
-  html+='<tr><td style="font-weight:600;background:var(--bg2);text-align:left;padding:4px 10px">Total</td>';
-  for(let m=1;m<=12;m++){
-    let tot=0,cnt=0;
-    for(const yr of allYears){
-      const c=cell[`${yr}_${m}`];
-      if(!c) continue;
-      const v=heatmapMetric==='ns'?c.ns:heatmapMetric==='gm'?c.gm:c.ns>0?c.gm/c.ns:0;
-      tot+=v; cnt++;
-    }
-    const disp=heatmapMetric==='gmpct'?(cnt>0?tot/cnt:0):tot;
-    html+=`<td style="font-weight:600;background:var(--bg2)">${cellFmt(disp)}</td>`;
-  }
-  html+='<td style="background:var(--bg2)"></td></tr>';
-  html+='</tbody></table>';
-  document.getElementById('heatmap-grid').innerHTML=html;
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EXPORTAR FICHA INDIVIDUAL DE FLOTA

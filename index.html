@@ -757,6 +757,13 @@ body.present-mode #exact-euros-btn{display:none}
           <div class="card-hd" id="fleet-hist-title">Histórico mensual</div>
           <div class="card-bd"><div class="chart-box tall"><canvas id="ch-fleet"></canvas></div></div>
         </div>
+        <!-- Comparativa mensual año contra año, en tabla — para no tener que leer el gráfico a ojo ni exportar el Excel -->
+        <div class="card" style="margin-top:.85rem">
+          <div class="card-hd" id="fleet-monthly-title">Comparativa mensual</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead id="fleet-monthly-thead"></thead><tbody id="fleet-monthly-tb"></tbody></table>
+          </div></div>
+        </div>
       </div>
     </div>
 
@@ -1382,12 +1389,14 @@ function toggleChipCanalF(el){
   el.classList.toggle('on');
   S.canalsF=new Set([...document.querySelectorAll('#canal-chips-f .chip.on')].map(c=>c.dataset.c));
   refreshFlotas();
+  refreshFleetDetailIfOpen();
 }
 
 function toggleChipMoF(el){
   el.classList.toggle('on');
   S.monthsF=new Set([...document.querySelectorAll('#mo-chips-f .chip.on')].map(c=>+c.dataset.m));
   refreshFlotas();
+  refreshFleetDetailIfOpen();
 }
 
 function toggleChip(el,t){
@@ -1408,6 +1417,7 @@ function toggleChipF(el){
   el.classList.toggle('on');
   S.yearsF=new Set([...document.querySelectorAll('#yr-chips-f .chip.on')].map(c=>+c.dataset.y));
   refreshFlotas();
+  refreshFleetDetailIfOpen();
 }
 
 function updatePills(){
@@ -2073,38 +2083,53 @@ async function showFleetHist(fleet){
     `select=year,month,canal,ns,gm&fleet_norm=eq.${encodeURIComponent(fleet)}&order=year,month&limit=10000`);
   _currentDetailRows=rows;
 
-  // Calcular MTD vs MTD-PY para el subtítulo
-  const allYrs=[...new Set(rows.map(r=>r.year))].sort();
-  const latY=allYrs[allYrs.length-1];
-  const prevY=allYrs.length>1?allYrs[allYrs.length-2]:null;
-  const latestMo=Math.max(...rows.filter(r=>r.year===latY).map(r=>r.month));
-  const mtdCur=rows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0);
-  const mtdPrev=prevY?rows.filter(r=>r.year===prevY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0):0;
+  // Interactividad (28/07/2026): la ficha de flota respeta ahora los filtros
+  // de AÑOS y CANAL de la barra superior de "Por flota" — antes se ignoraban
+  // por completo y esta pantalla era siempre la misma "foto" con todo el
+  // histórico y los dos canales sumados, sin importar qué chip tocaras.
+  const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
+  const frows=rows.filter(r=>activeCanals.includes(r.canal));
+  const years_f=S.yearsF.size?[...S.yearsF].sort():[...new Set(rows.map(r=>r.year))].sort();
+
+  // Calcular MTD vs MTD-PY para el subtítulo (ya sobre los datos filtrados)
+  const yrsWithData=years_f.filter(y=>frows.some(r=>r.year===y));
+  const latY=yrsWithData.length?yrsWithData[yrsWithData.length-1]:years_f[years_f.length-1];
+  const prevY=yrsWithData.length>1?yrsWithData[yrsWithData.length-2]:null;
+  const latMoRows=frows.filter(r=>r.year===latY);
+  const latestMo=latMoRows.length?Math.max(...latMoRows.map(r=>r.month)):null;
+  const mtdCur=latestMo?frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0):0;
+  const mtdPrev=(prevY&&latestMo)?frows.filter(r=>r.year===prevY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0):0;
   const mtdVar=mtdPrev>0?(mtdCur-mtdPrev)/mtdPrev:null;
-  const mtdLabel=mtdVar!==null?` · ${MN[latestMo-1]}: ${fmtM(mtdCur)} (${varStr(mtdVar)} vs ${prevY})`:'';
+  const mtdLabel=(mtdVar!==null&&latestMo)?` · ${MN[latestMo-1]}: ${fmtM(mtdCur)} (${varStr(mtdVar)} vs ${prevY})`:'';
+  const canalLabel=activeCanals.length===2?'':` · ${activeCanals.join('+')}`;
 
   // Cambiar a vista detalle
   document.getElementById('flotas-table-view').style.display='none';
   document.getElementById('flotas-detail-view').style.display='block';
   document.getElementById('fleet-detail-name').textContent=fleet;
-  document.getElementById('fleet-hist-title').textContent=`Evolución mensual NS€ — ${fleet}${mtdLabel}`;
+  document.getElementById('fleet-hist-title').textContent=`Evolución mensual NS€ — ${fleet}${mtdLabel}${canalLabel}`;
 
-  // Fila resumen
-  const flota=fleetRows.find(f=>f.name===fleet);
-  const years_f=S.yearsF.size ? [...S.yearsF].sort() : [...new Set(S.summary.map(r=>r.year))].sort();
+  // Fila resumen — calculada directamente de frows (filtrado), no de la caché
+  // sin filtrar de la lista, para que la tabla y el gráfico digan lo mismo.
+  const yearAgg=yr=>{
+    const rs=frows.filter(r=>r.year===yr);
+    const ns=rs.reduce((s,r)=>s+r.ns,0), gm=rs.reduce((s,r)=>s+r.gm,0);
+    const months=new Set(rs.filter(r=>r.ns>0||r.gm>0).map(r=>r.month));
+    return {ns,gm,months};
+  };
   const latYf=Math.max(...years_f);
   const prevYf=years_f[years_f.indexOf(latYf)-1];
-  if(flota){
-    const ch=[...flota.canals].sort().join('+');
-    const latest=flota.years[latYf]||{ns:0,gm:0,months:new Set([1])};
-    const prev=flota.years[prevYf]||{ns:0,gm:0,months:new Set([1])};
+  try{
+    const ch=activeCanals.slice().sort().join('+');
+    const latest=yearAgg(latYf);
+    const prev=prevYf?yearAgg(prevYf):{ns:0,gm:0,months:new Set([1])};
     const nm=latest.months.size||1;
     const proy=latest.ns/nm*12;
     const prevNm=prev.months?.size||1;
     const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
     const varV=prevProy>0?(proy-prevProy)/prevProy:null;
     const gp=latest.ns>0?latest.gm/latest.ns:0;
-    const dynCols=years_f.map(yr=>{const d=flota.years[yr]||{ns:0};return`<td class="r">${d.ns>0?fmtM(d.ns):'—'}</td>`;}).join('');
+    const dynCols=years_f.map(yr=>{const d=yearAgg(yr);return`<td class="r">${d.ns>0?fmtM(d.ns):'—'}</td>`;}).join('');
     const dthead=document.getElementById('fleet-detail-row')?.closest('table')?.querySelector('thead tr');
     if(dthead){
       dthead.innerHTML='<th>Flota</th><th>Canal</th>'
@@ -2121,14 +2146,18 @@ async function showFleetHist(fleet){
         <td class="r">${fmtP(gp)}</td>
         <td title="${growthLabel(varV)}">${growthSem(varV)}</td>
       </tr>`;
+  }catch(e){
+    console.error('Error al pintar la fila resumen de la ficha de flota:',e);
+    const tb=document.getElementById('fleet-detail-row');
+    if(tb) tb.innerHTML=`<tr><td colspan="8" class="log-err">Error mostrando el resumen — mira la consola (F12) y avisa a Claude con el mensaje exacto.</td></tr>`;
   }
 
-  // Gráfico histórico completo (todos los años de la flota)
-  const histYears=[...new Set(rows.map(r=>r.year))].sort();
-  const ds=histYears.map(yr=>({
+  // Gráfico — solo los años seleccionados en el filtro (antes: siempre todos
+  // los años que tuviera la flota en la base, ignorando el chip de AÑOS)
+  const ds=years_f.map(yr=>({
     label:String(yr),
     data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{
-      const rs=rows.filter(x=>x.year===yr&&x.month===m);
+      const rs=frows.filter(x=>x.year===yr&&x.month===m);
       const n=rs.reduce((s,r)=>s+r.ns,0);
       return n>0?Math.round(n):null;
     }),
@@ -2138,6 +2167,62 @@ async function showFleetHist(fleet){
   if(fleetHistChart) fleetHistChart.destroy();
   const ctx=document.getElementById('ch-fleet').getContext('2d');
   fleetHistChart=new Chart(ctx,{type:'line',data:{labels:MN,datasets:ds},options:chartOpts({})});
+
+  // Comparativa mensual en tabla, con NS/GM/GM% juntos — mismo dato que el
+  // gráfico pero legible sin tener que leer píxeles ni exportar el Excel.
+  const monthsArr=[1,2,3,4,5,6,7,8,9,10,11,12];
+  const nsByYear=years_f.map(yr=>monthsArr.map(m=>
+    frows.filter(x=>x.year===yr&&x.month===m).reduce((s,r)=>s+r.ns,0)));
+  const gmByYear=years_f.map(yr=>monthsArr.map(m=>
+    frows.filter(x=>x.year===yr&&x.month===m).reduce((s,r)=>s+r.gm,0)));
+
+  const theadEl=document.getElementById('fleet-monthly-thead');
+  if(theadEl){
+    const nYr=years_f.length;
+    theadEl.innerHTML=`
+      <tr>
+        <th rowspan="2">Mes</th>
+        <th colspan="${nYr+(nYr>1?1:0)}">NS€</th>
+        <th colspan="${nYr+(nYr>1?1:0)}">GM€</th>
+        <th colspan="${nYr}">GM%</th>
+      </tr>
+      <tr>
+        ${years_f.map(yr=>`<th class="r">${yr}</th>`).join('')}${nYr>1?'<th class="r">Var.</th>':''}
+        ${years_f.map(yr=>`<th class="r">${yr}</th>`).join('')}${nYr>1?'<th class="r">Var.</th>':''}
+        ${years_f.map(yr=>`<th class="r">${yr}</th>`).join('')}
+      </tr>`;
+  }
+  const tbEl=document.getElementById('fleet-monthly-tb');
+  if(tbEl){
+    tbEl.innerHTML=MN.map((mn,mi)=>{
+      const nsVals=nsByYear.map(arr=>arr[mi]);
+      const gmVals=gmByYear.map(arr=>arr[mi]);
+      const nsLast=nsVals[nsVals.length-1], nsPrev=years_f.length>1?nsVals[nsVals.length-2]:null;
+      const nsVar=(nsPrev!==null&&nsPrev>0)?(nsLast-nsPrev)/nsPrev:null;
+      const gmLast=gmVals[gmVals.length-1], gmPrev=years_f.length>1?gmVals[gmVals.length-2]:null;
+      const gmVar=(gmPrev!==null&&gmPrev>0)?(gmLast-gmPrev)/gmPrev:null;
+      const gmPctCells=years_f.map((yr,yi)=>{
+        const ns=nsByYear[yi][mi], gm=gmByYear[yi][mi];
+        return `<td class="r">${ns>0?fmtP(gm/ns):'—'}</td>`;
+      }).join('');
+      return `<tr>
+        <td>${mn}</td>
+        ${nsVals.map(v=>`<td class="r">${v>0?fmtM(v):'—'}</td>`).join('')}${years_f.length>1?`<td class="r ${varCls(nsVar)}">${varStr(nsVar)}</td>`:''}
+        ${gmVals.map(v=>`<td class="r">${v>0?fmtM(v):'—'}</td>`).join('')}${years_f.length>1?`<td class="r ${varCls(gmVar)}">${varStr(gmVar)}</td>`:''}
+        ${gmPctCells}
+      </tr>`;
+    }).join('');
+  }
+}
+
+// Si la ficha de una flota está abierta cuando se toca un filtro (años,
+// canal o mes) en "Por flota", la redibuja con el filtro nuevo aplicado —
+// antes los filtros solo afectaban a la lista, nunca a la ficha ya abierta.
+function refreshFleetDetailIfOpen(){
+  const detailView=document.getElementById('flotas-detail-view');
+  if(detailView && detailView.style.display==='block' && _currentDetailFleet){
+    showFleetHist(_currentDetailFleet);
+  }
 }
 
 function backToFlotasList(){

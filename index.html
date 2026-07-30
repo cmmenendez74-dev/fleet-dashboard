@@ -1313,7 +1313,7 @@ function setConn(ok,msg){
 
 async function loadSummary(){
   const rows=await sbSelectAll('fleet_data',
-    'select=year,month,canal&order=year.asc,month.asc');
+    'select=year,month,canal&order=year.asc,month.asc,canal.asc');
   S.summary=rows||[];
   const years=new Set(S.summary.map(r=>r.year));
   const months=new Set(S.summary.map(r=>r.month));
@@ -1472,7 +1472,14 @@ function togglePresent(){
 // DATA FETCH
 // ══════════════════════════════════════════════════════════════════════════════
 async function fetchData(years,months){
-  let params='select=year,month,canal,fleet_norm,ns,gm&order=year.asc,month.asc';
+  // 30/07/2026: el order= tiene que ser TOTALMENTE único (año+mes+canal+flota,
+  // que es justo la clave de agrupación de la vista fleet_data) para que la
+  // paginación de sbSelectAll sea determinista. Con un orden ambiguo (solo
+  // año+mes), Postgres puede devolver las filas "empatadas" en distinto
+  // orden en cada página paginada por separado, y algunas se pierden entre
+  // página y página sin ningún aviso — así es como el total EQ de 2025 en
+  // "Comparar" salía 9.589€ por debajo de lo que de verdad había guardado.
+  let params='select=year,month,canal,fleet_norm,ns,gm&order=year.asc,month.asc,canal.asc,fleet_norm.asc';
   if(years.length) params+=`&year=in.(${years.join(',')})`;
   if(months.length) params+=`&month=in.(${months.join(',')})`;
   return sbSelectAll('fleet_data',params);
@@ -2497,7 +2504,7 @@ async function refreshCanal(){
 // "períodos sin snapshots diarios" se siga comportando igual.
 async function recalcMonthFromDaily(year,month,canal){
   const dailyRows=await sbSelectAll('fleet_data_daily',
-    `select=fleet_norm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
+    `select=fleet_norm&year=eq.${year}&month=eq.${month}&canal=eq.${canal}&order=fleet_norm.asc`);
 
   if(!dailyRows || !dailyRows.length){
     const e=new Error(`Sin snapshots diarios guardados para ${MN[month-1]} ${year} ${canal}.`);
@@ -2509,7 +2516,7 @@ async function recalcMonthFromDaily(year,month,canal){
 
 async function refreshPeriodos(){
   const rows=await sbSelectAll('fleet_data',
-    'select=year,month,canal&order=year.asc,month.asc');
+    'select=year,month,canal&order=year.asc,month.asc,canal.asc');
   const uniq={};
   for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
   const items=Object.values(uniq).sort((a,b)=>a.year!==b.year?a.year-b.year:a.month-b.month);
@@ -2546,7 +2553,7 @@ async function recalcPeriod(year,month,canal){
 
 async function recalcAllPeriods(){
   if(!isAdmin()){alert('Solo el usuario administrador puede recalcular períodos.');return;}
-  const rows=await sbSelectAll('fleet_data','select=year,month,canal&order=year.asc,month.asc');
+  const rows=await sbSelectAll('fleet_data','select=year,month,canal&order=year.asc,month.asc,canal.asc');
   const uniq={};
   for(const r of rows) uniq[`${r.year}_${r.month}_${r.canal}`]=r;
   const items=Object.values(uniq);
@@ -3073,7 +3080,7 @@ async function verifySavedPeriod(year,month,canal){
 async function upsertDailySnapshot(date,canal,parsedRows,isOprOnly){
   const year=+date.slice(0,4), month=+date.slice(5,7);
   const existing=await sbSelectAll('fleet_data_daily',
-    `select=fleet_norm,fleet_raw,ns,gm,opr_id&snap_date=eq.${date}&canal=eq.${canal}`);
+    `select=fleet_norm,fleet_raw,ns,gm,opr_id&snap_date=eq.${date}&canal=eq.${canal}&order=fleet_norm.asc`);
   const exMap={};
   for(const e of (existing||[])) exMap[e.fleet_norm]=e;
 
@@ -3198,11 +3205,26 @@ async function handleFiles(files){
     try{
       const buf=await file.arrayBuffer();
       const rawRows=readWorkbookRows(new Uint8Array(buf));
-      sniffed.push({file,kind:sniffKind(rawRows)});
+      const filterInfo=extractDateFromFilterRow(rawRows);
+      sniffed.push({file,kind:sniffKind(rawRows),isRange:!!(filterInfo&&filterInfo.range)});
     }catch(e){
-      sniffed.push({file,kind:null});
+      sniffed.push({file,kind:null,isRange:false});
     }
   }
+
+  // "Carga normal" es solo para snapshots de UN día. Si el propio Excel dice
+  // en su fila "Filtros aplicados" que cubre varios días (p.ej. un mes
+  // entero exportado por error desde aquí en vez de con Carga masiva
+  // histórica), se bloquea todo el lote — es el mismo detector que ya usa
+  // la carga masiva, aplicado aquí también para que este caso concreto no
+  // pueda volver a colarse sin avisar.
+  const rangeFiles=sniffed.filter(s=>s.isRange);
+  if(rangeFiles.length){
+    const nombres=rangeFiles.map(s=>s.file.name).join(', ');
+    alert(`${nombres} cubre varios días (no es un snapshot de un solo día) — parece un archivo mensual o de rango, no diario.\n\n"Carga normal" solo admite archivos de un único día. No se ha subido nada.\n\nUsa "Carga masiva histórica" para archivos que cubran más de un día — ahí puedes asignarle tú la fecha efectiva a mano.`);
+    return;
+  }
+
   const countByKind={};
   for(const s of sniffed) if(s.kind) countByKind[s.kind]=(countByKind[s.kind]||0)+1;
   const repeated=Object.entries(countByKind).filter(([,n])=>n>1);
@@ -3552,7 +3574,7 @@ function toggleDiarioMetric(el){
 }
 
 async function fetchDailyRows(from,to,canals){
-  let params='select=snap_date,canal,fleet_norm,fleet_raw,ns,gm,opr_id&order=snap_date.asc';
+  let params='select=snap_date,canal,fleet_norm,fleet_raw,ns,gm,opr_id&order=snap_date.asc,canal.asc,fleet_norm.asc';
   if(from) params+=`&snap_date=gte.${from}`;
   if(to) params+=`&snap_date=lte.${to}`;
   if(canals&&canals.length) params+=`&canal=in.(${canals.join(',')})`;

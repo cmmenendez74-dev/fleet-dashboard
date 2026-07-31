@@ -254,6 +254,46 @@ body.present-mode #exact-euros-btn{display:none}
 .mtd-metric-cur{font-size:14px;font-weight:700;color:var(--dg)}
 .mtd-metric-prev{font-size:11px;color:var(--muted)}
 .mtd-metric-var{font-size:11px;font-weight:600}
+/* ── PILL ÚLTIMO DÍA CARGADO ──────────────────────────────────────────────── */
+.pill.warn-day{background:#FFF9C4;border-color:#F0D840;color:#8a6d00;font-weight:600;cursor:help}
+/* ── RESUMEN EJECUTIVO ────────────────────────────────────────────────────── */
+#exec-summary-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;
+  border:1px solid #6A1B9A;background:#fff;font-size:12px;font-weight:500;
+  cursor:pointer;color:#6A1B9A;transition:background .15s}
+#exec-summary-btn:hover{background:#F3E5F5}
+body.present-mode #exec-summary-btn{display:none}
+#exec-summary-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100;
+  display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:2.5rem 1rem}
+#exec-summary-overlay.show{display:flex}
+.exec-modal{background:#fff;border-radius:12px;width:720px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
+.exec-modal-hd{padding:1.1rem 1.4rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.exec-modal-hd h2{font-size:15px;font-weight:700}
+.exec-close-btn{background:none;border:none;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:2px 6px}
+.exec-close-btn:hover{color:var(--dg)}
+.exec-modal-bd{padding:1.4rem}
+.exec-scope{font-size:12px;color:var(--muted);margin-bottom:.15rem}
+.exec-title{font-size:18px;font-weight:800;margin-bottom:.25rem}
+.exec-period{font-size:12px;color:var(--muted);margin-bottom:1rem}
+.exec-daywarn{display:inline-block;font-size:11px;background:#FFF9C4;color:#8a6d00;border:1px solid #F0D840;border-radius:6px;padding:3px 8px;margin-bottom:1rem}
+.exec-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem;margin-bottom:1.1rem}
+.exec-kpi{border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem}
+.exec-kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;font-weight:600}
+.exec-kpi-val{font-size:16px;font-weight:700;margin-top:.15rem}
+.exec-kpi-sub{font-size:10px;color:var(--muted);margin-top:.15rem}
+.exec-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);margin:1.1rem 0 .5rem}
+.exec-narrative{font-size:13px;line-height:1.9}
+.exec-narrative li{margin-bottom:.15rem}
+.exec-movers{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.exec-mover-col h4{font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem}
+.exec-mover-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--lg)}
+.exec-modal-ft{padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.5rem;justify-content:flex-end;background:var(--bg2)}
+#exec-summary-body{font-family:'Segoe UI',Arial,sans-serif;color:var(--text)}
+@media print{
+  body.printing-exec-summary .app{display:none!important}
+  body.printing-exec-summary #exec-summary-overlay{position:static!important;background:#fff!important;display:block!important;padding:0;inset:auto}
+  body.printing-exec-summary .exec-modal{box-shadow:none!important;width:100%!important;max-width:100%!important;border-radius:0}
+  body.printing-exec-summary .exec-modal-hd,body.printing-exec-summary .exec-modal-ft{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -341,6 +381,24 @@ body.present-mode #exact-euros-btn{display:none}
   </div>
 </div>
 
+<!-- RESUMEN EJECUTIVO -->
+<div id="exec-summary-overlay">
+  <div class="exec-modal">
+    <div class="exec-modal-hd">
+      <h2>📋 Resumen ejecutivo</h2>
+      <button class="exec-close-btn" onclick="closeExecutiveSummary()">✕</button>
+    </div>
+    <div class="exec-modal-bd" id="exec-summary-body">
+      <div class="loading-msg"><span class="spinner"></span>Generando resumen...</div>
+    </div>
+    <div class="exec-modal-ft">
+      <button class="btn sm" onclick="copyExecutiveSummary(this)">📋 Copiar para email</button>
+      <button class="btn primary sm" onclick="printExecutiveSummary()">🖨️ Descargar PDF</button>
+      <button class="btn sm" onclick="closeExecutiveSummary()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- APP -->
 <div class="app" id="app" style="display:none">
 
@@ -395,6 +453,7 @@ body.present-mode #exact-euros-btn{display:none}
       <span class="pill" id="pill-period">—</span>
       <span class="pill r" id="pill-eq">EQ</span>
       <span class="pill b" id="pill-vc">VC</span>
+      <span class="pill" id="pill-lastday" style="display:none"></span>
       <div style="margin-left:.75rem;display:flex;gap:.4rem">
         <button id="exact-euros-btn" onclick="toggleExactEuros()" title="Alternar entre k€/M€ abreviado y el importe exacto en euros">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -403,6 +462,10 @@ body.present-mode #exact-euros-btn{display:none}
         <button id="present-btn" onclick="togglePresent()" title="Modo presentación">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           Presentar
+        </button>
+        <button id="exec-summary-btn" onclick="openExecutiveSummary()" title="Generar resumen ejecutivo del período/flota que estás viendo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H3v10h6V11zM21 3h-6v18h6V3zM15 7H9v14h6V7z"/></svg>
+          Resumen ejecutivo
         </button>
         <button class="export-btn pdf" onclick="exportPDF()" title="Exportar PDF">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -1302,7 +1365,39 @@ async function initApp(){
     await loadSummary();
     setConn(true,'Conectado');
     if(S.summary.length) await refreshResumen();
+    updateLastDayPill();
   }catch(e){setConn(false,'Sin conexión')}
+}
+
+// ── PILL "ÚLTIMO DÍA CARGADO" ────────────────────────────────────────────────
+// Muestra el snapshot diario más reciente guardado en fleet_data_daily, con
+// aviso de que ese día puede no estar todavía cerrado/confirmado en NEXT
+// FLEET (que trabaja "a día vencido"). Así, al comparar contra un export de
+// Power BI, se ve de un vistazo hasta qué día es seguro comparar.
+let _lastDailyDate=null;
+async function updateLastDayPill(){
+  const pill=document.getElementById('pill-lastday');
+  if(!pill) return;
+  try{
+    const rows=await sbSelect('fleet_data_daily','select=snap_date&order=snap_date.desc&limit=1');
+    const last=rows && rows.length ? rows[0].snap_date : null;
+    _lastDailyDate=last;
+    if(!last){ pill.style.display='none'; return; }
+    const d=new Date(last+'T00:00:00');
+    const dstr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    const today=todayISO();
+    const isToday=last===today;
+    const isYesterday=last===yesterdayISO();
+    pill.className='pill'+(isToday||isYesterday?' warn-day':'');
+    pill.title=isToday
+      ?'Este día puede no estar aún cerrado en NEXT FLEET (trabaja a día vencido). Si comparas contra un export de Power BI generado hoy, compara solo hasta el día anterior.'
+      :'Último snapshot diario guardado en el dashboard.';
+    pill.textContent=`Últ. día: ${dstr}${isToday||isYesterday?' ⚠':''}`;
+    pill.style.display='';
+  }catch(e){
+    console.warn('No se pudo obtener el último día cargado',e);
+    pill.style.display='none';
+  }
 }
 
 function setConn(ok,msg){
@@ -1637,6 +1732,24 @@ async function refreshResumen(){
   // que abrir a propósito — se ve siempre, de un vistazo, en la misma
   // pantalla. Por eso se refresca aquí también, no solo al hacer clic.
   try{ await refreshCanal(); }catch(e){ console.error('Error refrescando EQ vs VC',e); }
+
+  // Caché para el Resumen ejecutivo (30/07/2026): guarda aquí los agregados ya
+  // calculados en este refresco, para no tener que repetir el fetch/cálculo
+  // cuando se abre el modal — solo se regenera cuando cambian los filtros.
+  _execCache={
+    scope:'global',
+    selectedYears,selectedMonths,kpiYear,prevYear,nM,
+    A,P2,proy,eqProy,vcProy,cob,obYTD,obEqYTD,obVcYTD,
+    varTotKpi,varEqKpi,varVcKpi,
+    mtdNS,mtdPrevNS,mtdVarV,latestMonth,
+    up,down,
+    top:Object.values(A.byFleet).filter(f=>f.ns>0).sort((a,b)=>b.ns-a.ns).slice(0,10)
+      .map(f=>{
+        const prevNs=prevByKpi[f.name]?.ns||0;
+        return{name:f.name,ns:f.ns,gm:f.gm,canals:[...f.canals],
+          varV:prevNs>0?(f.ns-prevNs)/prevNs:null,gp:f.ns>0?f.gm/f.ns:0};
+      })
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2238,6 +2351,230 @@ function backToFlotasList(){
   if(fleetHistChart){ fleetHistChart.destroy(); fleetHistChart=null; }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// RESUMEN EJECUTIVO
+// ══════════════════════════════════════════════════════════════════════════════
+// Genera una lectura de un vistazo del período/flota que se esté viendo en
+// ese momento: si la ficha de una flota está abierta, resume esa flota con
+// sus filtros de años/canal; si no, resume el Resumen global con los filtros
+// de años/meses actuales. Reutiliza para ello los mismos cálculos que ya
+// hace refreshResumen (cacheados en _execCache) o los datos ya cargados de
+// la ficha de flota (_currentDetailFleet/_currentDetailRows) — no relanza
+// consultas pesadas nuevas salvo que hagan falta.
+let _execCache=null;
+
+async function openExecutiveSummary(){
+  const overlay=document.getElementById('exec-summary-overlay');
+  const body=document.getElementById('exec-summary-body');
+  overlay.classList.add('show');
+  body.innerHTML='<div class="loading-msg"><span class="spinner"></span>Generando resumen...</div>';
+  try{
+    const isFleetDetail=document.getElementById('flotas-detail-view')?.style.display==='block' && _currentDetailFleet;
+    let html;
+    if(isFleetDetail){
+      html=buildFleetExecSummary();
+    }else{
+      if(!_execCache || _execCache.scope!=='global') await refreshResumen();
+      html=buildGlobalExecSummary();
+    }
+    body.innerHTML=html;
+  }catch(e){
+    console.error('Error generando el resumen ejecutivo',e);
+    body.innerHTML=`<div class="no-data">No se ha podido generar el resumen — mira la consola (F12) y avisa a Claude con el mensaje exacto.</div>`;
+  }
+}
+
+function closeExecutiveSummary(){
+  document.getElementById('exec-summary-overlay').classList.remove('show');
+}
+
+// Aviso de "último día sin confirmar" reutilizado dentro del propio resumen,
+// para que quien lo reciba por email sepa si el último dato es provisional.
+function execDayWarnHtml(){
+  if(!_lastDailyDate) return '';
+  const today=todayISO();
+  if(_lastDailyDate===today || _lastDailyDate===yesterdayISO()){
+    const d=new Date(_lastDailyDate+'T00:00:00');
+    const dstr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    return `<div class="exec-daywarn">⚠ Último día cargado: ${dstr}. Puede no estar aún cerrado en NEXT FLEET (trabaja a día vencido) — compara con cautela contra exports externos de ese mismo día.</div>`;
+  }
+  return '';
+}
+
+function buildGlobalExecSummary(){
+  const c=_execCache;
+  if(!c) return '<div class="no-data">Sin datos para generar el resumen con los filtros actuales.</div>';
+  const periodTxt=`${c.selectedYears.join('/')} · ${c.selectedMonths.map(m=>MN[m-1]).join(', ')} · Canal: EQ+VC`;
+  const now=new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+' '
+    +new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+
+  const kpis=[
+    {l:`NS YTD ${c.kpiYear}`,v:fmtM(c.A.totNS),s:c.varTotKpi!==null?`vs ${c.prevYear}: ${varStr(c.varTotKpi)}`:'Sin año anterior'},
+    {l:'GM YTD',v:fmtM(c.A.totGM),s:`GM% ${fmtP(c.A.totNS>0?c.A.totGM/c.A.totNS:0)}`},
+    {l:'EQ NS YTD',v:fmtM(c.A.eqNS),s:c.varEqKpi!==null?varStr(c.varEqKpi)+' vs PY':'—'},
+    {l:'VC NS YTD',v:fmtM(c.A.vcNS),s:c.varVcKpi!==null?varStr(c.varVcKpi)+' vs PY':'—'},
+    {l:'Proyección FY',v:fmtM(c.proy),s:`${fmtP(c.cob)} vs objetivo OB26`},
+    {l:`MTD ${MN[c.latestMonth-1]}`,v:fmtM(c.mtdNS),s:c.mtdVarV!==null?varStr(c.mtdVarV)+' vs PY':'—'},
+  ];
+
+  // Narrativa automática — reglas simples sobre datos ya calculados, sin IA:
+  // mayor/menor variación, GM% vs objetivo, top movers. Nada aquí es una
+  // estimación; cada frase es una lectura directa de las cifras de arriba.
+  const bullets=[];
+  bullets.push(c.varTotKpi!==null
+    ?`El total NS€ ${c.varTotKpi>=0?'crece':'cae'} un <b>${varStr(c.varTotKpi)}</b> frente a ${c.prevYear} en el mismo período (${fmtM(c.A.totNS)} vs ${fmtM(c.P2.totNS)}).`
+    :`No hay año anterior disponible para comparar el total en este período.`);
+  if(c.varEqKpi!==null && c.varVcKpi!==null){
+    bullets.push(`EQ ${c.varEqKpi>=0?'sube':'baja'} ${varStr(c.varEqKpi)} y VC ${c.varVcKpi>=0?'sube':'baja'} ${varStr(c.varVcKpi)} vs el año anterior.`);
+  }
+  const gmPct=c.A.totNS>0?c.A.totGM/c.A.totNS:0;
+  bullets.push(`El margen (GM%) del período se sitúa en <b>${fmtP(gmPct)}</b>.`);
+  bullets.push(`La proyección a fin de año es de <b>${fmtM(c.proy)}</b>, un ${fmtP(c.cob)} del objetivo OB26 ${c.cob>=1?'— por encima del objetivo':'— por debajo del objetivo'}.`);
+  if(c.up.length){
+    const t=c.up[0];
+    bullets.push(`La flota que más crece es <b>${t.name}</b> (${varStr(t.varV)}, de ${fmtM(t.prev)} a ${fmtM(t.cur)}).`);
+  }
+  if(c.down.length){
+    const t=c.down[0];
+    bullets.push(`La mayor caída es <b>${t.name}</b> (${varStr(t.varV)}, de ${fmtM(t.prev)} a ${fmtM(t.cur)}).`);
+  }
+
+  const moversHtml=arr=>arr.slice(0,5).map(x=>
+    `<div class="exec-mover-row"><span>${x.name}</span><span class="${varCls(x.varV)}">${varStr(x.varV)}</span></div>`
+  ).join('')||'<div class="exec-mover-row" style="color:var(--muted)">Sin datos suficientes</div>';
+
+  return `
+    <div class="exec-scope">Alcance: Resumen global</div>
+    <div class="exec-title">First Stop Fleet Dashboard</div>
+    <div class="exec-period">${periodTxt}<br>Generado el ${now}</div>
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(k=>`<div class="exec-kpi"><div class="exec-kpi-lbl">${k.l}</div><div class="exec-kpi-val">${k.v}</div><div class="exec-kpi-sub">${k.s}</div></div>`).join('')}</div>
+    <div class="exec-section-title">Lectura del período</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <div class="exec-section-title">Movimientos más relevantes vs año anterior</div>
+    <div class="exec-movers">
+      <div class="exec-mover-col"><h4>🟢 Suben</h4>${moversHtml(c.up)}</div>
+      <div class="exec-mover-col"><h4>🔴 Caen</h4>${moversHtml(c.down)}</div>
+    </div>`;
+}
+
+function buildFleetExecSummary(){
+  const fleet=_currentDetailFleet;
+  const rows=_currentDetailRows||[];
+  const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
+  const frows=rows.filter(r=>activeCanals.includes(r.canal));
+  const years_f=S.yearsF.size?[...S.yearsF].sort():[...new Set(rows.map(r=>r.year))].sort();
+  if(!years_f.length) return '<div class="no-data">Sin datos para esta flota con los filtros actuales.</div>';
+  const latY=Math.max(...years_f);
+  const prevY=years_f[years_f.indexOf(latY)-1];
+  const yearAgg=yr=>{
+    const rs=frows.filter(r=>r.year===yr);
+    const ns=rs.reduce((s,r)=>s+r.ns,0), gm=rs.reduce((s,r)=>s+r.gm,0);
+    const months=new Set(rs.filter(r=>r.ns>0||r.gm>0).map(r=>r.month));
+    return{ns,gm,months};
+  };
+  const latest=yearAgg(latY);
+  const prev=prevY?yearAgg(prevY):{ns:0,gm:0,months:new Set()};
+  const nm=latest.months.size||1;
+  const proy=latest.ns/nm*12;
+  const prevNm=prev.months.size||1;
+  const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
+  const varV=prevProy>0?(proy-prevProy)/prevProy:null;
+  const gp=latest.ns>0?latest.gm/latest.ns:0;
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const periodTxt=`Años: ${years_f.join('/')} · Canal: ${canalLabel}`;
+  const now=new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+' '
+    +new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+
+  // Mejor y peor mes del año en curso, para dar contexto de estacionalidad.
+  const monthVals=[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>({
+    m,n:frows.filter(r=>r.year===latY&&r.month===m).reduce((s,r)=>s+r.ns,0)
+  })).filter(x=>x.n>0);
+  let bestMonth=null,worstMonth=null;
+  if(monthVals.length){
+    bestMonth=monthVals.reduce((a,b)=>b.n>a.n?b:a);
+    worstMonth=monthVals.reduce((a,b)=>b.n<a.n?b:a);
+  }
+
+  const kpis=[
+    {l:`NS ${latY}`,v:fmtM(latest.ns),s:prevY?`PY ${fmtM(prev.ns)}`:'Sin año anterior'},
+    {l:'GM',v:fmtM(latest.gm),s:`GM% ${fmtP(gp)}`},
+    {l:'Proyección FY',v:proy>0?fmtM(proy):'—',s:varV!==null?varStr(varV)+' vs PY':'—'},
+    {l:'Estado vs PY',v:growthSem(varV),s:growthLabel(varV)},
+  ];
+
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`La proyección a fin de año ${varV>=0?'crece':'cae'} un <b>${varStr(varV)}</b> frente a ${prevY}.`
+    :'No hay suficiente histórico del año anterior para comparar la tendencia de esta flota.');
+  bullets.push(`El margen medio del período es <b>${fmtP(gp)}</b>.`);
+  if(bestMonth) bullets.push(`El mejor mes de ${latY} ha sido <b>${MN[bestMonth.m-1]}</b> (${fmtM(bestMonth.n)}).`);
+  if(worstMonth && monthVals.length>1) bullets.push(`El más flojo ha sido <b>${MN[worstMonth.m-1]}</b> (${fmtM(worstMonth.n)}).`);
+
+  return `
+    <div class="exec-scope">Alcance: Ficha de flota</div>
+    <div class="exec-title">${fleet}</div>
+    <div class="exec-period">${periodTxt}<br>Generado el ${now}</div>
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(k=>`<div class="exec-kpi"><div class="exec-kpi-lbl">${k.l}</div><div class="exec-kpi-val">${k.v}</div><div class="exec-kpi-sub">${k.s}</div></div>`).join('')}</div>
+    <div class="exec-section-title">Lectura</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+}
+
+// Convierte el HTML del resumen en texto plano legible, listo para pegar en
+// un correo de Outlook sin arrastrar etiquetas ni formato raro.
+function execSummaryToPlainText(root){
+  const lines=[];
+  const scope=root.querySelector('.exec-scope');
+  const title=root.querySelector('.exec-title');
+  const period=root.querySelector('.exec-period');
+  const warn=root.querySelector('.exec-daywarn');
+  if(scope) lines.push(scope.textContent);
+  if(title) lines.push('== '+title.textContent+' ==');
+  if(period) lines.push(period.textContent.replace(/\s*\n\s*/g,' · '));
+  if(warn) lines.push('\n'+warn.textContent);
+  lines.push('');
+  lines.push('KPIs:');
+  root.querySelectorAll('.exec-kpi').forEach(k=>{
+    const l=k.querySelector('.exec-kpi-lbl')?.textContent||'';
+    const v=k.querySelector('.exec-kpi-val')?.textContent||'';
+    const s=k.querySelector('.exec-kpi-sub')?.textContent||'';
+    lines.push(`  • ${l}: ${v}${s?' ('+s+')':''}`);
+  });
+  root.querySelectorAll('.exec-section-title').forEach(sec=>{
+    lines.push('');
+    lines.push(sec.textContent.toUpperCase());
+    const next=sec.nextElementSibling;
+    if(next && next.classList.contains('exec-narrative')){
+      next.querySelectorAll('li').forEach(li=>lines.push('  - '+li.textContent.replace(/<\/?b>/g,'')));
+    }else if(next && next.classList.contains('exec-movers')){
+      next.querySelectorAll('.exec-mover-col').forEach(col=>{
+        lines.push('  '+(col.querySelector('h4')?.textContent||''));
+        col.querySelectorAll('.exec-mover-row').forEach(r=>{
+          const spans=r.querySelectorAll('span');
+          lines.push(`    ${spans[0]?.textContent||''}: ${spans[1]?.textContent||''}`);
+        });
+      });
+    }
+  });
+  return lines.join('\n');
+}
+
+function copyExecutiveSummary(btn){
+  const body=document.getElementById('exec-summary-body');
+  if(!body) return;
+  const text=execSummaryToPlainText(body);
+  navigator.clipboard.writeText(text).then(()=>{
+    if(btn){const old=btn.textContent;btn.textContent='✓ Copiado';setTimeout(()=>{btn.textContent=old;},1500);}
+  }).catch(()=>alert('No se pudo copiar automáticamente. Selecciona el texto manualmente.'));
+}
+
+function printExecutiveSummary(){
+  document.body.classList.add('printing-exec-summary');
+  window.print();
+  setTimeout(()=>document.body.classList.remove('printing-exec-summary'),500);
+}
+
 // ── EXPORT PDF ────────────────────────────────────────────────────────────────
 function exportPDF(){
   // Preparar header de impresión
@@ -2583,6 +2920,7 @@ async function delPeriod(year,month,canal){
   await sbDelete('fleet_data_daily',`year=eq.${year}&month=eq.${month}&canal=eq.${canal}`);
   await loadSummary();
   refreshPeriodos();
+  updateLastDayPill();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2970,6 +3308,7 @@ async function processBulkUpload(){
   await loadSummary();
   refreshPeriodos();
   try{refreshResumen();}catch(e){}
+  updateLastDayPill();
 
   log.innerHTML+=`<div class="log-row"><span class="log-ok">✓</span><b>Lote completo:</b> ${ok} archivo(s) procesados, ${fail} con error, ${sortedGroups.length} snapshot(s) guardados, ${touchedPeriods.size} período(s) recalculado(s).</div>`;
   document.getElementById('bulk-confirm-btn').disabled=false;
@@ -3295,6 +3634,7 @@ async function handleFiles(files){
   try{
     await loadSummary();
     refreshResumen();
+    updateLastDayPill();
   }catch(e){
     log.innerHTML+=`<div class="log-row"><span class="log-err">✗</span>Datos enviados, pero no se pudo refrescar el resumen: ${(e.message||e).toString().slice(0,300)}</div>`;
   }

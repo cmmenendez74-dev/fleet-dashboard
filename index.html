@@ -288,11 +288,13 @@ body.present-mode #exec-summary-btn{display:none}
 .exec-mover-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--lg)}
 .exec-modal-ft{padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.5rem;justify-content:flex-end;background:var(--bg2)}
 #exec-summary-body{font-family:'Segoe UI',Arial,sans-serif;color:var(--text)}
+.exec-scope-bar{display:flex;align-items:center;gap:.4rem;margin-bottom:1.1rem;flex-wrap:wrap;padding-bottom:.9rem;border-bottom:1px solid var(--border)}
+.exec-scope-bar #exec-day-picker{font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-family:inherit;margin-left:.25rem}
 @media print{
   body.printing-exec-summary .app{display:none!important}
   body.printing-exec-summary #exec-summary-overlay{position:static!important;background:#fff!important;display:block!important;padding:0;inset:auto}
   body.printing-exec-summary .exec-modal{box-shadow:none!important;width:100%!important;max-width:100%!important;border-radius:0}
-  body.printing-exec-summary .exec-modal-hd,body.printing-exec-summary .exec-modal-ft{display:none!important}
+  body.printing-exec-summary .exec-modal-hd,body.printing-exec-summary .exec-modal-ft,body.printing-exec-summary .exec-scope-bar{display:none!important}
 }
 </style>
 </head>
@@ -2363,29 +2365,83 @@ function backToFlotasList(){
 // consultas pesadas nuevas salvo que hagan falta.
 let _execCache=null;
 
+// Estado del selector de alcance del resumen: 'dia' (snapshot diario, lo más
+// útil para un envío diario al jefe), 'mes' (mes filtrado en curso, MTD real
+// vs mismo mes año anterior) o 'periodo' (todo lo seleccionado en los chips
+// de años/meses, el comportamiento "YTD total" que había antes). Por defecto
+// arranca en 'dia' porque es el uso que se pidió: un envío diario, no un
+// simple "la app está actualizada".
+let _execScope='dia';
+let _execDayDate=null; // fecha elegida a mano en el selector de "Día"; null = usar el último snapshot cargado
+
+function fmtDateEs(d){
+  if(!d) return '—';
+  const dt=new Date(d+'T00:00:00');
+  return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+}
+function nowEs(){
+  return new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+' '
+    +new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+}
+function execKpiHtml(k){
+  return `<div class="exec-kpi"><div class="exec-kpi-lbl">${k.l}</div><div class="exec-kpi-val">${k.v}</div><div class="exec-kpi-sub">${k.s}</div></div>`;
+}
+
 async function openExecutiveSummary(){
   const overlay=document.getElementById('exec-summary-overlay');
-  const body=document.getElementById('exec-summary-body');
   overlay.classList.add('show');
-  body.innerHTML='<div class="loading-msg"><span class="spinner"></span>Generando resumen...</div>';
-  try{
-    const isFleetDetail=document.getElementById('flotas-detail-view')?.style.display==='block' && _currentDetailFleet;
-    let html;
-    if(isFleetDetail){
-      html=buildFleetExecSummary();
-    }else{
-      if(!_execCache || _execCache.scope!=='global') await refreshResumen();
-      html=buildGlobalExecSummary();
-    }
-    body.innerHTML=html;
-  }catch(e){
-    console.error('Error generando el resumen ejecutivo',e);
-    body.innerHTML=`<div class="no-data">No se ha podido generar el resumen — mira la consola (F12) y avisa a Claude con el mensaje exacto.</div>`;
-  }
+  if(!_lastDailyDate){ try{ await updateLastDayPill(); }catch(e){} }
+  await renderExecScope(_execScope);
 }
 
 function closeExecutiveSummary(){
   document.getElementById('exec-summary-overlay').classList.remove('show');
+}
+
+function setExecScope(mode){
+  _execScope=mode;
+  renderExecScope(mode);
+}
+
+function setExecDay(d){
+  _execDayDate=d;
+  renderExecScope('dia');
+}
+
+function execScopeToolbarHtml(mode){
+  const dayVal=_execDayDate||_lastDailyDate||todayISO();
+  return `<div class="exec-scope-bar">
+    <span class="chip${mode==='dia'?' on':''}" onclick="setExecScope('dia')">📅 Día</span>
+    <span class="chip${mode==='mes'?' on':''}" onclick="setExecScope('mes')">🗓️ Mes en curso</span>
+    <span class="chip${mode==='periodo'?' on':''}" onclick="setExecScope('periodo')">📊 Período filtrado</span>
+    ${mode==='dia'?`<input type="date" id="exec-day-picker" value="${dayVal}" max="${todayISO()}" onchange="setExecDay(this.value)">`:''}
+  </div>`;
+}
+
+async function renderExecScope(mode){
+  const body=document.getElementById('exec-summary-body');
+  body.innerHTML=execScopeToolbarHtml(mode)+'<div id="exec-summary-content"><div class="loading-msg"><span class="spinner"></span>Generando resumen...</div></div>';
+  const contentEl=document.getElementById('exec-summary-content');
+  try{
+    const isFleetDetail=document.getElementById('flotas-detail-view')?.style.display==='block' && _currentDetailFleet;
+    let html;
+    if(mode==='dia'){
+      html=isFleetDetail?await buildFleetDayExecSummary():await buildDayExecSummary();
+    }else if(mode==='mes'){
+      html=isFleetDetail?await buildFleetMonthExecSummary():await buildMonthExecSummary();
+    }else{
+      if(isFleetDetail){
+        html=buildFleetExecSummary();
+      }else{
+        if(!_execCache || _execCache.scope!=='global') await refreshResumen();
+        html=buildGlobalExecSummary();
+      }
+    }
+    contentEl.innerHTML=html;
+  }catch(e){
+    console.error('Error generando el resumen ejecutivo',e);
+    contentEl.innerHTML=`<div class="no-data">No se ha podido generar el resumen — mira la consola (F12) y avisa a Claude con el mensaje exacto.</div>`;
+  }
 }
 
 // Aviso de "último día sin confirmar" reutilizado dentro del propio resumen,
@@ -2394,19 +2450,243 @@ function execDayWarnHtml(){
   if(!_lastDailyDate) return '';
   const today=todayISO();
   if(_lastDailyDate===today || _lastDailyDate===yesterdayISO()){
-    const d=new Date(_lastDailyDate+'T00:00:00');
-    const dstr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-    return `<div class="exec-daywarn">⚠ Último día cargado: ${dstr}. Puede no estar aún cerrado en NEXT FLEET (trabaja a día vencido) — compara con cautela contra exports externos de ese mismo día.</div>`;
+    return `<div class="exec-daywarn">⚠ Último día cargado: ${fmtDateEs(_lastDailyDate)}. Puede no estar aún cerrado en NEXT FLEET (trabaja a día vencido) — compara con cautela contra exports externos de ese mismo día.</div>`;
   }
   return '';
 }
 
+// ── ALCANCE: DÍA ─────────────────────────────────────────────────────────────
+// Pensado para el envío diario: NS/GM/GM%/OPR-ID de un día concreto (por
+// defecto el último snapshot cargado, elegible con el selector de fecha),
+// comparado contra el día hábil anterior con datos guardados, más las
+// flotas con más actividad ese día.
+async function buildDayExecSummary(){
+  const date=_execDayDate||_lastDailyDate;
+  if(!date) return '<div class="no-data">No hay ningún snapshot diario guardado todavía. Sube archivos desde "Cargar archivos".</div>';
+  const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
+  const rows=(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm,opr_id&snap_date=eq.${date}`)||[])
+    .filter(r=>activeCanals.includes(r.canal));
+  if(!rows.length) return `<div class="no-data">Sin snapshot guardado para el ${fmtDateEs(date)} con el canal seleccionado.</div>`;
+
+  const prevRow=await sbSelect('fleet_data_daily',`select=snap_date&snap_date=lt.${date}&order=snap_date.desc&limit=1`);
+  const prevDate=prevRow&&prevRow.length?prevRow[0].snap_date:null;
+  const prevRows=prevDate
+    ?(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm&snap_date=eq.${prevDate}`)||[]).filter(r=>activeCanals.includes(r.canal))
+    :[];
+
+  function agg(rs){
+    let ns=0,gm=0,eqns=0,eqgm=0,vcns=0,vcgm=0,oprEQ=0,oprVC=0;
+    const byFleet={};
+    for(const r of rs){
+      const rns=Number(r.ns)||0, rgm=Number(r.gm)||0;
+      ns+=rns; gm+=rgm;
+      if(r.canal==='EQ'){eqns+=rns;eqgm+=rgm; if(r.opr_id!=null) oprEQ+=Number(r.opr_id)||0;}
+      else{vcns+=rns;vcgm+=rgm; if(r.opr_id!=null) oprVC+=Number(r.opr_id)||0;}
+      byFleet[r.fleet_norm]=(byFleet[r.fleet_norm]||0)+rns;
+    }
+    return{ns,gm,eqns,eqgm,vcns,vcgm,oprEQ,oprVC,byFleet};
+  }
+  const A=agg(rows), B=agg(prevRows);
+  const varV=B.ns>0?(A.ns-B.ns)/B.ns:null;
+  const gmPct=A.ns>0?A.gm/A.ns:0;
+
+  const kpis=[
+    {l:'NS del día',v:fmtM(A.ns),s:varV!==null?`vs ${fmtDateEs(prevDate)}: ${varStr(varV)}`:'Sin día anterior con datos'},
+    {l:'GM del día',v:fmtM(A.gm),s:`GM% ${fmtP(gmPct)}`},
+    {l:'EQ NS',v:fmtM(A.eqns),s:`OPR-ID ${fmt(A.oprEQ)}`},
+    {l:'VC NS',v:fmtM(A.vcns),s:`OPR-ID ${fmt(A.oprVC)}`},
+  ];
+
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`El día ${fmtDateEs(date)} cierra con <b>${fmtM(A.ns)}</b> de NS, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}
+      frente al día hábil anterior con datos (${fmtDateEs(prevDate)}, ${fmtM(B.ns)}).`
+    :`El día ${fmtDateEs(date)} cierra con <b>${fmtM(A.ns)}</b> de NS. No hay día anterior con datos guardados para comparar.`);
+  bullets.push(`El margen del día es <b>${fmtP(gmPct)}</b>.`);
+  bullets.push(`Se han registrado <b>${fmt(A.oprEQ+A.oprVC)}</b> operaciones (${fmt(A.oprEQ)} EQ + ${fmt(A.oprVC)} VC).`);
+
+  const topContrib=Object.entries(A.byFleet).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const topHtml=topContrib.length
+    ?topContrib.map(([name,ns])=>`<div class="exec-mover-row"><span>${name}</span><span>${fmtM(ns)}</span></div>`).join('')
+    :'<div class="exec-mover-row" style="color:var(--muted)">Sin flotas con actividad ese día</div>';
+
+  return `
+    <div class="exec-scope">Alcance: Resumen global — Día</div>
+    <div class="exec-title">First Stop Fleet Dashboard</div>
+    <div class="exec-period">${fmtDateEs(date)}<br>Generado el ${nowEs()}</div>
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura del día</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <div class="exec-section-title">Flotas con más actividad ese día</div>
+    <div class="exec-movers" style="grid-template-columns:1fr"><div class="exec-mover-col">${topHtml}</div></div>`;
+}
+
+async function buildFleetDayExecSummary(){
+  const fleet=_currentDetailFleet;
+  const date=_execDayDate||_lastDailyDate;
+  if(!date) return '<div class="no-data">No hay ningún snapshot diario guardado todavía.</div>';
+  const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
+  const rows=(await sbSelectAll('fleet_data_daily',
+    `select=canal,ns,gm,opr_id&snap_date=eq.${date}&fleet_norm=eq.${encodeURIComponent(fleet)}`)||[])
+    .filter(r=>activeCanals.includes(r.canal));
+  if(!rows.length) return `<div class="no-data">Sin datos guardados de ${fleet} el ${fmtDateEs(date)} para el canal seleccionado.</div>`;
+
+  const prevRowD=await sbSelect('fleet_data_daily',
+    `select=snap_date&snap_date=lt.${date}&fleet_norm=eq.${encodeURIComponent(fleet)}&order=snap_date.desc&limit=1`);
+  const prevDate=prevRowD&&prevRowD.length?prevRowD[0].snap_date:null;
+  const prevRows=prevDate
+    ?(await sbSelectAll('fleet_data_daily',
+        `select=canal,ns,gm&snap_date=eq.${prevDate}&fleet_norm=eq.${encodeURIComponent(fleet)}`)||[]).filter(r=>activeCanals.includes(r.canal))
+    :[];
+
+  const ns=rows.reduce((s,r)=>s+(Number(r.ns)||0),0);
+  const gm=rows.reduce((s,r)=>s+(Number(r.gm)||0),0);
+  const opr=rows.reduce((s,r)=>s+(r.opr_id!=null?Number(r.opr_id)||0:0),0);
+  const prevNs=prevRows.reduce((s,r)=>s+(Number(r.ns)||0),0);
+  const varV=prevNs>0?(ns-prevNs)/prevNs:null;
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const gmPct=ns>0?gm/ns:0;
+
+  const kpis=[
+    {l:'NS del día',v:fmtM(ns),s:varV!==null?`vs ${fmtDateEs(prevDate)}: ${varStr(varV)}`:'Sin día anterior'},
+    {l:'GM del día',v:fmtM(gm),s:`GM% ${fmtP(gmPct)}`},
+    {l:'OPR-ID',v:fmt(opr),s:canalLabel},
+  ];
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`${fleet} registra <b>${fmtM(ns)}</b> de NS el ${fmtDateEs(date)}, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al día anterior con datos (${fmtDateEs(prevDate)}).`
+    :`${fleet} registra <b>${fmtM(ns)}</b> de NS el ${fmtDateEs(date)}. No hay día anterior con datos para comparar.`);
+  bullets.push(`Margen del día: <b>${fmtP(gmPct)}</b>.`);
+
+  return `
+    <div class="exec-scope">Alcance: Ficha de flota — Día</div>
+    <div class="exec-title">${fleet}</div>
+    <div class="exec-period">${fmtDateEs(date)} · Canal: ${canalLabel}<br>Generado el ${nowEs()}</div>
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura del día</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+}
+
+// ── ALCANCE: MES EN CURSO ────────────────────────────────────────────────────
+// El mes más reciente dentro de lo que tengas filtrado (los mismos chips de
+// años/meses del Resumen global), comparado contra el mismo mes del año
+// anterior — no contra el YTD acumulado. Es el término medio entre "de hoy"
+// y "todo el período", y probablemente el más útil para un resumen diario
+// que no cambie de foco cada vez que avanza el mes.
+async function buildMonthExecSummary(){
+  if(!_execCache || _execCache.scope!=='global'){ try{ await refreshResumen(); }catch(e){} }
+  const c=_execCache;
+  if(!c) return '<div class="no-data">Sin datos para el mes en curso.</div>';
+  const years=[c.prevYear,c.kpiYear].filter(Boolean);
+  const rows=await fetchData(years,[c.latestMonth]);
+  if(!rows?.length) return '<div class="no-data">Sin datos para el mes en curso.</div>';
+
+  let curNS=0,curGM=0,curEQ=0,curEQGM=0,curVC=0,curVCGM=0,prevNS=0,prevGM=0;
+  const byFleetCur={},byFleetPrev={};
+  for(const r of rows){
+    if(r.year===c.kpiYear){
+      curNS+=r.ns; curGM+=r.gm;
+      if(r.canal==='EQ'){curEQ+=r.ns;curEQGM+=r.gm;}else{curVC+=r.ns;curVCGM+=r.gm;}
+      byFleetCur[r.fleet_norm]=(byFleetCur[r.fleet_norm]||0)+r.ns;
+    }else if(r.year===c.prevYear){
+      prevNS+=r.ns; prevGM+=r.gm;
+      byFleetPrev[r.fleet_norm]=(byFleetPrev[r.fleet_norm]||0)+r.ns;
+    }
+  }
+  const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
+  const gmPct=curNS>0?curGM/curNS:0;
+  const mesTxt=`${MN[c.latestMonth-1]} ${c.kpiYear}`;
+
+  const kpis=[
+    {l:`NS ${mesTxt}`,v:fmtM(curNS),s:varV!==null?`vs ${MN[c.latestMonth-1]} ${c.prevYear}: ${varStr(varV)}`:'Sin año anterior'},
+    {l:'GM del mes',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
+    {l:'EQ NS',v:fmtM(curEQ),s:`GM% ${fmtP(curEQ>0?curEQGM/curEQ:0)}`},
+    {l:'VC NS',v:fmtM(curVC),s:`GM% ${fmtP(curVC>0?curVCGM/curVC:0)}`},
+  ];
+
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al mismo mes de ${c.prevYear} (${fmtM(prevNS)}).`
+    :`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS. No hay mismo mes del año anterior para comparar.`);
+  bullets.push(`El margen del mes es <b>${fmtP(gmPct)}</b>.`);
+
+  const names=new Set([...Object.keys(byFleetCur),...Object.keys(byFleetPrev)]);
+  const varRows=[];
+  for(const n of names){
+    const cur=byFleetCur[n]||0, prev=byFleetPrev[n]||0;
+    if(prev>0 && (cur>=2000||prev>=2000)) varRows.push({name:n,cur,prev,varV:(cur-prev)/prev});
+  }
+  const up=varRows.slice().sort((a,b)=>b.varV-a.varV).slice(0,5);
+  const down=varRows.slice().sort((a,b)=>a.varV-b.varV).slice(0,5);
+  if(up.length) bullets.push(`La flota que más crece este mes es <b>${up[0].name}</b> (${varStr(up[0].varV)}).`);
+  if(down.length) bullets.push(`La mayor caída del mes es <b>${down[0].name}</b> (${varStr(down[0].varV)}).`);
+
+  const moversHtml=arr=>arr.length?arr.map(x=>
+    `<div class="exec-mover-row"><span>${x.name}</span><span class="${varCls(x.varV)}">${varStr(x.varV)}</span></div>`).join('')
+    :'<div class="exec-mover-row" style="color:var(--muted)">Sin datos suficientes</div>';
+
+  return `
+    <div class="exec-scope">Alcance: Resumen global — Mes en curso</div>
+    <div class="exec-title">First Stop Fleet Dashboard</div>
+    <div class="exec-period">${mesTxt}<br>Generado el ${nowEs()}</div>
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura del mes</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <div class="exec-section-title">Movimientos del mes vs mismo mes año anterior</div>
+    <div class="exec-movers">
+      <div class="exec-mover-col"><h4>🟢 Suben</h4>${moversHtml(up)}</div>
+      <div class="exec-mover-col"><h4>🔴 Caen</h4>${moversHtml(down)}</div>
+    </div>`;
+}
+
+async function buildFleetMonthExecSummary(){
+  const fleet=_currentDetailFleet;
+  const rows=_currentDetailRows||[];
+  const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
+  const frows=rows.filter(r=>activeCanals.includes(r.canal));
+  const years_f=S.yearsF.size?[...S.yearsF].sort():[...new Set(rows.map(r=>r.year))].sort();
+  if(!years_f.length) return '<div class="no-data">Sin datos para esta flota con los filtros actuales.</div>';
+  const latY=Math.max(...years_f);
+  const prevY=years_f[years_f.indexOf(latY)-1];
+  const latMoRows=frows.filter(r=>r.year===latY&&(r.ns>0||r.gm>0));
+  const latestMo=latMoRows.length?Math.max(...latMoRows.map(r=>r.month)):null;
+  if(!latestMo) return '<div class="no-data">Sin datos del mes en curso para esta flota con los filtros actuales.</div>';
+  const curNS=frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0);
+  const curGM=frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.gm,0);
+  const prevNS=prevY?frows.filter(r=>r.year===prevY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0):0;
+  const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
+  const mesTxt=`${MN[latestMo-1]} ${latY}`;
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const gmPct=curNS>0?curGM/curNS:0;
+
+  const kpis=[
+    {l:`NS ${mesTxt}`,v:fmtM(curNS),s:varV!==null?`vs ${MN[latestMo-1]} ${prevY}: ${varStr(varV)}`:'Sin año anterior'},
+    {l:'GM del mes',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
+  ];
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`${fleet} lleva <b>${fmtM(curNS)}</b> en ${mesTxt}, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente a ${MN[latestMo-1]} ${prevY} (${fmtM(prevNS)}).`
+    :`${fleet} lleva <b>${fmtM(curNS)}</b> en ${mesTxt}. No hay mismo mes del año anterior para comparar.`);
+  bullets.push(`Margen del mes: <b>${fmtP(gmPct)}</b>.`);
+
+  return `
+    <div class="exec-scope">Alcance: Ficha de flota — Mes en curso</div>
+    <div class="exec-title">${fleet}</div>
+    <div class="exec-period">${mesTxt} · Canal: ${canalLabel}<br>Generado el ${nowEs()}</div>
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura del mes</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+}
+
+// ── ALCANCE: PERÍODO FILTRADO (comportamiento original, YTD total) ──────────
 function buildGlobalExecSummary(){
   const c=_execCache;
   if(!c) return '<div class="no-data">Sin datos para generar el resumen con los filtros actuales.</div>';
   const periodTxt=`${c.selectedYears.join('/')} · ${c.selectedMonths.map(m=>MN[m-1]).join(', ')} · Canal: EQ+VC`;
-  const now=new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+' '
-    +new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
 
   const kpis=[
     {l:`NS YTD ${c.kpiYear}`,v:fmtM(c.A.totNS),s:c.varTotKpi!==null?`vs ${c.prevYear}: ${varStr(c.varTotKpi)}`:'Sin año anterior'},
@@ -2444,11 +2724,11 @@ function buildGlobalExecSummary(){
   ).join('')||'<div class="exec-mover-row" style="color:var(--muted)">Sin datos suficientes</div>';
 
   return `
-    <div class="exec-scope">Alcance: Resumen global</div>
+    <div class="exec-scope">Alcance: Resumen global — Período filtrado</div>
     <div class="exec-title">First Stop Fleet Dashboard</div>
-    <div class="exec-period">${periodTxt}<br>Generado el ${now}</div>
+    <div class="exec-period">${periodTxt}<br>Generado el ${nowEs()}</div>
     ${execDayWarnHtml()}
-    <div class="exec-kpis">${kpis.map(k=>`<div class="exec-kpi"><div class="exec-kpi-lbl">${k.l}</div><div class="exec-kpi-val">${k.v}</div><div class="exec-kpi-sub">${k.s}</div></div>`).join('')}</div>
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del período</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
     <div class="exec-section-title">Movimientos más relevantes vs año anterior</div>
@@ -2483,8 +2763,6 @@ function buildFleetExecSummary(){
   const gp=latest.ns>0?latest.gm/latest.ns:0;
   const canalLabel=activeCanals.slice().sort().join('+');
   const periodTxt=`Años: ${years_f.join('/')} · Canal: ${canalLabel}`;
-  const now=new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+' '
-    +new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
 
   // Mejor y peor mes del año en curso, para dar contexto de estacionalidad.
   const monthVals=[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>({
@@ -2512,17 +2790,19 @@ function buildFleetExecSummary(){
   if(worstMonth && monthVals.length>1) bullets.push(`El más flojo ha sido <b>${MN[worstMonth.m-1]}</b> (${fmtM(worstMonth.n)}).`);
 
   return `
-    <div class="exec-scope">Alcance: Ficha de flota</div>
+    <div class="exec-scope">Alcance: Ficha de flota — Período filtrado</div>
     <div class="exec-title">${fleet}</div>
-    <div class="exec-period">${periodTxt}<br>Generado el ${now}</div>
+    <div class="exec-period">${periodTxt}<br>Generado el ${nowEs()}</div>
     ${execDayWarnHtml()}
-    <div class="exec-kpis">${kpis.map(k=>`<div class="exec-kpi"><div class="exec-kpi-lbl">${k.l}</div><div class="exec-kpi-val">${k.v}</div><div class="exec-kpi-sub">${k.s}</div></div>`).join('')}</div>
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
 }
 
 // Convierte el HTML del resumen en texto plano legible, listo para pegar en
-// un correo de Outlook sin arrastrar etiquetas ni formato raro.
+// un correo de Outlook sin arrastrar etiquetas ni formato raro. Solo lee el
+// contenido generado (#exec-summary-content), no la barra de selector de
+// alcance que queda por encima.
 function execSummaryToPlainText(root){
   const lines=[];
   const scope=root.querySelector('.exec-scope');
@@ -2561,9 +2841,9 @@ function execSummaryToPlainText(root){
 }
 
 function copyExecutiveSummary(btn){
-  const body=document.getElementById('exec-summary-body');
-  if(!body) return;
-  const text=execSummaryToPlainText(body);
+  const content=document.getElementById('exec-summary-content');
+  if(!content) return;
+  const text=execSummaryToPlainText(content);
   navigator.clipboard.writeText(text).then(()=>{
     if(btn){const old=btn.textContent;btn.textContent='✓ Copiado';setTimeout(()=>{btn.textContent=old;},1500);}
   }).catch(()=>alert('No se pudo copiar automáticamente. Selecciona el texto manualmente.'));

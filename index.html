@@ -2233,8 +2233,25 @@ async function showFleetHist(fleet){
 
   // Fila resumen — calculada directamente de frows (filtrado), no de la caché
   // sin filtrar de la lista, para que la tabla y el gráfico digan lo mismo.
+  //
+  // 31/07/2026: hasta ahora esta fila SIEMPRE sumaba el año entero (FY) para
+  // los años anteriores y el año en curso completo para el actual, ignorando
+  // por completo el filtro de MES de la barra de arriba — aunque filtraras
+  // Ene-Jul, el "Resumen" seguía mostrando el año completo (Ene-Dic) y la
+  // "Proy FY" se calculaba sobre esa base. El gráfico de abajo (evolución
+  // mensual Ene-Dic) y la tabla "Comparativa mensual" se dejan tal cual,
+  // porque ahí sí interesa ver el año completo para contexto — pero la fila
+  // Resumen debe reflejar exactamente el período que se ha filtrado.
+  const activeMonthsF=S.monthsF.size?[...S.monthsF].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const frowsResumen=frows.filter(r=>activeMonthsF.includes(r.month));
+  const isFullYearF=activeMonthsF.length===12;
+  const monthsLabelF=(()=>{
+    if(isFullYearF) return null;
+    const isContig=activeMonthsF.every((m,i)=>i===0||m===activeMonthsF[i-1]+1);
+    return isContig?`${MN[activeMonthsF[0]-1]}-${MN[activeMonthsF[activeMonthsF.length-1]-1]}`:`${activeMonthsF.length}m`;
+  })();
   const yearAgg=yr=>{
-    const rs=frows.filter(r=>r.year===yr);
+    const rs=frowsResumen.filter(r=>r.year===yr);
     const ns=rs.reduce((s,r)=>s+r.ns,0), gm=rs.reduce((s,r)=>s+r.gm,0);
     const months=new Set(rs.filter(r=>r.ns>0||r.gm>0).map(r=>r.month));
     return {ns,gm,months};
@@ -2255,7 +2272,7 @@ async function showFleetHist(fleet){
     const dthead=document.getElementById('fleet-detail-row')?.closest('table')?.querySelector('thead tr');
     if(dthead){
       dthead.innerHTML='<th>Flota</th><th>Canal</th>'
-        +years_f.map(yr=>`<th class="r">${yr}${yr===latYf?' YTD':' FY'}</th>`).join('')
+        +years_f.map(yr=>`<th class="r">${yr}${isFullYearF?(yr===latYf?' YTD':' FY'):' ('+monthsLabelF+')'}</th>`).join('')
         +'<th class="r">Proy FY</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado vs PY</th>';
     }
     document.getElementById('fleet-detail-row').innerHTML=`
@@ -2742,13 +2759,21 @@ function buildFleetExecSummary(){
   const fleet=_currentDetailFleet;
   const rows=_currentDetailRows||[];
   const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
+  const activeMonthsF=S.monthsF.size?[...S.monthsF].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const isFullYearF=activeMonthsF.length===12;
+  const monthsLabelF=(()=>{
+    if(isFullYearF) return null;
+    const isContig=activeMonthsF.every((m,i)=>i===0||m===activeMonthsF[i-1]+1);
+    return isContig?`${MN[activeMonthsF[0]-1]}-${MN[activeMonthsF[activeMonthsF.length-1]-1]}`:`${activeMonthsF.length}m`;
+  })();
   const frows=rows.filter(r=>activeCanals.includes(r.canal));
+  const frowsResumen=frows.filter(r=>activeMonthsF.includes(r.month));
   const years_f=S.yearsF.size?[...S.yearsF].sort():[...new Set(rows.map(r=>r.year))].sort();
   if(!years_f.length) return '<div class="no-data">Sin datos para esta flota con los filtros actuales.</div>';
   const latY=Math.max(...years_f);
   const prevY=years_f[years_f.indexOf(latY)-1];
   const yearAgg=yr=>{
-    const rs=frows.filter(r=>r.year===yr);
+    const rs=frowsResumen.filter(r=>r.year===yr);
     const ns=rs.reduce((s,r)=>s+r.ns,0), gm=rs.reduce((s,r)=>s+r.gm,0);
     const months=new Set(rs.filter(r=>r.ns>0||r.gm>0).map(r=>r.month));
     return{ns,gm,months};
@@ -2762,10 +2787,11 @@ function buildFleetExecSummary(){
   const varV=prevProy>0?(proy-prevProy)/prevProy:null;
   const gp=latest.ns>0?latest.gm/latest.ns:0;
   const canalLabel=activeCanals.slice().sort().join('+');
-  const periodTxt=`Años: ${years_f.join('/')} · Canal: ${canalLabel}`;
+  const periodTxt=`Años: ${years_f.join('/')} · Meses: ${isFullYearF?'Ene-Dic':monthsLabelF} · Canal: ${canalLabel}`;
 
-  // Mejor y peor mes del año en curso, para dar contexto de estacionalidad.
-  const monthVals=[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>({
+  // Mejor y peor mes del año en curso (dentro de los meses filtrados), para
+  // dar contexto de estacionalidad sin salirse del período que se ha elegido.
+  const monthVals=activeMonthsF.map(m=>({
     m,n:frows.filter(r=>r.year===latY&&r.month===m).reduce((s,r)=>s+r.ns,0)
   })).filter(x=>x.n>0);
   let bestMonth=null,worstMonth=null;
@@ -2775,7 +2801,7 @@ function buildFleetExecSummary(){
   }
 
   const kpis=[
-    {l:`NS ${latY}`,v:fmtM(latest.ns),s:prevY?`PY ${fmtM(prev.ns)}`:'Sin año anterior'},
+    {l:`NS ${latY}${isFullYearF?'':' ('+monthsLabelF+')'}`,v:fmtM(latest.ns),s:prevY?`PY ${fmtM(prev.ns)}`:'Sin año anterior'},
     {l:'GM',v:fmtM(latest.gm),s:`GM% ${fmtP(gp)}`},
     {l:'Proyección FY',v:proy>0?fmtM(proy):'—',s:varV!==null?varStr(varV)+' vs PY':'—'},
     {l:'Estado vs PY',v:growthSem(varV),s:growthLabel(varV)},

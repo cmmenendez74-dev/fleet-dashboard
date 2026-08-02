@@ -2440,7 +2440,16 @@ async function renderExecScope(mode){
   body.innerHTML=execScopeToolbarHtml(mode)+'<div id="exec-summary-content"><div class="loading-msg"><span class="spinner"></span>Generando resumen...</div></div>';
   const contentEl=document.getElementById('exec-summary-content');
   try{
-    const isFleetDetail=document.getElementById('flotas-detail-view')?.style.display==='block' && _currentDetailFleet;
+    // Antes esto solo miraba si el estilo inline de #flotas-detail-view seguía
+    // en 'block' — pero ese estilo NO se resetea al cambiar de pestaña (solo
+    // al pulsar "Volver a la lista" o al reabrir "Por flota"), así que si
+    // habías abierto una flota y luego ibas a Resumen/Año vs año/Alertas sin
+    // volver atrás, el resumen ejecutivo seguía "pegado" a esa flota aunque
+    // ya no la estuvieras viendo. Ahora también exige que la pestaña "Por
+    // flota" sea la que está realmente activa en ese momento.
+    const isFleetDetail=document.getElementById('view-flotas')?.classList.contains('active')
+      && document.getElementById('flotas-detail-view')?.style.display==='block'
+      && !!_currentDetailFleet;
     let html;
     if(mode==='dia'){
       html=isFleetDetail?await buildFleetDayExecSummary():await buildDayExecSummary();
@@ -3367,8 +3376,22 @@ function extractDateFromFilterRow(rawRows){
         const n=+mHasta[1];
         return n===1 ? {date:`${y}-${String(mo).padStart(2,'0')}-01`} : {range:true};
       }
+      // "Día es mayor o igual que N" sin límite superior: en general es un
+      // rango abierto (p.ej. "día >= 25" cubre 25-31, varios días juntos).
+      // PERO si N coincide con el ÚLTIMO día real de ese mes/año concreto
+      // (31/07/2026: el caso que disparó esto — "Día es mayor o igual que
+      // 31" en julio, que solo tiene 31 días), entonces "mayor o igual que
+      // el último día" solo puede significar ESE día suelto, porque no
+      // existe un día 32. Se calcula el último día real del mes (respeta
+      // meses de 28/29/30/31 días) en vez de asumir siempre rango.
       const mDesde=text.match(/Día es mayor o igual que (\d{1,2})(?!\s*y)/i);
-      if(mDesde) return {range:true}; // sin límite superior -> rango abierto, no es un snapshot diario
+      if(mDesde){
+        const n=+mDesde[1];
+        const lastDayOfMonth=new Date(y,mo,0).getDate();
+        return n===lastDayOfMonth
+          ? {date:`${y}-${String(mo).padStart(2,'0')}-${String(n).padStart(2,'0')}`}
+          : {range:true};
+      }
       // Formato suelto "Día es N" (sin "mayor/menor que"), por si algún
       // export de Power BI lo expresa así — cubre el mismo caso que el
       // formato original.

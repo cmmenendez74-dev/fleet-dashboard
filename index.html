@@ -169,9 +169,13 @@ tr:hover td{background:var(--lg)}
   .print-header{display:block!important}
   body{font-size:11px}
   #view-resumen,#view-flotas{display:block!important}
-  #view-historico,#view-upload,#view-periodos,#view-alertas{display:none!important}
+  #view-historico,#view-upload,#view-periodos,#view-alertas,#view-kam{display:none!important}
   #flotas-detail-view{display:none!important}
   #flotas-table-view{display:block!important}
+  /* Imprimir "Por KAM" (ver exportPDF): con body.printing-kam se invierte
+     qué vista se muestra — solo view-kam, ocultando resumen/flotas. */
+  body.printing-kam #view-resumen,body.printing-kam #view-flotas{display:none!important}
+  body.printing-kam #view-kam{display:block!important}
 }
 .print-header{display:none;margin-bottom:1rem;border-bottom:2px solid var(--red);padding-bottom:.5rem}
 .export-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;cursor:pointer;color:var(--dg);transition:background .15s}
@@ -421,6 +425,10 @@ body.present-mode #exec-summary-btn{display:none}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Por flota
   </div>
+  <div class="nav-item" onclick="nav('kam',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
+    Por KAM
+  </div>
   <div class="nav-item" onclick="nav('alertas',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     Alertas
@@ -496,6 +504,7 @@ body.present-mode #exec-summary-btn{display:none}
       <div class="card"><div class="card-hd" style="display:flex;align-items:center;gap:.6rem">
         <span class="chip on" id="upload-mode-normal" onclick="setUploadMode('normal')" style="cursor:pointer">Carga normal</span>
         <span class="chip" id="upload-mode-bulk" onclick="setUploadMode('bulk')" style="cursor:pointer">Carga masiva histórica</span>
+        <span class="chip" id="upload-mode-kam" onclick="setUploadMode('kam')" style="cursor:pointer">Mapeo KAM</span>
       </div>
       <div class="card-bd" id="upload-normal-panel">
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
@@ -543,12 +552,32 @@ body.present-mode #exec-summary-btn{display:none}
         </div>
         <div id="bulk-log" class="upload-log"></div>
       </div>
+      <div class="card-bd" id="upload-kam-panel" style="display:none">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:.85rem;line-height:1.7">
+          Para identificar qué KAM lleva cada flota. En NEXT FLEET, exporta el archivo <b>EQ filtrado por "Responsable"</b>
+          (un archivo por cada KAM, con las flotas que gestiona) y suéltalos aquí de golpe. El nombre del KAM se lee
+          automáticamente de la fila "Filtros aplicados" del propio Excel (<code>Responsable es Nombre Apellido</code>),
+          igual que la fecha en las otras cargas — no hace falta escribirlo a mano. <b>Esto NO se suma como venta</b>
+          (no toca NS€/GM€ de ningún día ni mes): solo actualiza qué KAM tiene asignada cada flota.
+          Como el export está filtrado a un mes concreto, solo aparecen las flotas con actividad ese mes — las flotas
+          que ya tenían KAM asignado de una carga anterior lo conservan aunque no aparezcan esta vez.
+        </p>
+        <label class="upload-zone" id="kam-drop-zone">
+          <input type="file" id="kam-file-input" multiple accept=".xlsx,.xls">
+          <svg style="width:36px;height:36px;color:#ccc;margin-bottom:.5rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <h3>Arrastra aquí un archivo EQ por cada KAM</h3>
+          <p style="margin-top:.3rem">Detecta el nombre del responsable automáticamente. Puedes soltar varios KAMs a la vez.</p>
+        </label>
+        <div id="kam-log" class="upload-log"></div>
+        <button class="btn primary" onclick="document.getElementById('kam-file-input').click()">Seleccionar archivos</button>
+      </div>
       </div>
       <div class="card"><div class="card-hd">Formato de archivos</div>
       <div class="card-bd" style="font-size:12px;color:var(--muted);line-height:1.9">
         <b style="color:var(--text)">EQ (resultados):</b> Hoja Export · Columnas NOMBRE, NS€, GM€<br>
         <b style="color:var(--text)">VC:</b> Columnas CLI_RAZON, Recuento de OPR_ID, TOTAL_VENTA, GM_FST<br>
         <b style="color:var(--text)">ID (nº operaciones Equity):</b> Columnas Customer Name, Docs — se combina automáticamente con el archivo EQ de la misma fecha<br>
+        <b style="color:var(--text)">Mapeo KAM:</b> Mismo formato que EQ, pero exportado filtrando por "Responsable" en NEXT FLEET — se detecta por ese filtro, no por columnas, y no se guarda como venta<br>
         <b style="color:var(--text)">Cada subida:</b> Sobreescribe el mes en curso (como hasta ahora) y además guarda un snapshot del día elegido arriba, para poder ver la evolución diaria<br>
         <b style="color:var(--text)">Fines de semana:</b> Si no subes archivo, no se guarda ese día — el siguiente día laborable ya recoge en su acumulado lo generado durante el fin de semana<br>
         <b style="color:var(--text)">Flotas nuevas:</b> Se incorporan solas al subir el archivo
@@ -827,6 +856,79 @@ body.present-mode #exec-summary-btn{display:none}
           <div class="card-hd" id="fleet-monthly-title">Comparativa mensual</div>
           <div class="card-bd"><div class="tbl-wrap">
             <table><thead id="fleet-monthly-thead"></thead><tbody id="fleet-monthly-tb"></tbody></table>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POR KAM -->
+    <div class="view" id="view-kam">
+      <!-- Barra de filtros: mismos criterios que "Por flota" (años/canal/mes) -->
+      <div class="filter-bar" style="flex-wrap:wrap;gap:.5rem .85rem">
+        <span class="filter-label">Años</span>
+        <div class="chip-group" id="yr-chips-k"></div>
+        <span class="filter-label" style="margin-left:.25rem">Canal</span>
+        <div class="chip-group" id="canal-chips-k"></div>
+        <span class="filter-label" style="margin-left:.25rem">Mes</span>
+        <div class="chip-group" id="mo-chips-k"></div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem">
+          <span id="kam-count" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+        </div>
+      </div>
+
+      <!-- Vista lista de KAMs -->
+      <div id="kam-table-view">
+        <div class="card">
+          <div class="card-hd">Actividad por responsable (KAM)</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead><tr>
+              <th>KAM</th><th class="r">Flotas</th>
+              <th class="r">NS período</th><th class="r">Proy FY</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado vs PY</th>
+            </tr></thead><tbody id="kam-tb"></tbody></table>
+          </div></div>
+        </div>
+        <div class="card" id="kam-unmapped-card" style="display:none">
+          <div class="card-hd">⚪ Flotas sin KAM asignado <span style="font-weight:400;color:var(--muted);font-size:11px" id="kam-unmapped-count"></span></div>
+          <div class="card-bd" style="font-size:12px;color:var(--muted);line-height:1.6">
+            Sube un archivo de NEXT FLEET filtrado por "Responsable" desde <b>Cargar archivos → Mapeo KAM</b> para asignarles un responsable — mientras tanto no se cuentan en ninguna fila de arriba.
+            <div id="kam-unmapped-list" style="margin-top:.5rem"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vista detalle de un KAM -->
+      <div id="kam-detail-view" style="display:none">
+        <div class="filter-bar" style="margin-bottom:.85rem">
+          <button class="btn sm" onclick="backToKamList()" style="display:flex;align-items:center;gap:4px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            Volver a la lista
+          </button>
+          <span id="kam-detail-name" style="font-size:13px;font-weight:600;margin-left:.5rem"></span>
+          <button class="fleet-export-btn" style="margin-left:auto" onclick="exportKamDetail()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:3px"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+            Exportar ficha
+          </button>
+        </div>
+        <div class="card" style="margin-bottom:.85rem">
+          <div class="card-hd">Resumen</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead><tr>
+              <th>KAM</th><th class="r">Flotas</th>
+              <th class="r">NS período</th><th class="r">Proy FY</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado vs PY</th>
+            </tr></thead><tbody id="kam-detail-row"></tbody></table>
+          </div></div>
+        </div>
+        <div class="card">
+          <div class="card-hd" id="kam-hist-title">Evolución mensual NS€</div>
+          <div class="card-bd"><div class="chart-box tall"><canvas id="ch-kam"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-top:.85rem">
+          <div class="card-hd">Flotas de este KAM</div>
+          <div class="card-bd"><div class="tbl-wrap">
+            <table><thead><tr>
+              <th>Flota</th><th>Canal</th>
+              <th class="r">Proy FY</th><th class="r">Var vs PY</th><th class="r">GM%</th><th>Estado vs PY</th>
+            </tr></thead><tbody id="kam-fleet-tb"></tbody></table>
           </div></div>
         </div>
       </div>
@@ -1272,7 +1374,19 @@ const NORM_MAP={
   'MALCO DIGITAL':'Malco Digital','MOBIUS GESTION':'Mobius',
   'CAFES CANDELAS':'Cafes Candelas','CAFENTO':'Cafento',
   'TRANSTEL':'Transtel','AMBULANCIAS RODRIGO':'Amb.Rodrigo',
-  'AMBUIBERICA':'Ambuibérica','MAPFRE':'Mapfre',
+  'AMBUIBERICA':'Ambuibérica',
+  // 03/08/2026: se ha quitado 'MAPFRE':'Mapfre' — fusionaba bajo una sola
+  // fila tres cuentas reales y distintas (MAPFRE AUTOMOCIÓN → Miguel Meije,
+  // TE CUIDAMOS (MAPFRE) → Carlos Menendez, EMPLEADOS MAPFRE → Joan Viles),
+  // descubierto al construir el mapeo KAM. A partir de ahora cada una cae en
+  // el comportamiento por defecto (se usa su propio nombre, sin fusionar) y
+  // cada una puede tener su propio KAM asignado en fleet_kam.
+  // OJO al añadir reglas nuevas aquí: solo deben fusionar variantes de UNA
+  // misma empresa real (distinta redacción/sucursal del mismo cliente), no
+  // palabras genéricas que puedan aparecer en nombres de negocios distintos
+  // sin relación entre sí — 'SOLUCIONES DE RENTING' es candidata a vigilar
+  // por el mismo motivo si en el futuro aparece más de una empresa distinta
+  // que la contenga.
   'TALRENT':'Talrent','SIXT RENT':'Sixt',
   'AB SERVICIOS SELECTA':'AB Servicios','GLOOBAL MOVINGRENT':'Gloobal',
   'CASTILLO RUIZ':'Castillo Ruiz','EIFFAGE ENERGIA':'Eiffage',
@@ -1352,7 +1466,7 @@ function varCls(v){return v>0.01?'up':v<-0.01?'dn':''}
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════════════════════════════
-let S={years:new Set(),months:new Set(),yearsH:new Set(),yearsF:new Set(),canalsF:new Set(['EQ','VC']),monthsF:new Set(),summary:[],fleetRows:[],fleetIndex:null,fleetCache:null,histMode:'anual',histMes:null};
+let S={years:new Set(),months:new Set(),yearsH:new Set(),yearsF:new Set(),canalsF:new Set(['EQ','VC']),monthsF:new Set(),yearsK:new Set(),canalsK:new Set(['EQ','VC']),monthsK:new Set(),fleetKam:{},summary:[],fleetRows:[],fleetIndex:null,fleetCache:null,histMode:'anual',histMes:null};
 let charts={};
 let _alertData=null;
 let _currentDetailFleet=null;
@@ -1415,9 +1529,9 @@ async function loadSummary(){
   const years=new Set(S.summary.map(r=>r.year));
   const months=new Set(S.summary.map(r=>r.month));
   S.years=years; S.months=months;
-  S.yearsH=new Set(years); S.yearsF=new Set(years);
-  S.canalsF=new Set(['EQ','VC']);
-  S.monthsF=new Set(months);
+  S.yearsH=new Set(years); S.yearsF=new Set(years); S.yearsK=new Set(years);
+  S.canalsF=new Set(['EQ','VC']); S.canalsK=new Set(['EQ','VC']);
+  S.monthsF=new Set(months); S.monthsK=new Set(months);
   buildChips();
   buildChipsH();
   buildChipsF();
@@ -1427,6 +1541,8 @@ async function loadSummary(){
   updatePills();
   // Construir índice de flotas para buscador global (en background)
   buildFleetIndex();
+  // Cargar el mapeo flota → KAM (en background, no bloquea el resto de la carga)
+  loadFleetKamMap();
 }
 
 async function buildFleetIndex(){
@@ -1517,6 +1633,47 @@ function toggleChipF(el){
   refreshFleetDetailIfOpen();
 }
 
+function buildChipsK(){
+  const years=[...new Set(S.summary.map(r=>r.year))].sort();
+  const el=document.getElementById('yr-chips-k');
+  if(!el) return;
+  el.innerHTML=years.map(y=>`<span class="chip on" data-y="${y}" onclick="toggleChipK(this)">${y}</span>`).join('');
+}
+
+function buildChipsCanalK(){
+  const el=document.getElementById('canal-chips-k');
+  if(!el) return;
+  el.innerHTML=['EQ','VC'].map(c=>`<span class="chip on" data-c="${c}" onclick="toggleChipCanalK(this)">${c}</span>`).join('');
+}
+
+function buildChipsMoK(){
+  const months=[...new Set(S.summary.map(r=>r.month))].sort((a,b)=>a-b);
+  const el=document.getElementById('mo-chips-k');
+  if(!el) return;
+  el.innerHTML=months.map(m=>`<span class="chip on" data-m="${m}" onclick="toggleChipMoK(this)">${MN[m-1]}</span>`).join('');
+}
+
+function toggleChipK(el){
+  el.classList.toggle('on');
+  S.yearsK=new Set([...document.querySelectorAll('#yr-chips-k .chip.on')].map(c=>+c.dataset.y));
+  refreshKam();
+  refreshKamDetailIfOpen();
+}
+
+function toggleChipCanalK(el){
+  el.classList.toggle('on');
+  S.canalsK=new Set([...document.querySelectorAll('#canal-chips-k .chip.on')].map(c=>c.dataset.c));
+  refreshKam();
+  refreshKamDetailIfOpen();
+}
+
+function toggleChipMoK(el){
+  el.classList.toggle('on');
+  S.monthsK=new Set([...document.querySelectorAll('#mo-chips-k .chip.on')].map(c=>+c.dataset.m));
+  refreshKam();
+  refreshKamDetailIfOpen();
+}
+
 function updatePills(){
   const years=[...new Set(S.summary.map(r=>r.year))].sort();
   const mc=[...new Set(S.summary.map(r=>r.month))].length;
@@ -1528,7 +1685,7 @@ function updatePills(){
 // ══════════════════════════════════════════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════════════════════
-const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',
+const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',kam:'Por KAM',
                alertas:'Alertas',upload:'Cargar archivos',periodos:'Períodos'};
 
 // ── Resumen: EQ vs VC ahora siempre visible, sin pestaña (ver refreshResumen) ──
@@ -1553,6 +1710,12 @@ function nav(id,el){
     document.getElementById('flotas-table-view').style.display='block';
     if(fleetHistChart){fleetHistChart.destroy();fleetHistChart=null;}
     buildChipsF(); buildChipsCanalF(); buildChipsMoF(); refreshFlotas();
+  }
+  else if(id==='kam'){
+    document.getElementById('kam-detail-view').style.display='none';
+    document.getElementById('kam-table-view').style.display='block';
+    if(kamHistChart){kamHistChart.destroy();kamHistChart=null;}
+    buildChipsK(); buildChipsCanalK(); buildChipsMoK(); refreshKam();
   }
   else if(id==='alertas') refreshAlertas();
   else if(id==='periodos') refreshPeriodos();
@@ -2143,7 +2306,7 @@ function renderFlotasTb(){
   const thead=document.getElementById('fleet-tb')?.closest('table')?.querySelector('thead tr');
   if(thead){
     const sc=(col)=>fleetSortCol===col?(fleetSortDir==='desc'?' sort-desc':' sort-asc'):'';
-    thead.innerHTML='<th class="sortable" onclick="setFleetSort(&quot;name&quot;)">Flota</th><th>Canal</th>'
+    thead.innerHTML='<th class="sortable" onclick="setFleetSort(&quot;name&quot;)">Flota</th><th>Canal</th><th>KAM</th>'
       +dynYrs.map(yr=>`<th class="r">${yr}${yr===latY?' YTD':' FY'}</th>`).join('')
       +`<th class="r sortable${sc('proy')}" onclick="setFleetSort(&quot;proy&quot;)">Proy FY</th>`
       +`<th class="r sortable${sc('var')}" onclick="setFleetSort(&quot;var&quot;)">Var vs PY</th>`
@@ -2188,6 +2351,7 @@ function renderFlotasTb(){
     return`<tr class="tr-link" onclick="showFleetHist('${f.name.replace(/'/g,"\'")}')">
       <td style="color:var(--bl)">${f.name}</td>
       <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      <td style="font-size:11px;color:${S.fleetKam[f.name]?'var(--text)':'var(--muted)'}">${S.fleetKam[f.name]||'—'}</td>
       ${dynCols}
       <td class="r">${f._proy>0?fmtM(f._proy):'—'}</td>
       <td class="r ${varCls(f._var)}">${varStr(f._var)}${f._pyNS>0?`<br><span style="font-size:10px;color:var(--muted)">${fmtM(f._pyNS)}</span>`:''}</td>
@@ -2898,16 +3062,23 @@ function exportPDF(){
   const sub=`${years.join(' / ')} · ${months.length} meses · Exportado ${new Date().toLocaleDateString('es-ES')}`;
   document.getElementById('print-subtitle').textContent=sub;
 
+  // Si "Por KAM" es la vista activa, se imprime esa (lista o ficha del KAM
+  // abierto) en vez del resumen+flotas de siempre — ver regla CSS
+  // body.printing-kam en @media print.
+  const isKamActive=document.getElementById('view-kam')?.classList.contains('active');
+  if(isKamActive) document.body.classList.add('printing-kam');
+
   // Asegurarse de que la vista resumen y flotas sean visibles para print
   // Guardamos el estado actual para restaurarlo después
   const views=document.querySelectorAll('.view');
   const prevDisplay={};
   views.forEach(v=>{ prevDisplay[v.id]=v.style.display; });
 
-  // Para el PDF mostramos resumen + flotas
+  // Para el PDF mostramos resumen + flotas (o Por KAM si es la vista activa)
   views.forEach(v=>{ v.style.display='none'; });
   document.getElementById('view-resumen').style.display='block';
   document.getElementById('view-flotas').style.display='block';
+  document.getElementById('view-kam').style.display='block';
   document.getElementById('flotas-table-view').style.display='block';
   if(document.getElementById('flotas-detail-view'))
     document.getElementById('flotas-detail-view').style.display='none';
@@ -2917,6 +3088,7 @@ function exportPDF(){
   // Restaurar estado
   setTimeout(()=>{
     views.forEach(v=>{ v.style.display=prevDisplay[v.id]; });
+    document.body.classList.remove('printing-kam');
   }, 500);
 }
 
@@ -2926,6 +3098,16 @@ async function exportExcel(){
 
   // ── Detectar vista activa para aplicar filtros correctos ─────────────────
   const activeView=document.querySelector('.view.active')?.id||'view-resumen';
+
+  // "Por KAM" tiene su propio formato de exportación (ficha de un KAM si hay
+  // uno abierto, o el listado completo si no) — se desvía aquí del resto.
+  if(activeView==='view-kam'){
+    const isKamDetailOpen=document.getElementById('kam-detail-view')?.style.display==='block' && _currentDetailKam;
+    if(isKamDetailOpen) await exportKamDetail();
+    else await exportKamList();
+    return;
+  }
+
   const isFlotas=activeView==='view-flotas';
 
   // Filtros según vista
@@ -3064,6 +3246,231 @@ async function exportExcel(){
 async function openFleetFromResumen(fleet){
   document.querySelector('.nav-item[onclick*="flotas"]').click();
   setTimeout(()=>showFleetHist(fleet),300);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POR KAM
+// ══════════════════════════════════════════════════════════════════════════════
+// Usa el mapeo flota→KAM guardado en la tabla `fleet_kam` (ver "Mapeo KAM" en
+// Cargar archivos) para agrupar la misma actividad que ya tiene "Por flota",
+// pero por responsable comercial en vez de por cliente. Si la tabla aún no
+// existe en Supabase o está vacía, todas las flotas aparecen como "sin KAM
+// asignado" — la vista no rompe, simplemente no puede agrupar nada todavía.
+let kamHistChart=null;
+let _currentDetailKam=null;
+let _currentDetailKamRows=null;
+
+async function loadFleetKamMap(){
+  try{
+    const rows=await sbSelectAll('fleet_kam','select=fleet_norm,kam&order=fleet_norm.asc');
+    const map={};
+    for(const r of (rows||[])) map[r.fleet_norm]=r.kam;
+    S.fleetKam=map;
+  }catch(e){
+    console.warn('No se pudo cargar el mapeo flota→KAM (¿existe la tabla fleet_kam en Supabase? mira el SQL de configuración).',e);
+    S.fleetKam={};
+  }
+}
+
+async function refreshKam(){
+  const years=S.yearsK.size?[...S.yearsK].sort():[...new Set(S.summary.map(r=>r.year))].sort();
+  const activeMonths=S.monthsK.size?[...S.monthsK].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const activeCanals=S.canalsK.size?[...S.canalsK]:['EQ','VC'];
+  const rows=await fetchData(years,activeMonths);
+  if(!rows) return;
+  const filteredRows=rows.filter(r=>activeCanals.includes(r.canal));
+
+  const byFleet={};
+  for(const r of filteredRows){
+    const k=r.fleet_norm;
+    if(!byFleet[k]) byFleet[k]={name:k,years:{}};
+    if(!byFleet[k].years[r.year]) byFleet[k].years[r.year]={ns:0,gm:0,months:new Set()};
+    byFleet[k].years[r.year].ns+=r.ns;
+    byFleet[k].years[r.year].gm+=r.gm;
+    byFleet[k].years[r.year].months.add(r.month);
+  }
+
+  const latY=Math.max(...years);
+  const prevY=years[years.indexOf(latY)-1];
+
+  const byKam={};
+  const unmapped=[];
+  for(const f of Object.values(byFleet)){
+    const latestNs=f.years[latY]?.ns||0;
+    const prevNsRaw=f.years[prevY]?.ns||0;
+    if(latestNs<=0 && prevNsRaw<=0) continue; // sin actividad relevante en el período filtrado
+    const kam=S.fleetKam[f.name];
+    if(!kam){ if(latestNs>0) unmapped.push({name:f.name,ns:latestNs}); continue; }
+    if(!byKam[kam]) byKam[kam]={name:kam,fleets:[]};
+    byKam[kam].fleets.push(f);
+  }
+
+  const kamRows=Object.values(byKam).map(k=>{
+    let curNS=0,curGM=0,prevNS=0; const monthsSet=new Set();
+    for(const f of k.fleets){
+      const latest=f.years[latY];
+      const prev=prevY?f.years[prevY]:null;
+      if(latest){curNS+=latest.ns;curGM+=latest.gm; latest.months.forEach(m=>monthsSet.add(m));}
+      if(prev) prevNS+=prev.ns;
+    }
+    const nm=monthsSet.size||1;
+    const proy=curNS/nm*12;
+    const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
+    const gp=curNS>0?curGM/curNS:0;
+    return{name:k.name,nFleets:k.fleets.length,ns:curNS,proy,varV,gp};
+  }).filter(k=>k.ns>0).sort((a,b)=>b.ns-a.ns);
+
+  document.getElementById('kam-count').textContent=`${kamRows.length} KAM con actividad · ${unmapped.length} flotas sin asignar`;
+  document.getElementById('kam-tb').innerHTML=kamRows.length?kamRows.map(k=>`
+    <tr class="tr-link" onclick="showKamDetail('${k.name.replace(/'/g,"\\'")}')">
+      <td style="color:var(--bl);font-weight:500">${k.name}</td>
+      <td class="r">${k.nFleets}</td>
+      <td class="r">${fmtM(k.ns)}</td>
+      <td class="r">${k.proy>0?fmtM(k.proy):'—'}</td>
+      <td class="r ${varCls(k.varV)}">${varStr(k.varV)}</td>
+      <td class="r">${fmtP(k.gp)}</td>
+      <td title="${growthLabel(k.varV)}">${growthSem(k.varV)}</td>
+    </tr>`).join(''):'<tr><td colspan="7" class="no-data">Sin datos para los filtros actuales.</td></tr>';
+
+  const unmappedCard=document.getElementById('kam-unmapped-card');
+  if(unmapped.length){
+    unmappedCard.style.display='';
+    document.getElementById('kam-unmapped-count').textContent=`(${unmapped.length})`;
+    document.getElementById('kam-unmapped-list').innerHTML=unmapped
+      .sort((a,b)=>b.ns-a.ns).slice(0,60)
+      .map(f=>`<span style="display:inline-block;padding:2px 8px;margin:2px 3px;background:var(--lg);border-radius:10px;cursor:pointer" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')" title="NS: ${fmtM(f.ns)}">${f.name}</span>`).join('');
+  }else{
+    unmappedCard.style.display='none';
+  }
+}
+
+async function showKamDetail(kamName){
+  _currentDetailKam=kamName;
+  document.getElementById('kam-table-view').style.display='none';
+  document.getElementById('kam-detail-view').style.display='block';
+  document.getElementById('kam-detail-name').textContent=kamName;
+
+  const fleetSet=new Set(Object.keys(S.fleetKam).filter(f=>S.fleetKam[f]===kamName));
+  const years=S.yearsK.size?[...S.yearsK].sort():[...new Set(S.summary.map(r=>r.year))].sort();
+  const activeMonths=S.monthsK.size?[...S.monthsK].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const activeCanals=S.canalsK.size?[...S.canalsK]:['EQ','VC'];
+
+  if(!fleetSet.size){
+    document.getElementById('kam-detail-row').innerHTML='<tr><td colspan="7" class="no-data">Sin flotas asignadas a este KAM todavía.</td></tr>';
+    document.getElementById('kam-fleet-tb').innerHTML='';
+    if(kamHistChart){kamHistChart.destroy();kamHistChart=null;}
+    _currentDetailKamRows=null;
+    return;
+  }
+
+  // Traemos el año completo (Ene-Dic) para el gráfico de tendencia — el
+  // filtro de mes solo recorta el "Resumen" y la tabla de flotas, igual
+  // criterio que en la ficha de una flota individual.
+  const rowsFull=(await fetchData(years,[1,2,3,4,5,6,7,8,9,10,11,12])||[])
+    .filter(r=>fleetSet.has(r.fleet_norm) && activeCanals.includes(r.canal));
+  _currentDetailKamRows=rowsFull;
+
+  if(!rowsFull.length){
+    document.getElementById('kam-detail-row').innerHTML='<tr><td colspan="7" class="no-data">Sin datos para este KAM con los filtros actuales.</td></tr>';
+    document.getElementById('kam-fleet-tb').innerHTML='';
+    if(kamHistChart){kamHistChart.destroy();kamHistChart=null;}
+    return;
+  }
+
+  const latY=Math.max(...years);
+  const prevY=years[years.indexOf(latY)-1];
+  const rowsResumen=rowsFull.filter(r=>activeMonths.includes(r.month));
+
+  const yearAgg=(rs,yr)=>{
+    const rr=rs.filter(r=>r.year===yr);
+    return{ns:rr.reduce((s,r)=>s+r.ns,0),gm:rr.reduce((s,r)=>s+r.gm,0),months:new Set(rr.filter(r=>r.ns>0||r.gm>0).map(r=>r.month))};
+  };
+  const latest=yearAgg(rowsResumen,latY);
+  const prev=prevY?yearAgg(rowsResumen,prevY):{ns:0,gm:0,months:new Set()};
+  const nm=latest.months.size||1;
+  const proy=latest.ns/nm*12;
+  const varV=prev.ns>0?(latest.ns-prev.ns)/prev.ns:null;
+  const gp=latest.ns>0?latest.gm/latest.ns:0;
+  const isFullYearK=activeMonths.length===12;
+  const monthsLabelK=(()=>{
+    if(isFullYearK) return null;
+    const sorted=[...activeMonths].sort((a,b)=>a-b);
+    const isContig=sorted.every((m,i)=>i===0||m===sorted[i-1]+1);
+    return isContig?`${MN[sorted[0]-1]}-${MN[sorted[sorted.length-1]-1]}`:`${sorted.length}m`;
+  })();
+
+  document.getElementById('kam-detail-row').innerHTML=`
+    <tr class="tr-selected">
+      <td style="color:var(--bl);font-weight:600">${kamName}</td>
+      <td class="r">${fleetSet.size}</td>
+      <td class="r">${fmtM(latest.ns)}</td>
+      <td class="r">${proy>0?fmtM(proy):'—'}</td>
+      <td class="r ${varCls(varV)}">${varStr(varV)}</td>
+      <td class="r">${fmtP(gp)}</td>
+      <td title="${growthLabel(varV)}">${growthSem(varV)}</td>
+    </tr>`;
+
+  document.getElementById('kam-hist-title').textContent=
+    `Evolución mensual NS€ — ${kamName}${isFullYearK?'':' · Resumen: '+monthsLabelK}`;
+
+  const ds=years.map(yr=>({
+    label:String(yr),
+    data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{
+      const n=rowsFull.filter(r=>r.year===yr&&r.month===m).reduce((s,r)=>s+r.ns,0);
+      return n>0?Math.round(n):null;
+    }),
+    borderColor:YCOL[yr]||'#999',backgroundColor:'transparent',tension:.3,spanGaps:false,
+    pointRadius:3,pointHoverRadius:5,borderWidth:2
+  }));
+  if(kamHistChart) kamHistChart.destroy();
+  const ctx=document.getElementById('ch-kam').getContext('2d');
+  kamHistChart=new Chart(ctx,{type:'line',data:{labels:MN,datasets:ds},options:chartOpts({})});
+
+  // Tabla de flotas de este KAM, con el mismo criterio de período filtrado
+  // que la tabla "Por flota" — clic en una flota abre su propia ficha.
+  const byFleetK={};
+  for(const r of rowsResumen){
+    if(!byFleetK[r.fleet_norm]) byFleetK[r.fleet_norm]={name:r.fleet_norm,years:{},canals:new Set()};
+    if(!byFleetK[r.fleet_norm].years[r.year]) byFleetK[r.fleet_norm].years[r.year]={ns:0,gm:0,months:new Set()};
+    byFleetK[r.fleet_norm].years[r.year].ns+=r.ns;
+    byFleetK[r.fleet_norm].years[r.year].gm+=r.gm;
+    byFleetK[r.fleet_norm].years[r.year].months.add(r.month);
+    byFleetK[r.fleet_norm].canals.add(r.canal);
+  }
+  const fleetList=Object.values(byFleetK).sort((a,b)=>(b.years[latY]?.ns||0)-(a.years[latY]?.ns||0));
+  document.getElementById('kam-fleet-tb').innerHTML=fleetList.length?fleetList.map(f=>{
+    const latestF=f.years[latY]||{ns:0,gm:0,months:new Set()};
+    const prevF=prevY?(f.years[prevY]||{ns:0}):{ns:0};
+    const nmF=latestF.months.size||1;
+    const proyF=latestF.ns/nmF*12;
+    const varVF=prevF.ns>0?(latestF.ns-prevF.ns)/prevF.ns:null;
+    const gpF=latestF.ns>0?latestF.gm/latestF.ns:0;
+    const c=[...f.canals].sort().join('+');
+    return`<tr class="tr-link" onclick="globalSearchGo('${f.name.replace(/'/g,"\\'")}')">
+      <td style="color:var(--bl)">${f.name}</td>
+      <td><span class="badge ${c.includes('+')?'both':c}">${c}</span></td>
+      <td class="r">${proyF>0?fmtM(proyF):'—'}</td>
+      <td class="r ${varCls(varVF)}">${varStr(varVF)}</td>
+      <td class="r">${fmtP(gpF)}</td>
+      <td title="${growthLabel(varVF)}">${growthSem(varVF)}</td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="6" class="no-data">Sin datos en el período filtrado.</td></tr>';
+}
+
+function backToKamList(){
+  document.getElementById('kam-detail-view').style.display='none';
+  document.getElementById('kam-table-view').style.display='block';
+  if(kamHistChart){kamHistChart.destroy();kamHistChart=null;}
+  _currentDetailKam=null;
+}
+
+// Igual que refreshFleetDetailIfOpen: si la ficha de un KAM está abierta
+// cuando se toca un filtro (años/canal/mes) de "Por KAM", la redibuja.
+function refreshKamDetailIfOpen(){
+  const dv=document.getElementById('kam-detail-view');
+  if(dv && dv.style.display==='block' && _currentDetailKam){
+    showKamDetail(_currentDetailKam);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -3259,8 +3666,10 @@ if(uploadDateEl) uploadDateEl.value=yesterdayISO();
 function setUploadMode(mode){
   document.getElementById('upload-mode-normal').classList.toggle('on',mode==='normal');
   document.getElementById('upload-mode-bulk').classList.toggle('on',mode==='bulk');
+  document.getElementById('upload-mode-kam').classList.toggle('on',mode==='kam');
   document.getElementById('upload-normal-panel').style.display=mode==='normal'?'':'none';
   document.getElementById('upload-bulk-panel').style.display=mode==='bulk'?'':'none';
+  document.getElementById('upload-kam-panel').style.display=mode==='kam'?'':'none';
 }
 
 // ── CARGA MASIVA HISTÓRICA ──────────────────────────────────────────────────
@@ -3969,6 +4378,101 @@ async function handleFiles(files){
   }
 }
 
+// ── MAPEO KAM ────────────────────────────────────────────────────────────────
+// Extrae el nombre del responsable de la fila "Filtros aplicados" (el mismo
+// mecanismo que ya usa la carga masiva para leer la fecha) y guarda, por cada
+// flota del archivo, a qué KAM pertenece. No toca fleet_data ni
+// fleet_data_daily — es una tabla de mapeo aparte (fleet_kam), así que subir
+// esto nunca puede duplicar ni alterar ninguna cifra de ventas.
+function extractResponsableFromFilterRow(rawRows){
+  for(const row of rawRows){
+    const vals=Object.values(row);
+    if(typeof vals[0]==='string' && vals[0].startsWith('Filtros aplicados')){
+      const text=vals.filter(v=>typeof v==='string').join('\n');
+      const m=text.match(/Responsable es ([^\n]+)/i);
+      if(!m) return null;
+      const kam=m[1].trim();
+      // 03/08/2026: detectado en producción — algunas flotas sin KAM asignado
+      // en NEXT FLEET devuelven como "Responsable" el propio código de canal
+      // (p.ej. "D1A", "D1D") en vez de un nombre de persona. Si el valor
+      // extraído coincide con uno de los códigos que aparecen en la línea
+      // "CANAL NAVISION es ..." del mismo filtro, se marca como sospechoso
+      // para que se avise en el log en vez de guardarlo como si fuera un KAM
+      // real — evita colar "KAMs" falsos en la vista "Por KAM".
+      const canalMatch=text.match(/CANAL NAVISION es ([^\n]+)/i);
+      const canalCodes=canalMatch?canalMatch[1].split(/,| o /i).map(s=>s.trim()).filter(Boolean):[];
+      const suspicious=canalCodes.some(c=>c.toLowerCase()===kam.toLowerCase());
+      return {kam,suspicious};
+    }
+  }
+  return null;
+}
+
+const kamDropZone=document.getElementById('kam-drop-zone');
+const kamFileInput=document.getElementById('kam-file-input');
+kamFileInput.onchange=e=>{handleKamFiles([...e.target.files]);kamFileInput.value='';};
+kamDropZone.ondragover=e=>{e.preventDefault();kamDropZone.classList.add('drag')};
+kamDropZone.ondragleave=()=>kamDropZone.classList.remove('drag');
+kamDropZone.ondrop=e=>{e.preventDefault();kamDropZone.classList.remove('drag');handleKamFiles([...e.dataTransfer.files])};
+
+async function handleKamFiles(files){
+  if(!isAdmin()){alert('Solo el usuario administrador puede subir archivos.');return;}
+  const log=document.getElementById('kam-log');
+  log.style.display='block';
+  log.innerHTML='';
+
+  for(const file of files){
+    const rowId='kamlog_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    log.innerHTML+=`<div class="log-row" id="${rowId}"><span class="spinner"></span><b>${file.name}</b> — Leyendo...</div>`;
+    log.scrollTop=log.scrollHeight;
+    try{
+      const buf=await file.arrayBuffer();
+      const rawRows=readWorkbookRows(new Uint8Array(buf));
+      const info=extractResponsableFromFilterRow(rawRows);
+      if(!info){
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — No se ha encontrado "Responsable es ..." en la fila de filtros. ¿Es un export de NEXT FLEET filtrado por Responsable?`;
+        continue;
+      }
+      // 03/08/2026: al principio esto bloqueaba el guardado cuando el
+      // "Responsable" coincidía con un código de canal (p.ej. "D1A", "D1D"),
+      // asumiendo que era un error de NEXT FLEET. Carlos confirmó que NO es
+      // un error: "D1A" y "D1D" son canales independientes que legítimamente
+      // no tienen KAM asignado, y deben guardarse tal cual para poder
+      // filtrarlos como una opción más en "Por KAM". Así que ahora solo se
+      // avisa en el log (por si algún día aparece un código nuevo que sí sea
+      // un error real) pero SIEMPRE se guarda.
+      const {kam,suspicious}=info;
+      const kind=sniffKind(rawRows);
+      if(kind!=='EQ'){
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Detecta "Responsable: ${kam}" pero las columnas no son las de un archivo EQ (NOMBRE/NS€/GM€). Revisa el export.`;
+        continue;
+      }
+      const fleets=parseRowsByKind(rawRows,'EQ');
+      if(!fleets.length){
+        document.getElementById(rowId).innerHTML=`<span class="log-warn">⚠</span><b>${file.name}</b> — Responsable "${kam}" detectado, pero sin filas de flotas válidas.`;
+        continue;
+      }
+      const payload=fleets.map(f=>({fleet_norm:f.norm,fleet_raw:f.raw,kam,updated_at:new Date().toISOString()}));
+      for(let i=0;i<payload.length;i+=50){
+        const batch=payload.slice(i,i+50);
+        await restJson('fleet_kam?on_conflict=fleet_norm',{
+          method:'POST',
+          body:JSON.stringify(batch),
+          headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}
+        });
+      }
+      document.getElementById(rowId).innerHTML=`<span class="log-ok">✓</span><b>${file.name}</b> — Responsable: <b>${kam}</b> · ${fleets.length} flotas asignadas.${suspicious?' <span style="color:var(--muted)">(coincide con un código de canal — guardado igualmente como KAM)</span>':''}`;
+    }catch(e){
+      const msg=(e.message||'Error desconocido').replace(/[<>]/g,'').slice(0,300);
+      document.getElementById(rowId).innerHTML=`<span class="log-err">✗</span><b>${file.name}</b> — NO guardado: ${msg}${msg.includes('fleet_kam')||msg.includes('42P01')?' (¿has creado la tabla fleet_kam en Supabase? mira el SQL que te pasó Claude)':''}`;
+      console.error('Error guardando mapeo KAM', file.name, e);
+    }
+  }
+
+  await loadFleetKamMap();
+  try{ refreshKam(); }catch(e){}
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // CHARTS
 // ══════════════════════════════════════════════════════════════════════════════
@@ -4192,6 +4696,157 @@ async function exportFleetDetail(){
   XLSX.utils.book_append_sheet(wb,wsMon,'Mensual');
 
   XLSX.writeFile(wb,`FirstStop_Flota_${fleet.replace(/[^a-zA-Z0-9]/g,'_')}_${now.replace(/\//g,'-')}.xlsx`);
+}
+
+// ── EXPORT EXCEL — POR KAM ────────────────────────────────────────────────────
+// Ficha de un KAM concreto: KPIs por año + desglose mensual agregado + listado
+// de sus flotas con NS/GM/Proy FY/Var vs PY, igual criterio que "Exportar
+// ficha" en Por flota.
+async function exportKamDetail(){
+  if(!_currentDetailKam||!_currentDetailKamRows||!_currentDetailKamRows.length){alert('Abre primero la ficha de un KAM con datos.');return;}
+  if(!window.XLSX){alert('SheetJS no disponible.');return;}
+  const kam=_currentDetailKam;
+  const rows=_currentDetailKamRows;
+  const wb=XLSX.utils.book_new();
+  const now=new Date().toLocaleDateString('es-ES');
+
+  // Hoja 1: KPIs por año
+  const years=[...new Set(rows.map(r=>r.year))].sort();
+  const byYear={};
+  for(const r of rows){
+    if(!byYear[r.year]) byYear[r.year]={ns:0,gm:0,months:new Set(),canals:new Set()};
+    byYear[r.year].ns+=r.ns; byYear[r.year].gm+=r.gm;
+    byYear[r.year].months.add(r.month); byYear[r.year].canals.add(r.canal);
+  }
+  const nFleets=new Set(rows.map(r=>r.fleet_norm)).size;
+  const kpiData=[[`Ficha de KAM: ${kam}`],[`Flotas asignadas: ${nFleets}`],[`Exportado: ${now}`],[]];
+  kpiData.push(['Año','Canal','NS (€)','GM (€)','GM%','Meses datos','Proyección FY (€)']);
+  for(const yr of years){
+    const d=byYear[yr];
+    const nm=d.months.size||1;
+    const proy=d.ns/nm*12;
+    const gp=d.ns>0?+(d.gm/d.ns*100).toFixed(1):0;
+    kpiData.push([yr,[...d.canals].sort().join('+'),Math.round(d.ns),Math.round(d.gm),gp,nm,Math.round(proy)]);
+  }
+  const wsKpi=XLSX.utils.aoa_to_sheet(kpiData);
+  wsKpi['!cols']=[{wch:8},{wch:8},{wch:14},{wch:14},{wch:8},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,wsKpi,'Resumen');
+
+  // Hoja 2: desglose mensual agregado del KAM (todas sus flotas juntas)
+  const monthly=[[`Evolución mensual agregada: ${kam}`],['Año','Mes','NS (€)','GM (€)','GM%']];
+  const byYm={};
+  for(const r of rows){
+    const k=`${r.year}_${r.month}`;
+    if(!byYm[k]) byYm[k]={year:r.year,month:r.month,ns:0,gm:0};
+    byYm[k].ns+=r.ns; byYm[k].gm+=r.gm;
+  }
+  Object.values(byYm).sort((a,b)=>a.year-b.year||a.month-b.month).forEach(d=>{
+    monthly.push([d.year,MN[d.month-1],Math.round(d.ns),Math.round(d.gm),d.ns>0?+(d.gm/d.ns*100).toFixed(1):0]);
+  });
+  const wsMon=XLSX.utils.aoa_to_sheet(monthly);
+  wsMon['!cols']=[{wch:8},{wch:8},{wch:14},{wch:14},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,wsMon,'Mensual');
+
+  // Hoja 3: flotas de este KAM, con el mismo criterio que la tabla en pantalla
+  const latY=Math.max(...years);
+  const prevY=years[years.indexOf(latY)-1];
+  const activeMonths=S.monthsK.size?[...S.monthsK].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const rowsResumen=rows.filter(r=>activeMonths.includes(r.month));
+  const byFleet={};
+  for(const r of rowsResumen){
+    if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={name:r.fleet_norm,years:{},canals:new Set()};
+    if(!byFleet[r.fleet_norm].years[r.year]) byFleet[r.fleet_norm].years[r.year]={ns:0,gm:0,months:new Set()};
+    byFleet[r.fleet_norm].years[r.year].ns+=r.ns;
+    byFleet[r.fleet_norm].years[r.year].gm+=r.gm;
+    byFleet[r.fleet_norm].years[r.year].months.add(r.month);
+    byFleet[r.fleet_norm].canals.add(r.canal);
+  }
+  const fleetData=[[`Flotas de ${kam}`],['Flota','Canal','NS (€)','GM (€)','GM%','Proyección FY (€)','Var vs PY (%)']];
+  Object.values(byFleet).sort((a,b)=>(b.years[latY]?.ns||0)-(a.years[latY]?.ns||0)).forEach(f=>{
+    const latest=f.years[latY]||{ns:0,gm:0,months:new Set()};
+    const prev=prevY?(f.years[prevY]||{ns:0}):{ns:0};
+    const nm=latest.months.size||1;
+    const proy=latest.ns/nm*12;
+    const gp=latest.ns>0?+(latest.gm/latest.ns*100).toFixed(1):0;
+    const varV=prev.ns>0?+((latest.ns-prev.ns)/prev.ns*100).toFixed(1):null;
+    fleetData.push([f.name,[...f.canals].sort().join('+'),Math.round(latest.ns),Math.round(latest.gm),gp,Math.round(proy),varV]);
+  });
+  const wsFleet=XLSX.utils.aoa_to_sheet(fleetData);
+  wsFleet['!cols']=[{wch:40},{wch:8},{wch:14},{wch:14},{wch:8},{wch:14},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,wsFleet,'Flotas');
+
+  XLSX.writeFile(wb,`FirstStop_KAM_${kam.replace(/[^a-zA-Z0-9]/g,'_')}_${now.replace(/\//g,'-')}.xlsx`);
+}
+
+// Lista completa de KAMs (vista general, no una ficha concreta): un resumen
+// por KAM con las mismas métricas que la tabla en pantalla, más una hoja con
+// las flotas sin KAM asignado — para poder priorizar qué falta por mapear.
+async function exportKamList(){
+  if(!window.XLSX){alert('SheetJS no disponible.');return;}
+  const years=S.yearsK.size?[...S.yearsK].sort():[...new Set(S.summary.map(r=>r.year))].sort();
+  const activeMonths=S.monthsK.size?[...S.monthsK].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const activeCanals=S.canalsK.size?[...S.canalsK]:['EQ','VC'];
+  const rows=await fetchData(years,activeMonths);
+  if(!rows?.length){alert('Sin datos para los filtros actuales.');return;}
+  const filteredRows=rows.filter(r=>activeCanals.includes(r.canal));
+
+  const byFleet={};
+  for(const r of filteredRows){
+    const k=r.fleet_norm;
+    if(!byFleet[k]) byFleet[k]={name:k,years:{}};
+    if(!byFleet[k].years[r.year]) byFleet[k].years[r.year]={ns:0,gm:0,months:new Set()};
+    byFleet[k].years[r.year].ns+=r.ns;
+    byFleet[k].years[r.year].gm+=r.gm;
+    byFleet[k].years[r.year].months.add(r.month);
+  }
+  const latY=Math.max(...years);
+  const prevY=years[years.indexOf(latY)-1];
+
+  const byKam={}; const unmapped=[];
+  for(const f of Object.values(byFleet)){
+    const latestNs=f.years[latY]?.ns||0;
+    const prevNsRaw=f.years[prevY]?.ns||0;
+    if(latestNs<=0 && prevNsRaw<=0) continue;
+    const kam=S.fleetKam[f.name];
+    if(!kam){ if(latestNs>0) unmapped.push({name:f.name,ns:latestNs}); continue; }
+    if(!byKam[kam]) byKam[kam]={name:kam,fleets:[]};
+    byKam[kam].fleets.push(f);
+  }
+  const kamRows=Object.values(byKam).map(k=>{
+    let curNS=0,curGM=0,prevNS=0; const monthsSet=new Set();
+    for(const f of k.fleets){
+      const latest=f.years[latY];
+      const prev=prevY?f.years[prevY]:null;
+      if(latest){curNS+=latest.ns;curGM+=latest.gm; latest.months.forEach(m=>monthsSet.add(m));}
+      if(prev) prevNS+=prev.ns;
+    }
+    const nm=monthsSet.size||1;
+    const proy=curNS/nm*12;
+    const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
+    const gp=curNS>0?curGM/curNS:0;
+    return{name:k.name,nFleets:k.fleets.length,ns:curNS,gm:curGM,proy,varV,gp};
+  }).filter(k=>k.ns>0).sort((a,b)=>b.ns-a.ns);
+
+  const wb=XLSX.utils.book_new();
+  const now=new Date().toLocaleDateString('es-ES');
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const periodTxt=`${years.join('/')} · ${activeMonths.map(m=>MN[m-1]).join(', ')} · Canal: ${canalLabel}`;
+
+  const kamData=[['Actividad por KAM'],[periodTxt],[`Exportado: ${now}`],[]];
+  kamData.push(['KAM','Flotas','NS período (€)','GM período (€)','GM%','Proyección FY (€)','Var vs PY (%)']);
+  kamRows.forEach(k=>kamData.push([k.name,k.nFleets,Math.round(k.ns),Math.round(k.gm),+(k.gp*100).toFixed(1),Math.round(k.proy),k.varV!==null?+(k.varV*100).toFixed(1):null]));
+  const wsKam=XLSX.utils.aoa_to_sheet(kamData);
+  wsKam['!cols']=[{wch:22},{wch:10},{wch:16},{wch:16},{wch:8},{wch:16},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,wsKam,'KAMs');
+
+  const unmappedData=[['Flotas sin KAM asignado'],[`NS ${latY} (período filtrado)`],[]];
+  unmappedData.push(['Flota','NS (€)']);
+  unmapped.sort((a,b)=>b.ns-a.ns).forEach(f=>unmappedData.push([f.name,Math.round(f.ns)]));
+  const wsUn=XLSX.utils.aoa_to_sheet(unmappedData);
+  wsUn['!cols']=[{wch:40},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,wsUn,'Sin asignar');
+
+  XLSX.writeFile(wb,`FirstStop_PorKAM_${now.replace(/\//g,'-')}.xlsx`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

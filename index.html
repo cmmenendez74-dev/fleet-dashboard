@@ -279,6 +279,13 @@ body.present-mode #exec-summary-btn{display:none}
 .exec-title{font-size:18px;font-weight:800;margin-bottom:.25rem}
 .exec-period{font-size:12px;color:var(--muted);margin-bottom:1rem}
 .exec-daywarn{display:inline-block;font-size:11px;background:#FFF9C4;color:#8a6d00;border:1px solid #F0D840;border-radius:6px;padding:3px 8px;margin-bottom:1rem}
+.exec-filters{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0 .3rem}
+.exec-filter-badge{font-size:11px;padding:2px 9px;border-radius:10px;background:var(--lg);border:1px solid var(--border);color:var(--mg);font-weight:500;white-space:nowrap}
+.exec-source{font-size:10.5px;color:var(--muted);margin-bottom:.9rem}
+.exec-estimate-banner{border:1.5px solid #E65100;background:#FFF3E0;border-radius:8px;padding:.75rem 1rem;margin-bottom:1.1rem}
+.exec-estimate-banner .eeb-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:#E65100;margin-bottom:.3rem}
+.exec-estimate-banner .eeb-val{font-size:22px;font-weight:800;color:var(--dg)}
+.exec-estimate-banner .eeb-sub{font-size:12px;color:var(--mg);margin-top:.25rem}
 .exec-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem;margin-bottom:1.1rem}
 .exec-kpi{border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem}
 .exec-kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;font-weight:600}
@@ -2612,6 +2619,41 @@ function execKpiHtml(k){
   return `<div class="exec-kpi"><div class="exec-kpi-lbl">${k.l}</div><div class="exec-kpi-val">${k.v}</div><div class="exec-kpi-sub">${k.s}</div></div>`;
 }
 
+// ── CLARIDAD DE FILTROS Y FUENTE DE DATOS (12/08/2026) ───────────────────────
+// Cada bloque del resumen ejecutivo tiene que decir, sin ambigüedad: qué se
+// ha filtrado (badges, no una frase que hay que leer entera) y de dónde sale
+// el número (qué tabla, con qué filtro aplicado). Se usa igual en las 9
+// variantes (Día/Mes/Período × Global/Flota/KAM).
+function execFiltersHtml(badges){
+  return `<div class="exec-filters">${badges.filter(Boolean).map(b=>`<span class="exec-filter-badge"><b>${b.l}:</b> ${b.v}</span>`).join('')}</div>`;
+}
+function execSourceHtml(text){
+  return `<div class="exec-source">📊 ${text}</div>`;
+}
+
+// "Mes en curso" tiene que ser SIEMPRE el mes natural actual (según el
+// último día realmente cargado), nunca "el mes más alto que esté marcado
+// en los chips de la pestaña Resumen" — si no, dos personas mirando el
+// resumen ejecutivo el mismo día podrían ver meses distintos según cómo
+// tuviera cada una los filtros de otra pantalla, que es justo la falta de
+// fiabilidad que hay que evitar aquí.
+function getCurrentMonthInfo(){
+  const ref=_lastDailyDate?new Date(_lastDailyDate+'T00:00:00'):new Date();
+  return{year:ref.getFullYear(),month:ref.getMonth()+1};
+}
+
+// Banner grande y aparte (no una fila más de KPI) para que la estimación de
+// cierre de mes salte a la vista de inmediato y se pueda reaccionar con
+// antelación, en vez de descubrirlo solo si se lee el detalle con calma.
+function execEstimateBanner(mesTxt,curNS,proyNS,prevNS,daysElapsed,daysInMonth){
+  const varV=(prevNS>0)?(proyNS-prevNS)/prevNS:null;
+  return `<div class="exec-estimate-banner">
+    <div class="eeb-title">📈 Estimación de cierre — ${mesTxt} (mes en curso, día ${daysElapsed} de ${daysInMonth})</div>
+    <div class="eeb-val">${fmtM(proyNS)}</div>
+    <div class="eeb-sub">Real acumulado hasta hoy: <b>${fmtM(curNS)}</b>${varV!==null?` · <b class="${varCls(varV)}">${varStr(varV)}</b> vs mismo mes año anterior (sobre la estimación, no sobre el parcial)`:' · sin mismo mes del año anterior para comparar'}</div>
+  </div>`;
+}
+
 async function openExecutiveSummary(){
   const overlay=document.getElementById('exec-summary-overlay');
   overlay.classList.add('show');
@@ -2648,27 +2690,31 @@ async function renderExecScope(mode){
   body.innerHTML=execScopeToolbarHtml(mode)+'<div id="exec-summary-content"><div class="loading-msg"><span class="spinner"></span>Generando resumen...</div></div>';
   const contentEl=document.getElementById('exec-summary-content');
   try{
-    // Antes esto solo miraba si el estilo inline de #flotas-detail-view seguía
-    // en 'block' — pero ese estilo NO se resetea al cambiar de pestaña (solo
-    // al pulsar "Volver a la lista" o al reabrir "Por flota"), así que si
-    // habías abierto una flota y luego ibas a Resumen/Año vs año/Alertas sin
-    // volver atrás, el resumen ejecutivo seguía "pegado" a esa flota aunque
-    // ya no la estuvieras viendo. Ahora también exige que la pestaña "Por
-    // flota" sea la que está realmente activa en ese momento.
+    // El alcance se decide por qué pestaña está REALMENTE activa ahora mismo
+    // (no por si alguna vez se dejó una ficha abierta) — así nunca hay
+    // ambigüedad sobre qué se está resumiendo. Tres posibilidades: ficha de
+    // flota abierta en Por flota, ficha de KAM abierta en Por KAM, o
+    // cualquier otra pantalla → Resumen global (siempre con los filtros de
+    // la propia pestaña Resumen, nunca "heredados" de otra pestaña).
     const isFleetDetail=document.getElementById('view-flotas')?.classList.contains('active')
       && document.getElementById('flotas-detail-view')?.style.display==='block'
       && !!_currentDetailFleet;
+    const isKamDetail=document.getElementById('view-kam')?.classList.contains('active')
+      && document.getElementById('kam-detail-view')?.style.display==='block'
+      && !!_currentDetailKam;
     let html;
     if(mode==='dia'){
-      html=isFleetDetail?await buildFleetDayExecSummary():await buildDayExecSummary();
+      html=isFleetDetail?await buildFleetDayExecSummary():isKamDetail?await buildKamDayExecSummary():await buildDayExecSummary();
     }else if(mode==='mes'){
-      html=isFleetDetail?await buildFleetMonthExecSummary():await buildMonthExecSummary();
+      html=isFleetDetail?await buildFleetMonthExecSummary():isKamDetail?await buildKamMonthExecSummary():await buildMonthExecSummary();
     }else{
       if(isFleetDetail){
         html=buildFleetExecSummary();
+      }else if(isKamDetail){
+        html=buildKamExecSummary();
       }else{
         if(!_execCache || _execCache.scope!=='global') await refreshResumen();
-        html=buildGlobalExecSummary();
+        html=await buildGlobalExecSummary();
       }
     }
     contentEl.innerHTML=html;
@@ -2697,16 +2743,18 @@ function execDayWarnHtml(){
 async function buildDayExecSummary(){
   const date=_execDayDate||_lastDailyDate;
   if(!date) return '<div class="no-data">No hay ningún snapshot diario guardado todavía. Sube archivos desde "Cargar archivos".</div>';
-  const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
-  const rows=(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm,opr_id&snap_date=eq.${date}`)||[])
-    .filter(r=>activeCanals.includes(r.canal));
-  if(!rows.length) return `<div class="no-data">Sin snapshot guardado para el ${fmtDateEs(date)} con el canal seleccionado.</div>`;
+  // 12/08/2026: esto usaba S.canalsF (el filtro de canal de la pestaña "Por
+  // flota") aunque este resumen dice "Resumen global" — si habías dejado
+  // solo VC marcado en Por flota, el resumen global del día salía
+  // silenciosamente recortado a VC, sin ningún aviso. "Resumen global" no
+  // tiene filtro de canal propio: siempre sale EQ+VC completo, sin
+  // depender de lo que tengas marcado en ninguna otra pestaña.
+  const rows=(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm,opr_id&snap_date=eq.${date}`)||[]);
+  if(!rows.length) return `<div class="no-data">Sin snapshot guardado para el ${fmtDateEs(date)}.</div>`;
 
   const prevRow=await sbSelect('fleet_data_daily',`select=snap_date&snap_date=lt.${date}&order=snap_date.desc&limit=1`);
   const prevDate=prevRow&&prevRow.length?prevRow[0].snap_date:null;
-  const prevRows=prevDate
-    ?(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm&snap_date=eq.${prevDate}`)||[]).filter(r=>activeCanals.includes(r.canal))
-    :[];
+  const prevRows=prevDate?(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm&snap_date=eq.${prevDate}`)||[]):[];
 
   function agg(rs){
     let ns=0,gm=0,eqns=0,eqgm=0,vcns=0,vcgm=0,oprEQ=0,oprVC=0;
@@ -2747,7 +2795,9 @@ async function buildDayExecSummary(){
   return `
     <div class="exec-scope">Alcance: Resumen global — Día</div>
     <div class="exec-title">First Stop Fleet Dashboard</div>
-    <div class="exec-period">${fmtDateEs(date)}<br>Generado el ${nowEs()}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Fecha',v:fmtDateEs(date)},{l:'Canal',v:'EQ+VC (fijo en Resumen global)'},{l:'Comparado con',v:prevDate?fmtDateEs(prevDate)+' (día hábil anterior con datos)':'—'}])}
+    ${execSourceHtml('Snapshot diario (fleet_data_daily) de todas las flotas, sin ningún filtro heredado de otras pestañas.')}
     ${execDayWarnHtml()}
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del día</div>
@@ -2796,7 +2846,9 @@ async function buildFleetDayExecSummary(){
   return `
     <div class="exec-scope">Alcance: Ficha de flota — Día</div>
     <div class="exec-title">${fleet}</div>
-    <div class="exec-period">${fmtDateEs(date)} · Canal: ${canalLabel}<br>Generado el ${nowEs()}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Fecha',v:fmtDateEs(date)},{l:'Canal',v:canalLabel+' (filtro de Por flota)'},{l:'Comparado con',v:prevDate?fmtDateEs(prevDate)+' (día anterior con datos)':'—'}])}
+    ${execSourceHtml(`Snapshot diario (fleet_data_daily) de ${fleet}, filtrado por el canal marcado en Por flota.`)}
     ${execDayWarnHtml()}
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del día</div>
@@ -2810,56 +2862,52 @@ async function buildFleetDayExecSummary(){
 // y "todo el período", y probablemente el más útil para un resumen diario
 // que no cambie de foco cada vez que avanza el mes.
 async function buildMonthExecSummary(){
-  if(!_execCache || _execCache.scope!=='global'){ try{ await refreshResumen(); }catch(e){} }
-  const c=_execCache;
-  if(!c) return '<div class="no-data">Sin datos para el mes en curso.</div>';
-  const years=[c.prevYear,c.kpiYear].filter(Boolean);
-  const rows=await fetchData(years,[c.latestMonth]);
+  // 12/08/2026: antes "Mes en curso" tomaba c.latestMonth de _execCache, que
+  // es "el mes más alto marcado en los chips de la pestaña Resumen" — si
+  // alguien había deseleccionado el mes actual ahí por otro motivo, este
+  // resumen mostraba un mes pasado etiquetado como "en curso" sin ningún
+  // aviso. Ahora se calcula de forma independiente, siempre a partir del
+  // último día realmente cargado, y no depende de ningún filtro de chips.
+  const{year:curYear,month:curMonth}=getCurrentMonthInfo();
+  const prevYear=curYear-1;
+  const rows=await fetchData([curYear,prevYear],[curMonth]);
   if(!rows?.length) return '<div class="no-data">Sin datos para el mes en curso.</div>';
 
   let curNS=0,curGM=0,curEQ=0,curEQGM=0,curVC=0,curVCGM=0,prevNS=0,prevGM=0;
   const byFleetCur={},byFleetPrev={};
   for(const r of rows){
-    if(r.year===c.kpiYear){
+    if(r.year===curYear){
       curNS+=r.ns; curGM+=r.gm;
       if(r.canal==='EQ'){curEQ+=r.ns;curEQGM+=r.gm;}else{curVC+=r.ns;curVCGM+=r.gm;}
       byFleetCur[r.fleet_norm]=(byFleetCur[r.fleet_norm]||0)+r.ns;
-    }else if(r.year===c.prevYear){
+    }else if(r.year===prevYear){
       prevNS+=r.ns; prevGM+=r.gm;
       byFleetPrev[r.fleet_norm]=(byFleetPrev[r.fleet_norm]||0)+r.ns;
     }
   }
   const gmPct=curNS>0?curGM/curNS:0;
-  const mesTxt=`${MN[c.latestMonth-1]} ${c.kpiYear}`;
+  const mesTxt=`${MN[curMonth-1]} ${curYear}`;
 
-  // Si el mes analizado es el mes en curso, comparar el acumulado parcial
-  // contra el año pasado (mes completo) sale siempre muy a la baja de forma
-  // artificial — se calcula una estimación de cierre para comparar "cierre
-  // estimado vs año completo", que es lo justo.
-  const proj=monthProjectionInfo(c.kpiYear,c.latestMonth,curNS);
+  const proj=monthProjectionInfo(curYear,curMonth,curNS);
   const factor=proj.isCurrent&&curNS>0?proj.proy/curNS:1;
   const varV=prevNS>0?((proj.isCurrent?proj.proy:curNS)-prevNS)/prevNS:null;
-  const diaTxt=proj.isCurrent?` (estimado a partir de ${proj.daysElapsed}/${proj.daysInMonth} días cargados)`:'';
 
   const kpis=[
-    {l:`NS ${mesTxt}`,v:proj.isCurrent?fmtM(proj.proy):fmtM(curNS),
-     s:proj.isCurrent
-       ?`Real hasta ahora: ${fmtM(curNS)} · ${varV!==null?varStr(varV)+' vs PY (estimado)':'Sin año anterior'}`
-       :(varV!==null?`vs ${MN[c.latestMonth-1]} ${c.prevYear}: ${varStr(varV)}`:'Sin año anterior')},
-    {l:'GM del mes',v:fmtM(proj.isCurrent?curGM*factor:curGM),s:`GM% ${fmtP(gmPct)}${proj.isCurrent?' (estimado)':''}`},
-    {l:'EQ NS',v:fmtM(proj.isCurrent?curEQ*factor:curEQ),s:`GM% ${fmtP(curEQ>0?curEQGM/curEQ:0)}`},
-    {l:'VC NS',v:fmtM(proj.isCurrent?curVC*factor:curVC),s:`GM% ${fmtP(curVC>0?curVCGM/curVC:0)}`},
+    {l:`NS ${mesTxt} (real hoy)`,v:fmtM(curNS),s:'Acumulado real, sin proyectar — ver estimación de cierre arriba'},
+    {l:'GM del mes (real)',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
+    {l:'EQ NS (real)',v:fmtM(curEQ),s:`GM% ${fmtP(curEQ>0?curEQGM/curEQ:0)}`},
+    {l:'VC NS (real)',v:fmtM(curVC),s:`GM% ${fmtP(curVC>0?curVCGM/curVC:0)}`},
   ];
 
   const bullets=[];
   if(proj.isCurrent){
-    bullets.push(`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS real${diaTxt}; a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b>.`);
+    bullets.push(`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS real (${proj.daysElapsed} de ${proj.daysInMonth} días cargados); a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b> — mira el aviso de arriba para actuar con margen antes de fin de mes.`);
     bullets.push(varV!==null
-      ?`Comparado con el cierre completo de ${MN[c.latestMonth-1]} ${c.prevYear} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
+      ?`Comparado con el cierre completo de ${MN[curMonth-1]} ${prevYear} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
       :`No hay mismo mes del año anterior para comparar la estimación de cierre.`);
   }else{
     bullets.push(varV!==null
-      ?`${mesTxt} cerró con <b>${fmtM(curNS)}</b> de NS, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al mismo mes de ${c.prevYear} (${fmtM(prevNS)}).`
+      ?`${mesTxt} cerró con <b>${fmtM(curNS)}</b> de NS, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al mismo mes de ${prevYear} (${fmtM(prevNS)}).`
       :`${mesTxt} cerró con <b>${fmtM(curNS)}</b> de NS. No hay mismo mes del año anterior para comparar.`);
   }
   bullets.push(`El margen del mes es <b>${fmtP(gmPct)}</b>.`);
@@ -2888,8 +2936,11 @@ async function buildMonthExecSummary(){
   return `
     <div class="exec-scope">Alcance: Resumen global — Mes en curso</div>
     <div class="exec-title">First Stop Fleet Dashboard</div>
-    <div class="exec-period">${mesTxt}<br>Generado el ${nowEs()}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Mes',v:mesTxt+' (siempre el mes natural actual)'},{l:'Canal',v:'EQ+VC (fijo en Resumen global)'}])}
+    ${execSourceHtml('Resumen mensual (fleet_data) de EQ+VC combinados. No depende de los chips de años/meses de la pestaña Resumen — "Mes en curso" es siempre el mes calendario real.')}
     ${execDayWarnHtml()}
+    ${proj.isCurrent?execEstimateBanner(mesTxt,curNS,proj.proy,prevNS,proj.daysElapsed,proj.daysInMonth):''}
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del mes</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
@@ -2905,40 +2956,49 @@ async function buildFleetMonthExecSummary(){
   const rows=_currentDetailRows||[];
   const activeCanals=S.canalsF.size?[...S.canalsF]:['EQ','VC'];
   const frows=rows.filter(r=>activeCanals.includes(r.canal));
-  const years_f=S.yearsF.size?[...S.yearsF].sort():[...new Set(rows.map(r=>r.year))].sort();
-  if(!years_f.length) return '<div class="no-data">Sin datos para esta flota con los filtros actuales.</div>';
-  const latY=Math.max(...years_f);
-  const prevY=years_f[years_f.indexOf(latY)-1];
-  const latMoRows=frows.filter(r=>r.year===latY&&(r.ns>0||r.gm>0));
-  const latestMo=latMoRows.length?Math.max(...latMoRows.map(r=>r.month)):null;
-  if(!latestMo) return '<div class="no-data">Sin datos del mes en curso para esta flota con los filtros actuales.</div>';
-  const curNS=frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0);
-  const curGM=frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.gm,0);
-  const prevNS=prevY?frows.filter(r=>r.year===prevY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0):0;
-  const mesTxt=`${MN[latestMo-1]} ${latY}`;
   const canalLabel=activeCanals.slice().sort().join('+');
+
+  // 12/08/2026: igual que en el global, "Mes en curso" ya no es "el último
+  // mes con datos para esta flota" (que podía quedarse anclado en un mes
+  // pasado si la flota llevaba semanas sin actividad, sin avisar de que en
+  // realidad estaba mostrando un mes antiguo) — es siempre el mes natural
+  // actual. Si la flota no tiene nada todavía ese mes, se dice explícito.
+  const{year:curYear,month:curMonth}=getCurrentMonthInfo();
+  const prevYear=curYear-1;
+  const mesTxt=`${MN[curMonth-1]} ${curYear}`;
+  const curNS=frows.filter(r=>r.year===curYear&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+  const curGM=frows.filter(r=>r.year===curYear&&r.month===curMonth).reduce((s,r)=>s+r.gm,0);
+  const prevNS=frows.filter(r=>r.year===prevYear&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
   const gmPct=curNS>0?curGM/curNS:0;
 
-  const proj=monthProjectionInfo(latY,latestMo,curNS);
-  const factor=proj.isCurrent&&curNS>0?proj.proy/curNS:1;
+  const proj=monthProjectionInfo(curYear,curMonth,curNS);
   const varV=prevNS>0?((proj.isCurrent?proj.proy:curNS)-prevNS)/prevNS:null;
 
+  const filtersHtml=execFiltersHtml([{l:'Mes',v:mesTxt+' (mes natural actual)'},{l:'Canal',v:canalLabel+' (filtro de Por flota)'}]);
+  const sourceHtml=execSourceHtml(`Resumen mensual (fleet_data) de ${fleet}, filtrado por el canal marcado en Por flota. No depende de los chips de años/meses.`);
+
+  if(curNS<=0 && prevNS<=0){
+    return `
+      <div class="exec-scope">Alcance: Ficha de flota — Mes en curso</div>
+      <div class="exec-title">${fleet}</div>
+      <div class="exec-period">Generado el ${nowEs()}</div>
+      ${filtersHtml}${sourceHtml}${execDayWarnHtml()}
+      <div class="no-data">Sin actividad registrada todavía en ${mesTxt} para esta flota (canal ${canalLabel}).</div>`;
+  }
+
   const kpis=[
-    {l:`NS ${mesTxt}`,v:proj.isCurrent?fmtM(proj.proy):fmtM(curNS),
-     s:proj.isCurrent
-       ?`Real hasta ahora: ${fmtM(curNS)} · ${varV!==null?varStr(varV)+' vs PY (estimado)':'Sin año anterior'}`
-       :(varV!==null?`vs ${MN[latestMo-1]} ${prevY}: ${varStr(varV)}`:'Sin año anterior')},
-    {l:'GM del mes',v:fmtM(proj.isCurrent?curGM*factor:curGM),s:`GM% ${fmtP(gmPct)}${proj.isCurrent?' (estimado)':''}`},
+    {l:`NS ${mesTxt} (real hoy)`,v:fmtM(curNS),s:proj.isCurrent?'Ver estimación de cierre arriba':(varV!==null?`vs ${MN[curMonth-1]} ${prevYear}: ${varStr(varV)}`:'Sin año anterior')},
+    {l:'GM del mes (real)',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
   ];
   const bullets=[];
   if(proj.isCurrent){
-    bullets.push(`${fleet} lleva <b>${fmtM(curNS)}</b> real en ${mesTxt} (${proj.daysElapsed}/${proj.daysInMonth} días cargados); a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b>.`);
+    bullets.push(`${fleet} lleva <b>${fmtM(curNS)}</b> real en ${mesTxt} (${proj.daysElapsed} de ${proj.daysInMonth} días cargados); a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b>.`);
     bullets.push(varV!==null
-      ?`Frente al cierre completo de ${MN[latestMo-1]} ${prevY} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
+      ?`Frente al cierre completo de ${MN[curMonth-1]} ${prevYear} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
       :'No hay mismo mes del año anterior para comparar la estimación de cierre.');
   }else{
     bullets.push(varV!==null
-      ?`${fleet} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente a ${MN[latestMo-1]} ${prevY} (${fmtM(prevNS)}).`
+      ?`${fleet} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente a ${MN[curMonth-1]} ${prevYear} (${fmtM(prevNS)}).`
       :`${fleet} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>. No hay mismo mes del año anterior para comparar.`);
   }
   bullets.push(`Margen del mes: <b>${fmtP(gmPct)}</b>.`);
@@ -2946,18 +3006,21 @@ async function buildFleetMonthExecSummary(){
   return `
     <div class="exec-scope">Alcance: Ficha de flota — Mes en curso</div>
     <div class="exec-title">${fleet}</div>
-    <div class="exec-period">${mesTxt} · Canal: ${canalLabel}<br>Generado el ${nowEs()}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${filtersHtml}${sourceHtml}
     ${execDayWarnHtml()}
+    ${proj.isCurrent?execEstimateBanner(mesTxt,curNS,proj.proy,prevNS,proj.daysElapsed,proj.daysInMonth):''}
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del mes</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
 }
 
 // ── ALCANCE: PERÍODO FILTRADO (comportamiento original, YTD total) ──────────
-function buildGlobalExecSummary(){
+async function buildGlobalExecSummary(){
   const c=_execCache;
   if(!c) return '<div class="no-data">Sin datos para generar el resumen con los filtros actuales.</div>';
-  const periodTxt=`${c.selectedYears.join('/')} · ${c.selectedMonths.map(m=>MN[m-1]).join(', ')} · Canal: EQ+VC`;
+  const isFullYearP=c.selectedMonths.length===12;
+  const mesesLabel=isFullYearP?'Ene-Dic (año completo)':c.selectedMonths.map(m=>MN[m-1]).join(', ');
 
   const kpis=[
     {l:`NS YTD ${c.kpiYear}`,v:fmtM(c.A.totNS),s:c.varTotKpi!==null?`vs ${c.prevYear}: ${varStr(c.varTotKpi)}`:'Sin año anterior'},
@@ -2965,10 +3028,6 @@ function buildGlobalExecSummary(){
     {l:'EQ NS YTD',v:fmtM(c.A.eqNS),s:c.varEqKpi!==null?varStr(c.varEqKpi)+' vs PY':'—'},
     {l:'VC NS YTD',v:fmtM(c.A.vcNS),s:c.varVcKpi!==null?varStr(c.varVcKpi)+' vs PY':'—'},
     {l:'Proyección FY',v:fmtM(c.proy),s:`${fmtP(c.cob)} vs objetivo OB26`},
-    {l:`MTD ${MN[c.latestMonth-1]}`,v:fmtM(c.mtdNS),
-     s:c.mtdProj?.isCurrent&&c.mtdProyVarV!==null
-       ?`Est. cierre ${fmtM(c.mtdProj.proy)} · ${varStr(c.mtdProyVarV)} vs PY`
-       :c.mtdVarV!==null?varStr(c.mtdVarV)+' vs PY':'—'},
   ];
 
   // Narrativa automática — reglas simples sobre datos ya calculados, sin IA:
@@ -2997,15 +3056,37 @@ function buildGlobalExecSummary(){
     `<div class="exec-mover-row"><span>${x.name}</span><span class="${varCls(x.varV)}">${varStr(x.varV)}</span></div>`
   ).join('')||'<div class="exec-mover-row" style="color:var(--muted)">Sin datos suficientes</div>';
 
+  // Aviso proactivo: si el mes natural actual cae dentro del período
+  // filtrado, se calcula su estimación de cierre aparte (con una consulta
+  // propia e independiente, no reutilizando el YTD de arriba) para que
+  // nunca falte la posibilidad de reaccionar a tiempo, sea cual sea el
+  // período que se esté mirando.
+  const{year:curYear,month:curMonth}=getCurrentMonthInfo();
+  let bannerHtml='';
+  if(c.selectedYears.includes(curYear) && c.selectedMonths.includes(curMonth)){
+    try{
+      const curRows=await fetchData([curYear,curYear-1],[curMonth]);
+      let curMonthNS=0,prevMonthNS=0;
+      for(const r of (curRows||[])){
+        if(r.year===curYear) curMonthNS+=r.ns; else if(r.year===curYear-1) prevMonthNS+=r.ns;
+      }
+      const proj=monthProjectionInfo(curYear,curMonth,curMonthNS);
+      if(proj.isCurrent) bannerHtml=execEstimateBanner(`${MN[curMonth-1]} ${curYear}`,curMonthNS,proj.proy,prevMonthNS,proj.daysElapsed,proj.daysInMonth);
+    }catch(e){ console.warn('No se pudo calcular la estimación de cierre para el período filtrado',e); }
+  }
+
   return `
     <div class="exec-scope">Alcance: Resumen global — Período filtrado</div>
     <div class="exec-title">First Stop Fleet Dashboard</div>
-    <div class="exec-period">${periodTxt}<br>Generado el ${nowEs()}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Años',v:c.selectedYears.join(', ')},{l:'Meses',v:mesesLabel},{l:'Canal',v:'EQ+VC (fijo en Resumen global)'}])}
+    ${execSourceHtml('Resumen mensual (fleet_data), agregado exactamente por los años y meses marcados ahora mismo en los chips de la pestaña Resumen global.')}
     ${execDayWarnHtml()}
+    ${bannerHtml}
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del período</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
-    <div class="exec-section-title">Movimientos más relevantes vs año anterior</div>
+    <div class="exec-section-title">Movimientos más relevantes vs año anterior <span style="font-weight:400;color:var(--muted);text-transform:none">· flotas con NS ≥ 5.000€</span></div>
     <div class="exec-movers">
       <div class="exec-mover-col"><h4>🟢 Suben</h4>${moversHtml(c.up)}</div>
       <div class="exec-mover-col"><h4>🔴 Caen</h4>${moversHtml(c.down)}</div>
@@ -3072,11 +3153,214 @@ function buildFleetExecSummary(){
   if(bestMonth) bullets.push(`El mejor mes de ${latY} ha sido <b>${MN[bestMonth.m-1]}</b> (${fmtM(bestMonth.n)}).`);
   if(worstMonth && monthVals.length>1) bullets.push(`El más flojo ha sido <b>${MN[worstMonth.m-1]}</b> (${fmtM(worstMonth.n)}).`);
 
+  // Aviso proactivo: si el mes natural actual está dentro de años/meses
+  // filtrados, se añade su estimación de cierre — igual que en el resto de
+  // pantallas, para poder actuar con antelación sin tener que cambiar a
+  // "Mes en curso" a propósito.
+  const{year:curYear,month:curMonth}=getCurrentMonthInfo();
+  let bannerHtml='';
+  if(years_f.includes(curYear) && activeMonthsF.includes(curMonth)){
+    const curMonthNS=frows.filter(r=>r.year===curYear&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+    const prevMonthNS=frows.filter(r=>r.year===curYear-1&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+    const projM=monthProjectionInfo(curYear,curMonth,curMonthNS);
+    if(projM.isCurrent) bannerHtml=execEstimateBanner(`${MN[curMonth-1]} ${curYear}`,curMonthNS,projM.proy,prevMonthNS,projM.daysElapsed,projM.daysInMonth);
+  }
+
   return `
     <div class="exec-scope">Alcance: Ficha de flota — Período filtrado</div>
     <div class="exec-title">${fleet}</div>
-    <div class="exec-period">${periodTxt}<br>Generado el ${nowEs()}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Años',v:years_f.join(', ')},{l:'Meses',v:isFullYearF?'Ene-Dic (año completo)':monthsLabelF},{l:'Canal',v:canalLabel+' (filtro de Por flota)'}])}
+    ${execSourceHtml(`Resumen mensual (fleet_data) de ${fleet}, agregado exactamente por los años/meses/canal marcados ahora mismo en Por flota.`)}
     ${execDayWarnHtml()}
+    ${bannerHtml}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RESUMEN EJECUTIVO — POR KAM (12/08/2026)
+// ══════════════════════════════════════════════════════════════════════════════
+// Antes de esto, abrir el resumen ejecutivo estando en la ficha de un KAM
+// caía silenciosamente en "Resumen global" (con los filtros de la pestaña
+// Resumen, no los de Por KAM) — exactamente la falta de claridad que había
+// que evitar. Mismo patrón que las 6 funciones de flota, adaptado al
+// conjunto de flotas de un KAM (vía fleet_kam).
+async function buildKamDayExecSummary(){
+  const kam=_currentDetailKam;
+  const date=_execDayDate||_lastDailyDate;
+  const activeCanals=S.canalsK.size?[...S.canalsK]:['EQ','VC'];
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const fleetSet=new Set(Object.keys(S.fleetKam).filter(f=>S.fleetKam[f]===kam));
+  const filtersHtml=execFiltersHtml([{l:'Fecha',v:date?fmtDateEs(date):'—'},{l:'Canal',v:canalLabel+' (filtro de Por KAM)'},{l:'Flotas de este KAM',v:fmt(fleetSet.size)}]);
+  const sourceHtml=execSourceHtml(`Snapshot diario (fleet_data_daily) de las flotas asignadas a ${kam} en fleet_kam, filtrado por el canal marcado en Por KAM.`);
+  const header=(body)=>`<div class="exec-scope">Alcance: Ficha de KAM — Día</div><div class="exec-title">${kam}</div><div class="exec-period">Generado el ${nowEs()}</div>${filtersHtml}${sourceHtml}${execDayWarnHtml()}${body}`;
+
+  if(!date) return header('<div class="no-data">No hay ningún snapshot diario guardado todavía.</div>');
+  if(!fleetSet.size) return header('<div class="no-data">Sin flotas asignadas a este KAM todavía.</div>');
+
+  const rows=(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm,opr_id&snap_date=eq.${date}`)||[])
+    .filter(r=>fleetSet.has(r.fleet_norm)&&activeCanals.includes(r.canal));
+  if(!rows.length) return header(`<div class="no-data">Sin datos guardados de ${kam} el ${fmtDateEs(date)} para el canal seleccionado.</div>`);
+
+  const prevRow=await sbSelect('fleet_data_daily',`select=snap_date&snap_date=lt.${date}&order=snap_date.desc&limit=1`);
+  const prevDate=prevRow&&prevRow.length?prevRow[0].snap_date:null;
+  const prevRows=prevDate?(await sbSelectAll('fleet_data_daily',`select=canal,fleet_norm,ns,gm&snap_date=eq.${prevDate}`)||[])
+    .filter(r=>fleetSet.has(r.fleet_norm)&&activeCanals.includes(r.canal)):[];
+
+  function agg(rs){
+    let ns=0,gm=0,opr=0; const byFleet={};
+    for(const r of rs){
+      const rns=Number(r.ns)||0, rgm=Number(r.gm)||0;
+      ns+=rns; gm+=rgm;
+      if(r.opr_id!=null) opr+=Number(r.opr_id)||0;
+      byFleet[r.fleet_norm]=(byFleet[r.fleet_norm]||0)+rns;
+    }
+    return{ns,gm,opr,byFleet};
+  }
+  const A=agg(rows), B=agg(prevRows);
+  const varV=B.ns>0?(A.ns-B.ns)/B.ns:null;
+  const gmPct=A.ns>0?A.gm/A.ns:0;
+
+  const kpis=[
+    {l:'NS del día',v:fmtM(A.ns),s:varV!==null?`vs ${fmtDateEs(prevDate)}: ${varStr(varV)}`:'Sin día anterior con datos'},
+    {l:'GM del día',v:fmtM(A.gm),s:`GM% ${fmtP(gmPct)}`},
+    {l:'OPR-ID',v:fmt(A.opr),s:canalLabel},
+  ];
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`${kam} registra <b>${fmtM(A.ns)}</b> de NS el ${fmtDateEs(date)}, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al día hábil anterior con datos (${fmtDateEs(prevDate)}).`
+    :`${kam} registra <b>${fmtM(A.ns)}</b> de NS el ${fmtDateEs(date)}. No hay día anterior con datos para comparar.`);
+  bullets.push(`Margen del día: <b>${fmtP(gmPct)}</b>.`);
+
+  const topContrib=Object.entries(A.byFleet).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const topHtml=topContrib.length
+    ?topContrib.map(([name,ns])=>`<div class="exec-mover-row"><span>${name}</span><span>${fmtM(ns)}</span></div>`).join('')
+    :'<div class="exec-mover-row" style="color:var(--muted)">Sin flotas con actividad ese día</div>';
+
+  return header(`
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura del día</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <div class="exec-section-title">Flotas con más actividad ese día</div>
+    <div class="exec-movers" style="grid-template-columns:1fr"><div class="exec-mover-col">${topHtml}</div></div>`);
+}
+
+async function buildKamMonthExecSummary(){
+  const kam=_currentDetailKam;
+  const rows=_currentDetailKamRows||[];
+  const activeCanals=S.canalsK.size?[...S.canalsK]:['EQ','VC'];
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const{year:curYear,month:curMonth}=getCurrentMonthInfo();
+  const prevYear=curYear-1;
+  const mesTxt=`${MN[curMonth-1]} ${curYear}`;
+  const curNS=rows.filter(r=>r.year===curYear&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+  const curGM=rows.filter(r=>r.year===curYear&&r.month===curMonth).reduce((s,r)=>s+r.gm,0);
+  const prevNS=rows.filter(r=>r.year===prevYear&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+  const gmPct=curNS>0?curGM/curNS:0;
+  const proj=monthProjectionInfo(curYear,curMonth,curNS);
+  const varV=prevNS>0?((proj.isCurrent?proj.proy:curNS)-prevNS)/prevNS:null;
+
+  const filtersHtml=execFiltersHtml([{l:'Mes',v:mesTxt+' (mes natural actual)'},{l:'Canal',v:canalLabel+' (filtro de Por KAM)'}]);
+  const sourceHtml=execSourceHtml(`Resumen mensual (fleet_data) de todas las flotas asignadas a ${kam} en fleet_kam, filtrado por el canal marcado en Por KAM.`);
+
+  if(curNS<=0 && prevNS<=0){
+    return `<div class="exec-scope">Alcance: Ficha de KAM — Mes en curso</div><div class="exec-title">${kam}</div><div class="exec-period">Generado el ${nowEs()}</div>${filtersHtml}${sourceHtml}${execDayWarnHtml()}<div class="no-data">Sin actividad registrada todavía en ${mesTxt} para este KAM (canal ${canalLabel}).</div>`;
+  }
+
+  const kpis=[
+    {l:`NS ${mesTxt} (real hoy)`,v:fmtM(curNS),s:proj.isCurrent?'Ver estimación de cierre arriba':(varV!==null?`vs ${MN[curMonth-1]} ${prevYear}: ${varStr(varV)}`:'Sin año anterior')},
+    {l:'GM del mes (real)',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
+  ];
+  const bullets=[];
+  if(proj.isCurrent){
+    bullets.push(`${kam} lleva <b>${fmtM(curNS)}</b> real en ${mesTxt} (${proj.daysElapsed} de ${proj.daysInMonth} días cargados); a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b>.`);
+    bullets.push(varV!==null
+      ?`Frente al cierre completo de ${MN[curMonth-1]} ${prevYear} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
+      :'No hay mismo mes del año anterior para comparar la estimación de cierre.');
+  }else{
+    bullets.push(varV!==null
+      ?`${kam} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente a ${MN[curMonth-1]} ${prevYear} (${fmtM(prevNS)}).`
+      :`${kam} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>. No hay mismo mes del año anterior para comparar.`);
+  }
+  bullets.push(`Margen del mes: <b>${fmtP(gmPct)}</b>.`);
+
+  return `
+    <div class="exec-scope">Alcance: Ficha de KAM — Mes en curso</div>
+    <div class="exec-title">${kam}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${filtersHtml}${sourceHtml}
+    ${execDayWarnHtml()}
+    ${proj.isCurrent?execEstimateBanner(mesTxt,curNS,proj.proy,prevNS,proj.daysElapsed,proj.daysInMonth):''}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-section-title">Lectura del mes</div>
+    <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+}
+
+function buildKamExecSummary(){
+  const kam=_currentDetailKam;
+  const rows=_currentDetailKamRows||[];
+  const activeCanals=S.canalsK.size?[...S.canalsK]:['EQ','VC'];
+  const activeMonthsK=S.monthsK.size?[...S.monthsK].sort((a,b)=>a-b):[1,2,3,4,5,6,7,8,9,10,11,12];
+  const isFullYearK=activeMonthsK.length===12;
+  const monthsLabelK=(()=>{
+    if(isFullYearK) return null;
+    const isContig=activeMonthsK.every((m,i)=>i===0||m===activeMonthsK[i-1]+1);
+    return isContig?`${MN[activeMonthsK[0]-1]}-${MN[activeMonthsK[activeMonthsK.length-1]-1]}`:`${activeMonthsK.length}m`;
+  })();
+  const rowsResumen=rows.filter(r=>activeMonthsK.includes(r.month));
+  const years_k=S.yearsK.size?[...S.yearsK].sort():[...new Set(rows.map(r=>r.year))].sort();
+  if(!years_k.length) return '<div class="no-data">Sin datos para este KAM con los filtros actuales.</div>';
+  const latY=Math.max(...years_k);
+  const prevY=years_k[years_k.indexOf(latY)-1];
+  const yearAgg=yr=>{
+    const rs=rowsResumen.filter(r=>r.year===yr);
+    const ns=rs.reduce((s,r)=>s+r.ns,0), gm=rs.reduce((s,r)=>s+r.gm,0);
+    const months=new Set(rs.filter(r=>r.ns>0||r.gm>0).map(r=>r.month));
+    return{ns,gm,months};
+  };
+  const latest=yearAgg(latY);
+  const prev=prevY?yearAgg(prevY):{ns:0,gm:0,months:new Set()};
+  const nm=latest.months.size||1;
+  const proy=latest.ns/nm*12;
+  const prevNm=prev.months.size||1;
+  const prevProy=prev.ns>0?prev.ns/prevNm*12:0;
+  const varV=prevProy>0?(proy-prevProy)/prevProy:null;
+  const gp=latest.ns>0?latest.gm/latest.ns:0;
+  const canalLabel=activeCanals.slice().sort().join('+');
+  const nFleets=new Set(rows.map(r=>r.fleet_norm)).size;
+
+  const kpis=[
+    {l:`NS ${latY}${isFullYearK?'':' ('+monthsLabelK+')'}`,v:fmtM(latest.ns),s:prevY?`PY ${fmtM(prev.ns)}`:'Sin año anterior'},
+    {l:'GM',v:fmtM(latest.gm),s:`GM% ${fmtP(gp)}`},
+    {l:'Proyección FY',v:proy>0?fmtM(proy):'—',s:varV!==null?varStr(varV)+' vs PY':'—'},
+    {l:'Flotas asignadas',v:fmt(nFleets),s:'en fleet_kam'},
+  ];
+
+  const bullets=[];
+  bullets.push(varV!==null
+    ?`La proyección a fin de año ${varV>=0?'crece':'cae'} un <b>${varStr(varV)}</b> frente a ${prevY}.`
+    :'No hay suficiente histórico del año anterior para comparar la tendencia de este KAM.');
+  bullets.push(`El margen medio del período es <b>${fmtP(gp)}</b>, repartido entre ${nFleets} flotas.`);
+
+  const{year:curYear,month:curMonth}=getCurrentMonthInfo();
+  let bannerHtml='';
+  if(years_k.includes(curYear) && activeMonthsK.includes(curMonth)){
+    const curMonthNS=rows.filter(r=>r.year===curYear&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+    const prevMonthNS=rows.filter(r=>r.year===curYear-1&&r.month===curMonth).reduce((s,r)=>s+r.ns,0);
+    const projM=monthProjectionInfo(curYear,curMonth,curMonthNS);
+    if(projM.isCurrent) bannerHtml=execEstimateBanner(`${MN[curMonth-1]} ${curYear}`,curMonthNS,projM.proy,prevMonthNS,projM.daysElapsed,projM.daysInMonth);
+  }
+
+  return `
+    <div class="exec-scope">Alcance: Ficha de KAM — Período filtrado</div>
+    <div class="exec-title">${kam}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Años',v:years_k.join(', ')},{l:'Meses',v:isFullYearK?'Ene-Dic (año completo)':monthsLabelK},{l:'Canal',v:canalLabel+' (filtro de Por KAM)'}])}
+    ${execSourceHtml(`Resumen mensual (fleet_data) de todas las flotas asignadas a ${kam} en fleet_kam, agregado por los años/meses/canal marcados ahora mismo en Por KAM.`)}
+    ${execDayWarnHtml()}
+    ${bannerHtml}
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`;
@@ -3085,17 +3369,30 @@ function buildFleetExecSummary(){
 // Convierte el HTML del resumen en texto plano legible, listo para pegar en
 // un correo de Outlook sin arrastrar etiquetas ni formato raro. Solo lee el
 // contenido generado (#exec-summary-content), no la barra de selector de
-// alcance que queda por encima.
+// alcance que queda por encima. Incluye los filtros, la fuente de datos y
+// el banner de estimación si aparecen, para que el texto copiado sea tan
+// completo y trazable como lo que se ve en pantalla.
 function execSummaryToPlainText(root){
   const lines=[];
   const scope=root.querySelector('.exec-scope');
   const title=root.querySelector('.exec-title');
   const period=root.querySelector('.exec-period');
+  const filters=root.querySelector('.exec-filters');
+  const source=root.querySelector('.exec-source');
+  const banner=root.querySelector('.exec-estimate-banner');
   const warn=root.querySelector('.exec-daywarn');
   if(scope) lines.push(scope.textContent);
   if(title) lines.push('== '+title.textContent+' ==');
   if(period) lines.push(period.textContent.replace(/\s*\n\s*/g,' · '));
+  if(filters) lines.push('Filtros: '+[...filters.querySelectorAll('.exec-filter-badge')].map(b=>b.textContent).join(' · '));
+  if(source) lines.push(source.textContent);
   if(warn) lines.push('\n'+warn.textContent);
+  if(banner){
+    lines.push('');
+    lines.push((banner.querySelector('.eeb-title')?.textContent||'ESTIMACIÓN DE CIERRE').toUpperCase());
+    lines.push('  '+(banner.querySelector('.eeb-val')?.textContent||''));
+    lines.push('  '+(banner.querySelector('.eeb-sub')?.textContent||''));
+  }
   lines.push('');
   lines.push('KPIs:');
   root.querySelectorAll('.exec-kpi').forEach(k=>{

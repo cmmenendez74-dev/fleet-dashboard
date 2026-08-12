@@ -1485,6 +1485,27 @@ async function initApp(){
   }catch(e){setConn(false,'Sin conexión')}
 }
 
+// ── PROYECCIÓN DE MES EN CURSO ───────────────────────────────────────────────
+// 12/08/2026: cuando el mes que se está mirando es el mes en curso (solo hay
+// cargados N de los ~30 días), compararlo tal cual contra el mismo mes del
+// año anterior (que SÍ está completo) siempre sale artificialmente muy por
+// debajo — no es que el negocio haya caído, es que se están comparando 11
+// días contra 31. Este helper calcula una estimación de cierre (regla de
+// tres simple sobre los días ya cargados) para poder comparar "cierre
+// estimado vs año completo" en vez de "parcial vs año completo". Se usa en
+// todas las comparativas de mes en curso: KPI de Resumen, Resumen ejecutivo
+// (Mes en curso) y sus movimientos de flotas.
+function monthProjectionInfo(year,month,curValue){
+  if(!_lastDailyDate) return{isCurrent:false,proy:curValue,daysElapsed:null,daysInMonth:null};
+  const d=new Date(_lastDailyDate+'T00:00:00');
+  const lastY=d.getFullYear(), lastM=d.getMonth()+1;
+  if(year!==lastY || month!==lastM) return{isCurrent:false,proy:curValue,daysElapsed:null,daysInMonth:null};
+  const daysElapsed=d.getDate();
+  const daysInMonth=new Date(year,month,0).getDate();
+  if(daysElapsed<=0) return{isCurrent:true,daysElapsed,daysInMonth,proy:curValue};
+  return{isCurrent:true,daysElapsed,daysInMonth,proy:curValue/daysElapsed*daysInMonth};
+}
+
 // ── PILL "ÚLTIMO DÍA CARGADO" ────────────────────────────────────────────────
 // Muestra el snapshot diario más reciente guardado en fleet_data_daily, con
 // aviso de que ese día puede no estar todavía cerrado/confirmado en NEXT
@@ -1801,6 +1822,12 @@ async function refreshResumen(){
   const mtdPrevRows=prevYear?rows.filter(r=>r.year===prevYear&&r.month===latestMonth):[];
   const mtdPrevNS=mtdPrevRows.reduce((s,r)=>s+r.ns,0);
   const mtdVarV=mtdPrevNS>0?(mtdNS-mtdPrevNS)/mtdPrevNS:null;
+  // Si el mes mostrado es el mes en curso (incompleto), comparar el
+  // acumulado parcial contra el mes completo del año pasado sale siempre
+  // muy a la baja de forma artificial — se añade una estimación de cierre
+  // (regla de tres sobre los días ya cargados) para una comparación justa.
+  const mtdProj=monthProjectionInfo(kpiYear,latestMonth,mtdNS);
+  const mtdProyVarV=(mtdProj.isCurrent&&mtdPrevNS>0)?(mtdProj.proy-mtdPrevNS)/mtdPrevNS:null;
   document.getElementById('kpis-r').innerHTML=[
     {cls:'k-tot',l:`NS YTD ${kpiYear} (${nM}m)`,v:fmtM(A.totNS),
      s:varTotKpi!==null?`${pyLabel}${fmtM(P2.totNS)} <b class="${varCls(varTotKpi)}">${varStr(varTotKpi)}</b>`:`Obj YTD: ${(A.totNS-obYTD)>=0?'+':''}${fmtM(A.totNS-obYTD)}`,sc:varCls(varTotKpi)||''},
@@ -1812,7 +1839,10 @@ async function refreshResumen(){
      s:varVcKpi!==null?`${pyLabel}${fmtM(P2.vcNS)} <b class="${varCls(varVcKpi)}">${varStr(varVcKpi)}</b>`:`Obj. ${fmtM(obVcYTD)} ${fmtP(A.vcNS/obVcYTD)}`,sc:varCls(varVcKpi)||''},
     {cls:'k-py', l:'Proyección FY',v:fmtM(proy),s:`${sem(cob)} Cobertura ${fmtP(cob)} vs OB26`,sc:cob>=1?'up':'dn'},
     {cls:'k-tot',l:`MTD ${MN[latestMonth-1]} ${kpiYear}`,v:fmtM(mtdNS),
-     s:mtdVarV!==null?`${pyLabel}${fmtM(mtdPrevNS)} <b class="${varCls(mtdVarV)}">${varStr(mtdVarV)}</b>`:`GM ${fmtM(mtdGM)} · ${fmtP(mtdGM/mtdNS)}`,sc:varCls(mtdVarV)||''},
+     s:mtdProj.isCurrent&&mtdProyVarV!==null
+       ?`Est. cierre ${fmtM(mtdProj.proy)} (${mtdProj.daysElapsed}/${mtdProj.daysInMonth}d) · <b class="${varCls(mtdProyVarV)}">${varStr(mtdProyVarV)}</b> vs PY`
+       :mtdVarV!==null?`${pyLabel}${fmtM(mtdPrevNS)} <b class="${varCls(mtdVarV)}">${varStr(mtdVarV)}</b>`:`GM ${fmtM(mtdGM)} · ${fmtP(mtdGM/mtdNS)}`,
+     sc:mtdProj.isCurrent&&mtdProyVarV!==null?(varCls(mtdProyVarV)||''):(varCls(mtdVarV)||'')},
   ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
     <div class="kpi-val">${k.v}</div><div class="kpi-sub ${k.sc}">${k.s}</div></div>`).join('');
 
@@ -1906,7 +1936,7 @@ async function refreshResumen(){
     selectedYears,selectedMonths,kpiYear,prevYear,nM,
     A,P2,proy,eqProy,vcProy,cob,obYTD,obEqYTD,obVcYTD,
     varTotKpi,varEqKpi,varVcKpi,
-    mtdNS,mtdPrevNS,mtdVarV,latestMonth,
+    mtdNS,mtdPrevNS,mtdVarV,mtdProj,mtdProyVarV,latestMonth,
     up,down,
     top:Object.values(A.byFleet).filter(f=>f.ns>0).sort((a,b)=>b.ns-a.ns).slice(0,10)
       .map(f=>{
@@ -1987,17 +2017,30 @@ async function refreshMTD(){
   const cur=byYear[latY]||{ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0};
   const prev=prevY?(byYear[prevY]||{ns:0,gm:0,eqns:0,eqgm:0,vcns:0,vcgm:0}):null;
 
+  // Si "mes" es el mes en curso (incompleto), comparar el acumulado parcial
+  // contra el mismo mes completo del año anterior sale siempre muy a la baja
+  // de forma artificial — se proyecta un cierre estimado (regla de tres
+  // sobre los días ya cargados) y esa es la cifra que se usa para calcular
+  // las variaciones (vTot/vEq/vVc/vGm), aunque el bloque grande sigue
+  // mostrando el dato real acumulado, con la estimación como nota aparte.
+  const proj=monthProjectionInfo(latY,mes,cur.ns);
+  const factor=proj.isCurrent&&cur.ns>0?proj.proy/cur.ns:1;
+  const curProy=proj.isCurrent?{ns:proj.proy,gm:cur.gm*factor,eqns:cur.eqns*factor,eqgm:cur.eqgm*factor,vcns:cur.vcns*factor,vcgm:cur.vcgm*factor}:cur;
+
   // Helpers
   const varV=(a,b)=>b>0?(a-b)/b:null;
   const diffM=(a,b)=>b>0?Math.round(a-b):null;
   const varCl=v=>v===null?'neu':v>0.005?'up':v<-0.005?'dn':'neu';
   const ppStr=v=>v===null?'—':(v>=0?'+':'')+( v*100).toFixed(1)+' pp';
 
-  const vTot=varV(cur.ns,prev?.ns||0);
-  const vEq=varV(cur.eqns,prev?.eqns||0);
-  const vVc=varV(cur.vcns,prev?.vcns||0);
-  const vGm=prev?.ns>0?(cur.ns>0?cur.gm/cur.ns:0)-(prev.gm/prev.ns):null;
-  const absD=diffM(cur.ns,prev?.ns||0);
+  const vTot=varV(curProy.ns,prev?.ns||0);
+  const vEq=varV(curProy.eqns,prev?.eqns||0);
+  const vVc=varV(curProy.vcns,prev?.vcns||0);
+  const vGm=prev?.ns>0?(curProy.ns>0?curProy.gm/curProy.ns:0)-(prev.gm/prev.ns):null;
+  const absD=diffM(curProy.ns,prev?.ns||0);
+  const projNote=proj.isCurrent
+    ?`<div class="mtd-sub" style="color:var(--am);font-weight:600">≈ Est. cierre: ${fmtM(proj.proy)} (${proj.daysElapsed}/${proj.daysInMonth} días) — variación calculada sobre esta estimación</div>`
+    :'';
 
   // ── BLOQUE COMPARATIVA PRINCIPAL ─────────────────────────────────────────
   const prevBlock=prev?`
@@ -2021,6 +2064,7 @@ async function refreshMTD(){
         <div class="mtd-val">${fmtM(cur.ns)}</div>
         <div class="mtd-sub">EQ: <b>${fmtM(cur.eqns)}</b> · VC: <b>${fmtM(cur.vcns)}</b></div>
         <div class="mtd-sub">GM: <b>${fmtM(cur.gm)}</b> · GM% <b>${fmtP(cur.ns>0?cur.gm/cur.ns:0)}</b></div>
+        ${projNote}
       </div>
     </div>
     <div class="mtd-metrics">
@@ -2785,33 +2829,57 @@ async function buildMonthExecSummary(){
       byFleetPrev[r.fleet_norm]=(byFleetPrev[r.fleet_norm]||0)+r.ns;
     }
   }
-  const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
   const gmPct=curNS>0?curGM/curNS:0;
   const mesTxt=`${MN[c.latestMonth-1]} ${c.kpiYear}`;
 
+  // Si el mes analizado es el mes en curso, comparar el acumulado parcial
+  // contra el año pasado (mes completo) sale siempre muy a la baja de forma
+  // artificial — se calcula una estimación de cierre para comparar "cierre
+  // estimado vs año completo", que es lo justo.
+  const proj=monthProjectionInfo(c.kpiYear,c.latestMonth,curNS);
+  const factor=proj.isCurrent&&curNS>0?proj.proy/curNS:1;
+  const varV=prevNS>0?((proj.isCurrent?proj.proy:curNS)-prevNS)/prevNS:null;
+  const diaTxt=proj.isCurrent?` (estimado a partir de ${proj.daysElapsed}/${proj.daysInMonth} días cargados)`:'';
+
   const kpis=[
-    {l:`NS ${mesTxt}`,v:fmtM(curNS),s:varV!==null?`vs ${MN[c.latestMonth-1]} ${c.prevYear}: ${varStr(varV)}`:'Sin año anterior'},
-    {l:'GM del mes',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
-    {l:'EQ NS',v:fmtM(curEQ),s:`GM% ${fmtP(curEQ>0?curEQGM/curEQ:0)}`},
-    {l:'VC NS',v:fmtM(curVC),s:`GM% ${fmtP(curVC>0?curVCGM/curVC:0)}`},
+    {l:`NS ${mesTxt}`,v:proj.isCurrent?fmtM(proj.proy):fmtM(curNS),
+     s:proj.isCurrent
+       ?`Real hasta ahora: ${fmtM(curNS)} · ${varV!==null?varStr(varV)+' vs PY (estimado)':'Sin año anterior'}`
+       :(varV!==null?`vs ${MN[c.latestMonth-1]} ${c.prevYear}: ${varStr(varV)}`:'Sin año anterior')},
+    {l:'GM del mes',v:fmtM(proj.isCurrent?curGM*factor:curGM),s:`GM% ${fmtP(gmPct)}${proj.isCurrent?' (estimado)':''}`},
+    {l:'EQ NS',v:fmtM(proj.isCurrent?curEQ*factor:curEQ),s:`GM% ${fmtP(curEQ>0?curEQGM/curEQ:0)}`},
+    {l:'VC NS',v:fmtM(proj.isCurrent?curVC*factor:curVC),s:`GM% ${fmtP(curVC>0?curVCGM/curVC:0)}`},
   ];
 
   const bullets=[];
-  bullets.push(varV!==null
-    ?`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al mismo mes de ${c.prevYear} (${fmtM(prevNS)}).`
-    :`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS. No hay mismo mes del año anterior para comparar.`);
+  if(proj.isCurrent){
+    bullets.push(`${mesTxt} lleva <b>${fmtM(curNS)}</b> de NS real${diaTxt}; a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b>.`);
+    bullets.push(varV!==null
+      ?`Comparado con el cierre completo de ${MN[c.latestMonth-1]} ${c.prevYear} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
+      :`No hay mismo mes del año anterior para comparar la estimación de cierre.`);
+  }else{
+    bullets.push(varV!==null
+      ?`${mesTxt} cerró con <b>${fmtM(curNS)}</b> de NS, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente al mismo mes de ${c.prevYear} (${fmtM(prevNS)}).`
+      :`${mesTxt} cerró con <b>${fmtM(curNS)}</b> de NS. No hay mismo mes del año anterior para comparar.`);
+  }
   bullets.push(`El margen del mes es <b>${fmtP(gmPct)}</b>.`);
 
-  const names=new Set([...Object.keys(byFleetCur),...Object.keys(byFleetPrev)]);
+  // Movimientos: solo entre las flotas de más volumen (top 20 por NS del mes
+  // en curso), para que no dominen la lista subidas/caídas del 100%+ que en
+  // euros son irrelevantes. Dentro de esas 20, la comparación usa el mismo
+  // factor de proyección que el total del mes, para que sea coherente con
+  // el "estimado de cierre" de arriba.
+  const allFleets=Object.keys(byFleetCur).map(n=>({name:n,cur:byFleetCur[n]||0}));
+  const top20=new Set(allFleets.sort((a,b)=>b.cur-a.cur).slice(0,20).map(f=>f.name));
   const varRows=[];
-  for(const n of names){
+  for(const n of top20){
     const cur=byFleetCur[n]||0, prev=byFleetPrev[n]||0;
-    if(prev>0 && (cur>=2000||prev>=2000)) varRows.push({name:n,cur,prev,varV:(cur-prev)/prev});
+    if(prev>0) varRows.push({name:n,cur:cur*factor,prev,varV:((cur*factor)-prev)/prev});
   }
   const up=varRows.slice().sort((a,b)=>b.varV-a.varV).slice(0,5);
   const down=varRows.slice().sort((a,b)=>a.varV-b.varV).slice(0,5);
-  if(up.length) bullets.push(`La flota que más crece este mes es <b>${up[0].name}</b> (${varStr(up[0].varV)}).`);
-  if(down.length) bullets.push(`La mayor caída del mes es <b>${down[0].name}</b> (${varStr(down[0].varV)}).`);
+  if(up.length) bullets.push(`Dentro del top 20 por volumen, la que más crece este mes es <b>${up[0].name}</b> (${varStr(up[0].varV)}).`);
+  if(down.length) bullets.push(`Dentro del top 20 por volumen, la mayor caída es <b>${down[0].name}</b> (${varStr(down[0].varV)}).`);
 
   const moversHtml=arr=>arr.length?arr.map(x=>
     `<div class="exec-mover-row"><span>${x.name}</span><span class="${varCls(x.varV)}">${varStr(x.varV)}</span></div>`).join('')
@@ -2825,7 +2893,7 @@ async function buildMonthExecSummary(){
     <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
     <div class="exec-section-title">Lectura del mes</div>
     <ul class="exec-narrative">${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
-    <div class="exec-section-title">Movimientos del mes vs mismo mes año anterior</div>
+    <div class="exec-section-title">Movimientos del mes vs mismo mes año anterior <span style="font-weight:400;color:var(--muted);text-transform:none">· top 20 por volumen</span></div>
     <div class="exec-movers">
       <div class="exec-mover-col"><h4>🟢 Suben</h4>${moversHtml(up)}</div>
       <div class="exec-mover-col"><h4>🔴 Caen</h4>${moversHtml(down)}</div>
@@ -2847,19 +2915,32 @@ async function buildFleetMonthExecSummary(){
   const curNS=frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0);
   const curGM=frows.filter(r=>r.year===latY&&r.month===latestMo).reduce((s,r)=>s+r.gm,0);
   const prevNS=prevY?frows.filter(r=>r.year===prevY&&r.month===latestMo).reduce((s,r)=>s+r.ns,0):0;
-  const varV=prevNS>0?(curNS-prevNS)/prevNS:null;
   const mesTxt=`${MN[latestMo-1]} ${latY}`;
   const canalLabel=activeCanals.slice().sort().join('+');
   const gmPct=curNS>0?curGM/curNS:0;
 
+  const proj=monthProjectionInfo(latY,latestMo,curNS);
+  const factor=proj.isCurrent&&curNS>0?proj.proy/curNS:1;
+  const varV=prevNS>0?((proj.isCurrent?proj.proy:curNS)-prevNS)/prevNS:null;
+
   const kpis=[
-    {l:`NS ${mesTxt}`,v:fmtM(curNS),s:varV!==null?`vs ${MN[latestMo-1]} ${prevY}: ${varStr(varV)}`:'Sin año anterior'},
-    {l:'GM del mes',v:fmtM(curGM),s:`GM% ${fmtP(gmPct)}`},
+    {l:`NS ${mesTxt}`,v:proj.isCurrent?fmtM(proj.proy):fmtM(curNS),
+     s:proj.isCurrent
+       ?`Real hasta ahora: ${fmtM(curNS)} · ${varV!==null?varStr(varV)+' vs PY (estimado)':'Sin año anterior'}`
+       :(varV!==null?`vs ${MN[latestMo-1]} ${prevY}: ${varStr(varV)}`:'Sin año anterior')},
+    {l:'GM del mes',v:fmtM(proj.isCurrent?curGM*factor:curGM),s:`GM% ${fmtP(gmPct)}${proj.isCurrent?' (estimado)':''}`},
   ];
   const bullets=[];
-  bullets.push(varV!==null
-    ?`${fleet} lleva <b>${fmtM(curNS)}</b> en ${mesTxt}, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente a ${MN[latestMo-1]} ${prevY} (${fmtM(prevNS)}).`
-    :`${fleet} lleva <b>${fmtM(curNS)}</b> en ${mesTxt}. No hay mismo mes del año anterior para comparar.`);
+  if(proj.isCurrent){
+    bullets.push(`${fleet} lleva <b>${fmtM(curNS)}</b> real en ${mesTxt} (${proj.daysElapsed}/${proj.daysInMonth} días cargados); a este ritmo cerraría en torno a <b>${fmtM(proj.proy)}</b>.`);
+    bullets.push(varV!==null
+      ?`Frente al cierre completo de ${MN[latestMo-1]} ${prevY} (${fmtM(prevNS)}), la estimación de cierre supone ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')}.`
+      :'No hay mismo mes del año anterior para comparar la estimación de cierre.');
+  }else{
+    bullets.push(varV!==null
+      ?`${fleet} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>, ${varV>=0?'un '+varStr(varV)+' más':'una caída del '+varStr(varV).replace('-','')} frente a ${MN[latestMo-1]} ${prevY} (${fmtM(prevNS)}).`
+      :`${fleet} cerró ${mesTxt} con <b>${fmtM(curNS)}</b>. No hay mismo mes del año anterior para comparar.`);
+  }
   bullets.push(`Margen del mes: <b>${fmtP(gmPct)}</b>.`);
 
   return `
@@ -2884,7 +2965,10 @@ function buildGlobalExecSummary(){
     {l:'EQ NS YTD',v:fmtM(c.A.eqNS),s:c.varEqKpi!==null?varStr(c.varEqKpi)+' vs PY':'—'},
     {l:'VC NS YTD',v:fmtM(c.A.vcNS),s:c.varVcKpi!==null?varStr(c.varVcKpi)+' vs PY':'—'},
     {l:'Proyección FY',v:fmtM(c.proy),s:`${fmtP(c.cob)} vs objetivo OB26`},
-    {l:`MTD ${MN[c.latestMonth-1]}`,v:fmtM(c.mtdNS),s:c.mtdVarV!==null?varStr(c.mtdVarV)+' vs PY':'—'},
+    {l:`MTD ${MN[c.latestMonth-1]}`,v:fmtM(c.mtdNS),
+     s:c.mtdProj?.isCurrent&&c.mtdProyVarV!==null
+       ?`Est. cierre ${fmtM(c.mtdProj.proy)} · ${varStr(c.mtdProyVarV)} vs PY`
+       :c.mtdVarV!==null?varStr(c.mtdVarV)+' vs PY':'—'},
   ];
 
   // Narrativa automática — reglas simples sobre datos ya calculados, sin IA:

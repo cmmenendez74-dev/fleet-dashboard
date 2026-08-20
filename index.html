@@ -169,7 +169,7 @@ tr:hover td{background:var(--lg)}
   .print-header{display:block!important}
   body{font-size:11px}
   #view-resumen,#view-flotas{display:block!important}
-  #view-historico,#view-upload,#view-periodos,#view-alertas,#view-kam{display:none!important}
+  #view-historico,#view-upload,#view-periodos,#view-alertas,#view-kam,#view-neumaticos{display:none!important}
   #flotas-detail-view{display:none!important}
   #flotas-table-view{display:block!important}
   /* Imprimir "Por KAM" (ver exportPDF): con body.printing-kam se invierte
@@ -439,6 +439,10 @@ body.present-mode #exec-summary-btn{display:none}
   <div class="nav-item" onclick="nav('alertas',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     Alertas
+  </div>
+  <div class="nav-item" onclick="nav('neumaticos',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+    Neumáticos
   </div>
   <div class="nav-section">Datos</div>
   <div class="nav-item admin-only" id="nav-upload" onclick="nav('upload',this)">
@@ -978,6 +982,30 @@ body.present-mode #exec-summary-btn{display:none}
       </div>
     </div>
 
+    <!-- NEUMATICOS -->
+    <div class="view" id="view-neumaticos">
+      <div class="filter-bar">
+        <span class="filter-label">Desde</span>
+        <input type="date" id="neu-from" onchange="refreshNeumaticos()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px">
+        <span class="filter-label">Hasta</span>
+        <input type="date" id="neu-to" onchange="refreshNeumaticos()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px">
+        <span class="filter-label" style="margin-left:.5rem">Flota</span>
+        <select id="neu-fleet" onchange="refreshNeumaticos()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:#fff;min-width:140px">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="kpi-row" id="kpis-neu"></div>
+      <div class="g2">
+        <div class="card"><div class="card-hd">Cuota por marca</div>
+          <div class="card-bd"><div class="chart-box"><canvas id="ch-neu-donut"></canvas></div></div></div>
+        <div class="card"><div class="card-hd">Principales marcas de la competencia</div>
+          <div class="card-bd"><div class="chart-box"><canvas id="ch-neu-comp"></canvas></div></div></div>
+      </div>
+      <div class="card"><div class="card-hd">Cuota Bridgestone+Firestone por flota</div>
+      <div class="card-bd"><div class="tbl-wrap">
+        <table><thead><tr><th>Flota</th><th class="r">Venta BS+FS</th><th class="r">Venta competencia</th><th class="r">% BS+FS</th></tr></thead><tbody id="neu-fleet-tb"></tbody></table>
+      </div></div></div>
+    </div>
 
   </div><!-- /content -->
 </div><!-- /main -->
@@ -1714,7 +1742,7 @@ function updatePills(){
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════════════════════
 const TITLES={resumen:'Resumen global',historico:'Año vs año',flotas:'Por flota',kam:'Por KAM',
-               alertas:'Alertas',upload:'Cargar archivos',periodos:'Períodos'};
+               alertas:'Alertas',neumaticos:'Neumáticos',upload:'Cargar archivos',periodos:'Períodos'};
 
 // ── Resumen: EQ vs VC ahora siempre visible, sin pestaña (ver refreshResumen) ──
 
@@ -1746,6 +1774,7 @@ function nav(id,el){
     buildChipsK(); buildChipsCanalK(); buildChipsMoK(); refreshKam();
   }
   else if(id==='alertas') refreshAlertas();
+  else if(id==='neumaticos') refreshNeumaticos();
   else if(id==='periodos') refreshPeriodos();
   document.getElementById('global-search-results').style.display='none';
   document.getElementById('global-search').value='';
@@ -5034,6 +5063,112 @@ async function refreshAlertas(){
     : '<tr><td colspan="5" class="no-data">Sin flotas con crecimiento significativo</td></tr>';
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// NEUMATICOS — cuota Bridgestone/Firestone vs. competencia, desde
+// tire_brand_sales_daily (fuente: Hermes, ver hermes_sql_sync.py).
+// ══════════════════════════════════════════════════════════════════════════════
+const NEU_BSFS=new Set(['BRIDGESTONE','FIRESTONE']);
+let neuFleetLoaded=false;
+
+async function refreshNeumaticos(){
+  const fromEl=document.getElementById('neu-from');
+  const toEl=document.getElementById('neu-to');
+  if(!fromEl.value||!toEl.value){
+    const today=new Date();
+    const past=new Date();past.setDate(today.getDate()-30);
+    toEl.value=localDateStr(today);
+    fromEl.value=localDateStr(past);
+  }
+  const from=fromEl.value, to=toEl.value;
+  const fleetSel=document.getElementById('neu-fleet').value;
+
+  let params=`select=snap_date,fleet_norm,marca,num_lineas,venta&snap_date=gte.${from}&snap_date=lte.${to}`;
+  if(fleetSel) params+=`&fleet_norm=eq.${encodeURIComponent(fleetSel)}`;
+  const rows=await sbSelectAll('tire_brand_sales_daily',params);
+
+  if(!neuFleetLoaded){
+    const allFleets=[...new Set(rows.map(r=>r.fleet_norm))].sort();
+    const sel=document.getElementById('neu-fleet');
+    allFleets.forEach(f=>{
+      const opt=document.createElement('option');opt.value=f;opt.textContent=f;sel.appendChild(opt);
+    });
+    neuFleetLoaded=true;
+  }
+
+  if(!rows.length){
+    document.getElementById('kpis-neu').innerHTML='<div class="no-data">No hay datos de neumáticos en este período todavía.</div>';
+    document.getElementById('neu-fleet-tb').innerHTML='<tr><td colspan="4" class="no-data">Sin datos</td></tr>';
+    return;
+  }
+
+  // Agregado por marca
+  const byMarca={};
+  let bsfsVenta=0, compVenta=0;
+  for(const r of rows){
+    if(!byMarca[r.marca]) byMarca[r.marca]={venta:0,lineas:0};
+    byMarca[r.marca].venta+=r.venta; byMarca[r.marca].lineas+=r.num_lineas;
+    if(NEU_BSFS.has(r.marca)) bsfsVenta+=r.venta;
+    else if(r.marca!=='SIN_MARCA') compVenta+=r.venta;
+  }
+  const totalIdentificado=bsfsVenta+compVenta;
+  const pctBsfs=totalIdentificado>0?bsfsVenta/totalIdentificado:0;
+
+  document.getElementById('kpis-neu').innerHTML=[
+    {cls:'k-tot',l:'Cuota Bridgestone+Firestone',v:fmtP(pctBsfs),s:'Sobre venta de marca identificada'},
+    {cls:'k-eq', l:'Venta BS+FS',v:fmtM(bsfsVenta),s:`${from} — ${to}`},
+    {cls:'k-vc', l:'Venta competencia',v:fmtM(compVenta),s:`${Object.keys(byMarca).filter(m=>!NEU_BSFS.has(m)&&m!=='SIN_MARCA').length} marcas identificadas`},
+  ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
+    <div class="kpi-val">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`).join('');
+
+  // Donut: Firestone, Bridgestone, top-3 competencia, resto
+  const compEntries=Object.entries(byMarca).filter(([m])=>!NEU_BSFS.has(m)&&m!=='SIN_MARCA').sort((a,b)=>b[1].venta-a[1].venta);
+  const top3=compEntries.slice(0,3);
+  const restoVenta=compEntries.slice(3).reduce((s,[,v])=>s+v.venta,0);
+  const donutLabels=['Firestone','Bridgestone',...top3.map(([m])=>m[0]+m.slice(1).toLowerCase()),'Otras marcas'];
+  const donutData=[byMarca['FIRESTONE']?.venta||0,byMarca['BRIDGESTONE']?.venta||0,...top3.map(([,v])=>v.venta),restoVenta];
+  const donutColors=['#E65100','#1565C0','#666','#999','#BBB','#DDD'];
+  if(charts['ch-neu-donut']) charts['ch-neu-donut'].destroy();
+  const ctxD=document.getElementById('ch-neu-donut')?.getContext('2d');
+  if(ctxD) charts['ch-neu-donut']=new Chart(ctxD,{type:'doughnut',
+    data:{labels:donutLabels,datasets:[{data:donutData,backgroundColor:donutColors,borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmtM(ctx.parsed)}`}}}}});
+
+  // Barra horizontal: ranking de competencia (todas, no solo top3)
+  if(charts['ch-neu-comp']) charts['ch-neu-comp'].destroy();
+  const ctxC=document.getElementById('ch-neu-comp')?.getContext('2d');
+  if(ctxC) charts['ch-neu-comp']=new Chart(ctxC,{type:'bar',
+    data:{labels:compEntries.slice(0,8).map(([m])=>m[0]+m.slice(1).toLowerCase()),
+      datasets:[{data:compEntries.slice(0,8).map(([,v])=>v.venta),backgroundColor:'#888',borderRadius:4}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed.x)}`}}},
+      scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:10},callback:v=>fmtM(v)}},
+        y:{grid:{display:false},ticks:{font:{size:10}}}}}});
+
+  // Tabla por flota (solo si no hay flota concreta seleccionada)
+  if(!fleetSel){
+    const byFleet={};
+    for(const r of rows){
+      if(!byFleet[r.fleet_norm]) byFleet[r.fleet_norm]={bsfs:0,comp:0};
+      if(NEU_BSFS.has(r.marca)) byFleet[r.fleet_norm].bsfs+=r.venta;
+      else if(r.marca!=='SIN_MARCA') byFleet[r.fleet_norm].comp+=r.venta;
+    }
+    const fleetRows=Object.entries(byFleet)
+      .filter(([,v])=>v.bsfs+v.comp>0)
+      .sort((a,b)=>(b[1].bsfs+b[1].comp)-(a[1].bsfs+a[1].comp));
+    document.getElementById('neu-fleet-tb').innerHTML=fleetRows.length
+      ? fleetRows.map(([name,v])=>{
+          const tot=v.bsfs+v.comp;
+          const pct=tot>0?v.bsfs/tot:0;
+          return `<tr><td>${name}</td><td class="r">${fmtM(v.bsfs)}</td><td class="r">${fmtM(v.comp)}</td>
+            <td class="r"><b class="${pct>=0.8?'up':pct>=0.5?'':'dn'}">${fmtP(pct)}</b></td></tr>`;
+        }).join('')
+      : '<tr><td colspan="4" class="no-data">Sin datos</td></tr>';
+  } else {
+    document.getElementById('neu-fleet-tb').innerHTML='<tr><td colspan="4" class="no-data">Selecciona "Todas" para ver el desglose por flota</td></tr>';
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EXPORTAR FICHA INDIVIDUAL DE FLOTA

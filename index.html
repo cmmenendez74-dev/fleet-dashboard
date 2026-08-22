@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V17 · Hermes live ingestion === */
+/* === V17.1 · Hermes live ingestion === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -5181,15 +5181,25 @@ let hermesStage={valid:false,file:null,fileHash:null,operations:[],workflow:[],c
 
 function normHermesSheet(v){return String(v||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 function normHermesHeader(v){return normHermesSheet(v).replace(/\s+/g,'_');}
-function hNum(v){if(v===null||v===undefined||v==='')return null;const n=Number(String(v).replace(',','.'));return Number.isFinite(n)?n:null;}
+function hNull(v){
+  if(v===null||v===undefined) return null;
+  if(typeof v==='string'){
+    const x=v.trim();
+    if(x==='' || ['NULL','(NULL)','N/A','NA'].includes(x.toUpperCase())) return null;
+    return x;
+  }
+  return v;
+}
+function hText(v){const x=hNull(v);return x===null?null:String(x);}
+function hNum(v){v=hNull(v);if(v===null)return null;const n=Number(String(v).replace(',','.'));return Number.isFinite(n)?n:null;}
 function hBool(v){
-  if(v===null||v===undefined||v==='')return null;
+  v=hNull(v);if(v===null)return null;
   if(typeof v==='boolean')return v;
   const x=String(v).trim().toUpperCase();
   return ['1','TRUE','SI','SÍ','YES'].includes(x)?true:['0','FALSE','NO'].includes(x)?false:null;
 }
 function hIso(v){
-  if(v===null||v===undefined||v==='')return null;
+  v=hNull(v);if(v===null)return null;
   if(v instanceof Date&&!isNaN(v)) return v.toISOString();
   if(typeof v==='number'){
     const d=XLSX.SSF.parse_date_code(v);
@@ -5218,19 +5228,19 @@ async function sha256File(file){
 function mapHermesOperation(r){
   return {
     opr_id:hNum(r.OPR_ID),
-    channel:String(r.CHANNEL||'OTHER').toUpperCase(),
+    channel:String(hText(r.CHANNEL)||'OTHER').toUpperCase(),
     provider_type_synergy:hNum(r.PROVIDER_TYPE_SYNERGY),
     provider_id:hNum(r.PROVIDER_ID),
-    provider_synergy_code:r.PROVIDER_SYNERGY_CODE??null,
-    provider_name:r.PROVIDER_NAME??null,
-    regional_manager:r.REGIONAL_MANAGER??null,
+    provider_synergy_code:hText(r.PROVIDER_SYNERGY_CODE),
+    provider_name:hText(r.PROVIDER_NAME),
+    regional_manager:hText(r.REGIONAL_MANAGER),
     client_id:hNum(r.CLIENT_ID),
-    client_name:r.CLIENT_NAME??null,
-    vehicle_plate:r.VEHICLE_PLATE??null,
-    vehicle_description:r.VEHICLE_DESCRIPTION??null,
+    client_name:hText(r.CLIENT_NAME),
+    vehicle_plate:hText(r.VEHICLE_PLATE),
+    vehicle_description:hText(r.VEHICLE_DESCRIPTION),
     vehicle_km:hNum(r.VEHICLE_KM),
-    technician_assigned:r.TECHNICIAN_ASSIGNED??null,
-    authorization_code:r.AUTHORIZATION_CODE??null,
+    technician_assigned:hText(r.TECHNICIAN_ASSIGNED),
+    authorization_code:hText(r.AUTHORIZATION_CODE),
     authorization_type:hNum(r.AUTHORIZATION_TYPE),
     retained:hBool(r.RETAINED),
     entry_at:hIso(r.ENTRY_AT),
@@ -5248,33 +5258,33 @@ function mapHermesOperation(r){
     fleet_total_amount:hNum(r.FLEET_TOTAL_AMOUNT),
     gt_integrated:hBool(r.GT_INTEGRATED),
     gt_authorization_id:hNum(r.GT_AUTHORIZATION_ID),
-    gt_estimate:r.GT_ESTIMATE??null,
+    gt_estimate:hText(r.GT_ESTIMATE),
     gt_imported_valuation:hBool(r.GT_IMPORTED_VALUATION)
   };
 }
 function mapHermesWorkflow(r){
   return {
-    source_key:String(r.SOURCE_KEY??'').trim(),
+    source_key:hText(r.SOURCE_KEY)||'',
     opr_id:hNum(r.OPR_ID),
     event_at:hIso(r.EVENT_AT),
-    state_code:r.STATE_CODE==null?null:String(r.STATE_CODE),
-    state_name:r.STATE_NAME??null,
-    station_code:r.STATION_CODE==null?null:String(r.STATION_CODE),
-    station_name:r.STATION_NAME??null,
-    event_type:r.EVENT_TYPE??'STATE_CHANGE',
+    state_code:hText(r.STATE_CODE),
+    state_name:hText(r.STATE_NAME),
+    station_code:hText(r.STATION_CODE),
+    station_name:hText(r.STATION_NAME),
+    event_type:hText(r.EVENT_TYPE)||'STATE_CHANGE',
     user_id_hermes:hNum(r.USER_ID_HERMES),
-    user_name:r.USER_NAME??null,
-    technician_name:r.TECHNICIAN_NAME??null,
+    user_name:hText(r.USER_NAME),
+    technician_name:hText(r.TECHNICIAN_NAME),
     client_id:hNum(r.CLIENT_ID),
-    client_name:r.CLIENT_NAME??null,
+    client_name:hText(r.CLIENT_NAME),
     provider_id:hNum(r.PROVIDER_ID),
     provider_name:r.PROVIDER_NAME??null
   };
 }
 function mapHermesConversion(r){
-  const et=String(r.EVENT_TYPE||'').toUpperCase();
+  const et=String(hText(r.EVENT_TYPE)||'').toUpperCase();
   return {
-    source_key:String(r.SOURCE_KEY??'').trim(),
+    source_key:hText(r.SOURCE_KEY)||'',
     opr_id:hNum(r.OPR_ID),
     budget_id:hNum(r.BUDGET_ID),
     budget_version:hNum(r.BUDGET_VERSION),
@@ -5286,10 +5296,10 @@ function mapHermesConversion(r){
     reopened:et==='REOPENING',
     is_total_rejection:hBool(r.IS_TOTAL_REJECTION)??(et==='TOTAL_REJECTION'),
     is_reopening:hBool(r.IS_REOPENING)??(et==='REOPENING'),
-    user_name:r.USER_NAME??null,
-    fleet_name:r.FLEET_NAME??null,
-    comment:r.COMMENT??null,
-    rejection_reason:r.COMMENT??null
+    user_name:hText(r.USER_NAME),
+    fleet_name:hText(r.FLEET_NAME),
+    comment:hText(r.COMMENT),
+    rejection_reason:hText(r.COMMENT)
   };
 }
 function hermesPeriodFromRows(ops,wf,cv){
@@ -5344,6 +5354,13 @@ async function validateHermesWorkbook(file){
 
     const badCv=cv.filter(x=>!['CORRECTION','TOTAL_REJECTION','REOPENING'].includes(x.event_type));
     if(badCv.length) throw new Error(`CONVERSION: ${badCv.length} filas con EVENT_TYPE no válido.`);
+
+    const literalNulls=[
+      ...ops.flatMap((x,i)=>Object.entries(x).filter(([k,v])=>typeof v==='string'&&v.trim().toUpperCase()==='NULL').map(([k])=>`OPERACIONES fila ${i+2} · ${k}`)),
+      ...wf.flatMap((x,i)=>Object.entries(x).filter(([k,v])=>typeof v==='string'&&v.trim().toUpperCase()==='NULL').map(([k])=>`WORKFLOW fila ${i+2} · ${k}`)),
+      ...cv.flatMap((x,i)=>Object.entries(x).filter(([k,v])=>typeof v==='string'&&v.trim().toUpperCase()==='NULL').map(([k])=>`CONVERSION fila ${i+2} · ${k}`))
+    ];
+    if(literalNulls.length) throw new Error(`Quedan valores NULL literales tras normalizar: ${literalNulls.slice(0,5).join('; ')}`);
 
     const period=hermesPeriodFromRows(ops,wf,cv);
     const fileHash=await sha256File(file);
@@ -5430,7 +5447,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V17 validada. Equipo derivado de Workflow + Conversion.',
+        validation_message:'Carga V17.1 validada. NULL normalizados; Equipo derivado de Workflow + Conversion.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

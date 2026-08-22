@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V17.1 · Hermes live ingestion === */
+/* === V18.1 · Executive Focus + Hermes Quality === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -631,6 +631,15 @@ body,.main{background:var(--app-bg)}
 .hermes-progress>div{height:100%;background:var(--bl);width:0%;transition:width .2s}
 @media(max-width:900px){.hermes-stage-summary{grid-template-columns:1fr 1fr}}
 
+
+/* === V18 · Executive Focus === */
+.hermes-more summary::-webkit-details-marker{display:none}
+.hermes-more[open] summary{background:#202020;color:#fff}
+#view-neumaticos .page-title{margin-bottom:.65rem}
+#view-neumaticos .neu-insight{padding:.55rem .7rem;font-size:10.5px}
+
+
+/* V18.1: Neumáticos retirado del producto funcional; código residual no accesible desde navegación. */
 </style>
 </head>
 <body>
@@ -761,10 +770,6 @@ body,.main{background:var(--app-bg)}
   <div class="nav-item" id="nav-hermes" onclick="nav('hermes',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>
     Hermes
-  </div>
-  <div class="nav-item" id="nav-neumaticos" onclick="nav('neumaticos',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
-    Neumáticos
   </div>
   <details class="admin-menu admin-only"><summary>Administración</summary>
   <div class="nav-item admin-only" id="nav-upload" onclick="nav('upload',this)">
@@ -1262,7 +1267,7 @@ body,.main{background:var(--app-bg)}
     <!-- POR KAM -->
     <div class="view" id="view-kam">
       <div class="page-title">
-        <div><div class="section-eyebrow">Gestión comercial</div><h1>Equipo</h1><p>Rendimiento por KAM, con foco en excepciones y clientes que explican el resultado.</p></div>
+        <div><div class="section-eyebrow">Gestión comercial</div><h1>KAM</h1><p>Cartera, resultado y excepciones por responsable comercial.</p></div>
       </div>
       <div class="team-kpis" id="team-kpis"></div>
       <div class="focus-chips">
@@ -1309,8 +1314,8 @@ body,.main{background:var(--app-bg)}
       <div id="kam-detail-view" style="display:none">
         <div class="team-detail-head">
           <div style="display:flex;align-items:flex-start;gap:.65rem">
-            <button class="back-btn" onclick="backToKamList()" title="Volver a Equipo">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Equipo
+            <button class="back-btn" onclick="backToKamList()" title="Volver a KAM">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>KAM
             </button>
             <div class="team-detail-title">
               <h2 id="kam-detail-name">KAM</h2>
@@ -1396,17 +1401,22 @@ body,.main{background:var(--app-bg)}
         <div>
           <div class="section-eyebrow">Control operativo</div>
           <h1>Hermes</h1>
-          <p>Complementa los KPIs oficiales de Power BI con operaciones, cierres, talleres, tiempos y pendientes. La fuente Hermes se mantiene separada y nunca sobrescribe el dato económico oficial.</p>
+          <p>Excepciones operativas: SLA, tiempo por estación, retrabajo y responsables.</p>
         </div>
         <span class="hermes-source-pill">Fuente operativa separada</span>
       </div>
 
-      <div class="hermes-subnav">
+      <div class="hermes-subnav" style="display:flex;align-items:center;gap:.45rem;flex-wrap:wrap">
         <span class="chip on" id="hermes-tab-control" onclick="setHermesTab('control')">Control</span>
         <span class="chip" id="hermes-tab-ops" onclick="setHermesTab('ops')">Operaciones</span>
         <span class="chip" id="hermes-tab-workshops" onclick="setHermesTab('workshops')">Talleres</span>
-        <span class="chip" id="hermes-tab-conversion" onclick="setHermesTab('conversion')">Conversión</span>
-        <span class="chip" id="hermes-tab-team" onclick="setHermesTab('team')">Equipo</span>
+        <details class="hermes-more" style="margin-left:auto;position:relative">
+          <summary class="chip" style="list-style:none;cursor:pointer">Más análisis ▾</summary>
+          <div style="position:absolute;right:0;top:34px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.35rem;box-shadow:0 8px 20px rgba(0,0,0,.08);z-index:20;min-width:135px">
+            <span class="chip" id="hermes-tab-conversion" onclick="setHermesTab('conversion');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Conversión</span>
+            <span class="chip" id="hermes-tab-team" onclick="setHermesTab('team');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Equipo Hermes</span>
+          </div>
+        </details>
       </div>
 
       <div class="hermes-panel active" id="hermes-panel-control">
@@ -1422,33 +1432,20 @@ body,.main{background:var(--app-bg)}
           <div class="hermes-kpi"><div class="hk-label">Cerrado sin factura</div><div class="hk-value">—</div><div class="hk-sub">Alerta operativa Hermes.</div></div>
         </div>
 
-        <div class="hermes-overview">
-          <div class="card">
-            <div class="card-hd">Excepciones prioritarias <span class="subtle-tag">live</span></div>
-            <div class="card-bd" id="hermes-control-alerts"><div class="hermes-op-empty">Sin datos Hermes cargados.</div></div>
-          </div>
-          <div class="card">
-            <div class="card-hd">Cómo se interpreta</div>
-            <div class="card-bd">
-              <div class="hermes-note">
-                <b>Equity</b><br>Power BI/Navision mantiene la cifra económica oficial. Hermes añade control de cierres, tiempos y talleres.<br><br>
-                <b>Partners</b><br>Hermes aporta el detalle operativo; Power BI sigue como control agregado mientras la extracción sea manual.<br><br>
-                <b>Regla</b><br>Las discrepancias se muestran como alertas, no se mezclan en los KPIs oficiales.
-              </div>
-            </div>
-          </div>
+        <div class="card" style="margin-bottom:.8rem">
+          <div class="card-hd">Qué requiere atención <span class="subtle-tag">prioridad</span></div>
+          <div class="card-bd" id="hermes-control-alerts"><div class="hermes-op-empty">Sin datos Hermes cargados.</div></div>
         </div>
 
-        <div class="hermes-note" style="margin-bottom:.8rem">
-          <b>Histórico Hermes:</b> para períodos cerrados anteriores a agosto, la carga recomendada será <b>mensual</b>, no diaria. Permitirá comparar operaciones, ticket, talleres, tiempos y conversión por mes/año sin multiplicar archivos ni duplicar snapshots diarios.
+        <div class="hermes-method-note" style="margin:.15rem 0 .8rem;color:var(--muted);font-size:11px">
+          <strong>Lectura:</strong> ciclo total ≠ tiempo First Stop. El control separa Taller · First Stop · Flota y prioriza SLA + retrabajo.
         </div>
 
-        <div class="cockpit-section-title">Profundizar</div>
-        <div class="hermes-actions">
-          <div class="hermes-action" onclick="setHermesTab('ops')"><div class="ha-title">Operaciones</div><div class="ha-desc">Volumen, ticket medio, abiertas/cerradas y detalle por cliente.</div></div>
-          <div class="hermes-action" onclick="setHermesTab('workshops')"><div class="ha-title">Talleres</div><div class="ha-desc">Actividad, concentración, clientes, eficiencia y calidad por centro.</div></div>
-          <div class="hermes-action" onclick="setHermesTab('conversion')"><div class="ha-title">Conversión</div><div class="ha-desc">Presupuesto → autorización → operación → factura, rechazos y € no convertidos.</div></div>
-          <div class="hermes-action" onclick="setHermesTab('ops')"><div class="ha-title">Flujo y tiempos</div><div class="ha-desc">Integrado en Operaciones: fases, estancia, SLA y cuellos de botella.</div></div>
+        <div class="cockpit-section-title">Ir al detalle</div>
+        <div class="hermes-actions" style="grid-template-columns:repeat(3,1fr)">
+          <div class="hermes-action" onclick="setHermesTab('ops')"><div class="ha-title">Operaciones</div><div class="ha-desc">Abiertas, ciclo, SLA y tiempo atribuible por estación.</div></div>
+          <div class="hermes-action" onclick="setHermesTab('workshops')"><div class="ha-title">Talleres</div><div class="ha-desc">Dónde se concentra el volumen y las incidencias.</div></div>
+          <div class="hermes-action" onclick="setHermesTab('conversion')"><div class="ha-title">Calidad del proceso</div><div class="ha-desc">First Time Right, correcciones, rechazo total y reaperturas.</div></div>
         </div>
       </div>
 
@@ -1576,7 +1573,7 @@ body,.main{background:var(--app-bg)}
     <!-- NEUMATICOS -->
     <div class="view" id="view-neumaticos">
       <div class="page-title">
-        <div><div class="section-eyebrow">Análisis especializado</div><h1>Neumáticos</h1><p>Cuota Bridgestone + Firestone, presión competitiva y flotas donde existe mayor oportunidad de crecimiento.</p></div>
+        <div><div class="section-eyebrow">Producto · análisis puntual</div><h1>Neumáticos</h1><p>Cuota BS+FS, presión competitiva y clientes con oportunidad. Nada más.</p></div>
       </div>
       <div class="filter-bar">
         <span class="filter-label">Desde</span>
@@ -2374,7 +2371,7 @@ function updatePills(){
 // ══════════════════════════════════════════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════════════════════
-const TITLES={resumen:'Resumen',historico:'Evolución',flotas:'Clientes',kam:'Equipo',
+const TITLES={resumen:'Resumen',historico:'Evolución',flotas:'Clientes',kam:'KAM',
                alertas:'Atención',hermes:'Hermes',neumaticos:'Neumáticos',upload:'Cargar archivos',periodos:'Períodos'};
 
 // ── Resumen: EQ vs VC ahora siempre visible, sin pestaña (ver refreshResumen) ──
@@ -2470,6 +2467,24 @@ function hermesHours(a,b){
 function escHtml(v){
   return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
+
+function hermesExecutiveSignals(){
+  const wf=(HERMES_STATE&&HERMES_STATE.workflow)||[];
+  const cv=(HERMES_STATE&&HERMES_STATE.conversion)||[];
+  const ops=(HERMES_STATE&&HERMES_STATE.operations)||[];
+  if(!ops.length && !wf.length && !cv.length) return [];
+  const corr=cv.filter(x=>String(x.event_type||'').toUpperCase()==='CORRECTION').length;
+  const rej=cv.filter(x=>String(x.event_type||'').toUpperCase()==='TOTAL_REJECTION').length;
+  const reo=cv.filter(x=>String(x.event_type||'').toUpperCase()==='REOPENING').length;
+  const opWithRework=new Set(cv.filter(x=>['CORRECTION','TOTAL_REJECTION','REOPENING'].includes(String(x.event_type||'').toUpperCase())).map(x=>String(x.opr_id))).size;
+  const denom=new Set(ops.map(x=>String(x.opr_id))).size||1;
+  const ftr=Math.max(0,100-(opWithRework/denom*100));
+  return [
+    {label:'First Time Right',value:ftr.toFixed(1)+'%',detail:`${opWithRework} operaciones con retrabajo`},
+    {label:'Retrabajo',value:String(corr+rej+reo),detail:`${corr} correcciones · ${rej} rechazos · ${reo} reaperturas`}
+  ];
+}
+
 function renderHermesControl(){
   const rows=hermesOpsData||[];
   const r=hermesActiveRange();
@@ -5278,7 +5293,7 @@ function mapHermesWorkflow(r){
     client_id:hNum(r.CLIENT_ID),
     client_name:hText(r.CLIENT_NAME),
     provider_id:hNum(r.PROVIDER_ID),
-    provider_name:r.PROVIDER_NAME??null
+    provider_name:hText(r.PROVIDER_NAME)
   };
 }
 function mapHermesConversion(r){
@@ -5447,7 +5462,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V17.1 validada. NULL normalizados; Equipo derivado de Workflow + Conversion.',
+        validation_message:'Carga V18.1 validada. Hermes Quality preparado; NULL normalizados.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

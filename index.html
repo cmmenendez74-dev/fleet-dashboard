@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V19.1 · Hermes Working Time === */
+/* === V19.2 · Hermes Quality Semantics === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -654,6 +654,11 @@ body,.main{background:var(--app-bg)}
   #hermes-panel-conversion .hermes-op-kpis,
   #hermes-panel-team .hermes-op-kpis{grid-template-columns:repeat(2,1fr)}
 }
+
+
+/* === V19.2 · Quality semantics === */
+.hermes-op-badge.reject{background:#eef1f4;color:#39434d;border:1px solid #d9dee3}
+.hermes-op-badge.review{background:#eef4ff;color:#315a9c;border:1px solid #d7e4fb}
 
 </style>
 </head>
@@ -1537,12 +1542,12 @@ body,.main{background:var(--app-bg)}
 
       <div class="hermes-panel" id="hermes-panel-conversion">
         <div class="hermes-op-controls">
-          <span class="hermes-source-pill" id="hermes-conv-source">Esperando carga Hermes</span>
+          <span class="hermes-source-pill" id="hermes-conv-source">Esperando carga Hermes</span><span class="hermes-source-pill">OK · Revisar · Retrabajo · Rechazada · Crítico</span>
         </div>
 
         <div class="hermes-op-kpis" id="hermes-conv-kpis">
-          <div class="hermes-op-kpi"><div class="label">OPR con retrabajo</div><div class="value">—</div><div class="sub">Operaciones afectadas</div></div>
-          <div class="hermes-op-kpi"><div class="label">First Time Right</div><div class="value">—</div><div class="sub">Sin eventos de retrabajo</div></div>
+          <div class="hermes-op-kpi"><div class="label">OPR con retrabajo</div><div class="value">—</div><div class="sub">Corrección o reapertura</div></div>
+          <div class="hermes-op-kpi"><div class="label">First Time Right</div><div class="value">—</div><div class="sub">Sin corrección ni reapertura</div></div>
           <div class="hermes-op-kpi"><div class="label">Rechazo total</div><div class="value">—</div><div class="sub">Operaciones</div></div>
           <div class="hermes-op-kpi"><div class="label">Reaperturas</div><div class="value">—</div><div class="sub">Operaciones</div></div>
         </div>
@@ -2599,8 +2604,16 @@ function hermesIsOutsideSla(op){
 }
 function hermesPriority(op,timing,rework){
   const fsOutside=Number(timing.FIRSTSTOP||0)>hermesFirstStopSlaHours();
-  if(fsOutside || rework.rejects>0 || rework.reopenings>0) return {rank:2,label:'CRÍTICO',cls:'err'};
-  if(rework.corrections>=2 || rework.events>0) return {rank:1,label:'ATENCIÓN',cls:'warn'};
+  const severeRework =
+    (rework.reopenings>0 && rework.rejects>0) ||
+    rework.corrections>=3 ||
+    (fsOutside && (rework.corrections>0 || rework.reopenings>0));
+
+  if(severeRework) return {rank:4,label:'CRÍTICO',cls:'err'};
+  if(rework.rejects>0) return {rank:3,label:'RECHAZADA',cls:'reject'};
+  if(rework.reopenings>0 || rework.corrections>=2) return {rank:2,label:'RETRABAJO',cls:'warn'};
+  if(rework.corrections===1) return {rank:1,label:'REVISAR',cls:'review'};
+  if(fsOutside) return {rank:1,label:'SLA FS',cls:'warn'};
   return {rank:0,label:'OK',cls:'ok'};
 }
 
@@ -2687,7 +2700,7 @@ function renderHermesOperations(){
   src.textContent=`Hermes · ${rows.length} operaciones`;
   const open=rows.filter(r=>Number(r.delivery_status)!==2).length;
   const outside=detailed.filter(x=>x.sla).length;
-  const reworkOps=detailed.filter(x=>x.rework.events>0).length;
+  const reworkOps=detailed.filter(x=>x.rework.corrections>0 || x.rework.reopenings>0).length;
   const ftr=rows.length?1-reworkOps/rows.length:null;
 
   const k=document.getElementById('hermes-op-kpis');
@@ -2695,7 +2708,7 @@ function renderHermesOperations(){
     ['Operaciones',fmt(rows.length),'Período Hermes'],
     ['Abiertas',fmt(open),'Pendientes de cierre'],
     ['Fuera SLA FS',fmt(outside),outside?'Más de 2 h laborables FS':'Sin alertas'],
-    ['First Time Right',ftr!==null?fmtP(ftr):'—',`${reworkOps} OPR con retrabajo`]
+    ['First Time Right',ftr!==null?fmtP(ftr):'—',`${reworkOps} OPR con corrección/reapertura`]
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
 
   const tb=document.getElementById('hermes-op-client-tb');
@@ -2735,8 +2748,8 @@ function renderHermesWorkshops(){
       if(Number(op.delivery_status)!==2) open++;
       if(Number(timing.FIRSTSTOP||0)>hermesFirstStopSlaHours()) outside++;
       taller+=timing.TALLER; fs+=timing.FIRSTSTOP;
-      if(rw.events>0) reworkOps++;
-      reworkEvents+=rw.events;
+      if(rw.corrections>0 || rw.reopenings>0) reworkOps++;
+      reworkEvents+=rw.corrections+rw.reopenings;
       critical=Math.max(critical,pr.rank);
     }
     const ftr=g.ops.length?1-reworkOps/g.ops.length:null;
@@ -2760,7 +2773,7 @@ function renderHermesWorkshops(){
     ['Talleres activos',fmt(list.length),'Con OPR'],
     ['Con incidencias',fmt(incidents),'Crítico o Atención'],
     ['OPR fuera SLA FS',fmt(outsideAll),'Más de 2 h laborables FS'],
-    ['First Time Right',ftrAll!==null?fmtP(ftrAll):'—',`${reworkAll} OPR con retrabajo`]
+    ['First Time Right',ftrAll!==null?fmtP(ftrAll):'—',`${reworkAll} OPR con corrección/reapertura`]
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
 
   const tb=document.getElementById('hermes-workshop-tb');
@@ -2779,12 +2792,15 @@ function renderHermesWorkshops(){
 function renderHermesConversion(){
   const rows=hermesConversionData||[];
   const opMap=new Map((hermesOpsData||[]).map(x=>[String(x.opr_id),x]));
+  const wfMap=hermesWorkflowByOpr();
+
   const by=new Map();
   for(const r of rows){
     const key=String(r.opr_id||'');
     if(!by.has(key)) by.set(key,{opr:r.opr_id,events:[]});
     by.get(key).events.push(r);
   }
+
   const list=[...by.values()].map(g=>{
     g.events.sort((a,b)=>new Date(a.event_at)-new Date(b.event_at));
     const op=opMap.get(String(g.opr))||{};
@@ -2792,27 +2808,36 @@ function renderHermesConversion(){
     const rej=g.events.filter(x=>x.event_type==='TOTAL_REJECTION').length;
     const re=g.events.filter(x=>x.event_type==='REOPENING').length;
     const last=g.events[g.events.length-1]||{};
-    const state=rej||re?{label:'CRÍTICO',cls:'err'}:c>=2?{label:'ATENCIÓN',cls:'warn'}:{label:'RETRABAJO',cls:'warn'};
-    return {opr:g.opr,op,c,rej,re,last,state,total:g.events.length};
-  }).sort((a,b)=>{
-    const ra=a.state.cls==='err'?2:1, rb=b.state.cls==='err'?2:1;
-    return rb-ra || b.total-a.total || Number(b.opr)-Number(a.opr);
-  });
+    const timing=hermesOprBusinessTiming(g.opr,wfMap);
+    const priority=hermesPriority(op,timing,{
+      events:g.events.length,
+      corrections:c,
+      rejects:rej,
+      reopenings:re,
+      last
+    });
+    const hasRework=(c>0 || re>0); // FTR operativo: rechazo total por sí solo no penaliza
+    return {opr:g.opr,op,c,rej,re,last,priority,total:g.events.length,hasRework,timing};
+  }).sort((a,b)=>
+    b.priority.rank-a.priority.rank ||
+    b.total-a.total ||
+    Number(b.opr)-Number(a.opr)
+  );
 
   const totalOps=(hermesOpsData||[]).length;
-  const affected=list.length;
-  const ftr=totalOps?1-affected/totalOps:null;
+  const reworkOps=list.filter(x=>x.hasRework).length;
+  const ftr=totalOps?1-reworkOps/totalOps:null;
   const rejectOps=list.filter(x=>x.rej>0).length;
   const reopenOps=list.filter(x=>x.re>0).length;
 
   const src=document.getElementById('hermes-conv-source');
-  if(src) src.textContent=`Hermes · ${fmt(rows.length)} eventos · ${fmt(affected)} OPR`;
+  if(src) src.textContent=`Hermes · ${fmt(rows.length)} eventos · ${fmt(list.length)} OPR con eventos`;
 
   const k=document.getElementById('hermes-conv-kpis');
   if(k) k.innerHTML=[
-    ['OPR con retrabajo',fmt(affected),'Operaciones afectadas'],
-    ['First Time Right',ftr!==null?fmtP(ftr):'—',`${totalOps-affected} OPR sin retrabajo`],
-    ['Rechazo total',fmt(rejectOps),'Operaciones'],
+    ['OPR con retrabajo',fmt(reworkOps),'Corrección o reapertura'],
+    ['First Time Right',ftr!==null?fmtP(ftr):'—','Sin corrección ni reapertura'],
+    ['Rechazo total',fmt(rejectOps),'Resultado separado del FTR'],
     ['Reaperturas',fmt(reopenOps),'Operaciones']
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
 
@@ -2826,8 +2851,8 @@ function renderHermesConversion(){
     <td class="r">${g.re}</td>
     <td title="${escHtml(g.last.comment||'')}">${escHtml((g.last.comment||'—').slice(0,85))}${(g.last.comment||'').length>85?'…':''}</td>
     <td>${escHtml(g.last.user_name||'—')}</td>
-    <td><span class="hermes-op-badge ${g.state.cls}">${g.state.label}</span></td>
-  </tr>`).join('')||'<tr><td colspan="9" class="hermes-op-empty">Sin retrabajo en el período.</td></tr>';
+    <td><span class="hermes-op-badge ${g.priority.cls}">${g.priority.label}</span></td>
+  </tr>`).join('')||'<tr><td colspan="9" class="hermes-op-empty">Sin eventos de calidad en el período.</td></tr>';
 }
 function renderHermesTeam(){
   const people=new Map(HERMES_TECHNICIANS.map(t=>[t.name,{name:t.name,events:new Set(),oprs:new Set(),validations:0,corrections:0,rejects:0,reopenings:0,closures:0}]));
@@ -5712,7 +5737,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V19.1 validada. SLA FS en horario L–V 09:00–18:00; NULL normalizados.',
+        validation_message:'Carga V19.2 validada. FTR sin corrección/reapertura; rechazo separado; SLA FS L–V 09:00–18:00.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

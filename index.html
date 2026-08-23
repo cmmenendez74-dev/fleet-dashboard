@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V18.1 · Executive Focus + Hermes Quality === */
+/* === V19.1 · Hermes Working Time === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -640,6 +640,21 @@ body,.main{background:var(--app-bg)}
 
 
 /* V18.1: Neumáticos retirado del producto funcional; código residual no accesible desde navegación. */
+
+/* === V19 · Hermes Management === */
+#hermes-panel-ops .hermes-op-kpis,
+#hermes-panel-workshops .hermes-op-kpis,
+#hermes-panel-conversion .hermes-op-kpis,
+#hermes-panel-team .hermes-op-kpis{grid-template-columns:repeat(4,1fr)}
+.hermes-op-table td{vertical-align:top}
+.hermes-op-table td[title]{max-width:390px}
+@media(max-width:1100px){
+  #hermes-panel-ops .hermes-op-kpis,
+  #hermes-panel-workshops .hermes-op-kpis,
+  #hermes-panel-conversion .hermes-op-kpis,
+  #hermes-panel-team .hermes-op-kpis{grid-template-columns:repeat(2,1fr)}
+}
+
 </style>
 </head>
 <body>
@@ -763,7 +778,7 @@ body,.main{background:var(--app-bg)}
   </div>
   <div class="nav-item" id="nav-equipo" onclick="nav('kam',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
-    Equipo
+    KAM
   </div>
   
   <div class="nav-section">Análisis</div>
@@ -1413,7 +1428,7 @@ body,.main{background:var(--app-bg)}
         <details class="hermes-more" style="margin-left:auto;position:relative">
           <summary class="chip" style="list-style:none;cursor:pointer">Más análisis ▾</summary>
           <div style="position:absolute;right:0;top:34px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.35rem;box-shadow:0 8px 20px rgba(0,0,0,.08);z-index:20;min-width:135px">
-            <span class="chip" id="hermes-tab-conversion" onclick="setHermesTab('conversion');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Conversión</span>
+            <span class="chip" id="hermes-tab-conversion" onclick="setHermesTab('conversion');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Calidad de proceso</span>
             <span class="chip" id="hermes-tab-team" onclick="setHermesTab('team');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Equipo Hermes</span>
           </div>
         </details>
@@ -1456,57 +1471,31 @@ body,.main{background:var(--app-bg)}
             <button data-hch="EQ" onclick="setHermesOpChannel('EQ',this)">EQ</button>
             <button data-hch="VC" onclick="setHermesOpChannel('VC',this)">VC</button>
           </div>
-          <span class="filter-label">Período</span>
-          <select id="hermes-op-period" onchange="renderHermesOperations()">
-            <option value="current">Período actual</option>
-            <option value="month">Mes seleccionado</option>
-            <option value="ytd">YTD</option>
-          </select>
-          <span class="hermes-source-pill" id="hermes-op-source">Sin carga Hermes</span>
-        </div>
-
-        <div class="hermes-import-card">
-          <h3>Fuente de Operaciones</h3>
-          <p>El módulo está preparado para una extracción Hermes mensual o diaria. Cuando incorporemos el fichero, la app calculará automáticamente los KPIs y comparativas sin mezclar estos datos con Power BI.</p>
-          <div class="hermes-schema">
-            <span>OPR_ID</span><span>CLI_RAZON</span><span>NOMBRE_PROVEEDOR</span><span>PRO_TIPO_SINERY</span>
-            <span>OPR_FECHA_ENTRADA</span><span>OPR_FECHA_SALIDA</span><span>OPR_FECHA_SALIDA_PREVISTA</span>
-            <span>IMPORTE_BRUTO_FLOTA</span><span>ENTREGA_ESTADO</span><span>FACTURA_FLOTA_ESTADO</span>
-          </div>
+          <span class="hermes-source-pill" id="hermes-op-source">Esperando carga Hermes</span><span class="hermes-source-pill">* L–V · 09:00–18:00</span>
         </div>
 
         <div class="hermes-op-kpis" id="hermes-op-kpis">
-          <div class="hermes-op-kpi"><div class="label">Operaciones</div><div class="value">—</div><div class="sub">Total del período</div></div>
-          <div class="hermes-op-kpi"><div class="label">Cerradas</div><div class="value">—</div><div class="sub">ENTREGA_ESTADO = 2</div></div>
+          <div class="hermes-op-kpi"><div class="label">Operaciones</div><div class="value">—</div><div class="sub">Período Hermes</div></div>
           <div class="hermes-op-kpi"><div class="label">Abiertas</div><div class="value">—</div><div class="sub">Pendientes de cierre</div></div>
-          <div class="hermes-op-kpi"><div class="label">Ticket medio</div><div class="value">—</div><div class="sub">Importe bruto flota / operación</div></div>
-          <div class="hermes-op-kpi"><div class="label">Estancia media</div><div class="value">—</div><div class="sub">Entrada → salida</div></div>
-        </div>
-
-        <div class="hermes-op-grid">
-          <div class="card">
-            <div class="card-hd">Excepciones operativas <span class="subtle-tag">prioridad</span></div>
-            <div class="card-bd" id="hermes-op-exceptions">
-              <div class="hermes-op-empty">Carga datos Hermes para detectar automáticamente cierres pendientes, retrasos y operaciones fuera de SLA.</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-hd">Lectura rápida</div>
-            <div class="card-bd">
-              <div class="hermes-note" id="hermes-op-reading">
-                La pantalla responderá a cinco preguntas: <b>cuánto volumen hay, cuánto está cerrado, cuánto sigue abierto, cuánto factura de media cada operación y cuánto tiempo permanece el vehículo</b>. El detalle solo aparece cuando una excepción requiere acción.
-              </div>
-            </div>
-          </div>
+          <div class="hermes-op-kpi"><div class="label">Fuera SLA FS</div><div class="value">—</div><div class="sub">&gt;2 h laborables</div></div>
+          <div class="hermes-op-kpi"><div class="label">First Time Right</div><div class="value">—</div><div class="sub">Sin retrabajo</div></div>
         </div>
 
         <div class="card">
-          <div class="card-hd">Detalle por cliente <span class="subtle-tag">drill-down</span></div>
+          <div class="card-hd">Operaciones <span class="subtle-tag">detalle individual</span></div>
           <div class="card-bd">
             <div style="overflow:auto">
               <table class="hermes-op-table">
-                <thead><tr><th>Cliente</th><th class="r">OPR</th><th class="r">Cerradas</th><th class="r">Abiertas</th><th class="r">Ticket</th><th class="r">Estancia</th><th>Señal</th></tr></thead>
-                <tbody id="hermes-op-client-tb"><tr><td colspan="7" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr></tbody>
+                <thead>
+                  <tr>
+                    <th>OPR</th><th>Cliente</th><th>Taller</th><th>Canal</th>
+                    <th>Estado</th><th class="r">Ciclo</th><th class="r">Tiempo FS*</th>
+                    <th class="r">Retrabajo</th><th>Prioridad</th>
+                  </tr>
+                </thead>
+                <tbody id="hermes-op-client-tb">
+                  <tr><td colspan="9" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr>
+                </tbody>
               </table>
             </div>
           </div>
@@ -1515,58 +1504,101 @@ body,.main{background:var(--app-bg)}
 
       <div class="hermes-panel" id="hermes-panel-workshops">
         <div class="hermes-op-controls">
-          <div class="seg"><button class="on">Total</button><button>EQ</button><button>VC</button></div>
-          <span class="hermes-source-pill">Esperando carga Hermes</span>
+          <span class="hermes-source-pill" id="hermes-workshop-source">Esperando carga Hermes</span><span class="hermes-source-pill">* L–V · 09:00–18:00</span>
         </div>
+
         <div class="hermes-op-kpis" id="hermes-workshop-kpis">
-          <div class="hermes-op-kpi"><div class="label">Talleres activos</div><div class="value">—</div><div class="sub">Con OPR en el período</div></div>
-          <div class="hermes-op-kpi"><div class="label">OPR / taller</div><div class="value">—</div><div class="sub">Actividad media</div></div>
-          <div class="hermes-op-kpi"><div class="label">Ticket medio</div><div class="value">—</div><div class="sub">Importe flota / OPR</div></div>
-          <div class="hermes-op-kpi"><div class="label">SLA</div><div class="value">—</div><div class="sub">% dentro de objetivo</div></div>
-          <div class="hermes-op-kpi"><div class="label">Rechazos</div><div class="value">—</div><div class="sub">Calidad operativa</div></div>
+          <div class="hermes-op-kpi"><div class="label">Talleres activos</div><div class="value">—</div><div class="sub">Con OPR</div></div>
+          <div class="hermes-op-kpi"><div class="label">Con incidencias</div><div class="value">—</div><div class="sub">Requieren atención</div></div>
+          <div class="hermes-op-kpi"><div class="label">OPR fuera SLA FS</div><div class="value">—</div><div class="sub">&gt;2 h laborables</div></div>
+          <div class="hermes-op-kpi"><div class="label">First Time Right</div><div class="value">—</div><div class="sub">Red completa</div></div>
         </div>
-        <div class="hermes-op-grid">
-          <div class="card"><div class="card-hd">Ranking de actividad <span class="subtle-tag">taller</span></div><div class="card-bd"><div class="hermes-op-empty">Mostrará OPR, clientes, ticket, estancia y evolución por taller.</div></div></div>
-          <div class="card"><div class="card-hd">Calidad y eficiencia</div><div class="card-bd"><div class="hermes-note"><b>Señales prioritarias:</b> talleres con estancia elevada, incumplimiento de SLA, rechazos, reaperturas, alertas y concentración anormal de actividad.</div></div></div>
+
+        <div class="card">
+          <div class="card-hd">Talleres <span class="subtle-tag">ordenados por prioridad</span></div>
+          <div class="card-bd">
+            <div style="overflow:auto">
+              <table class="hermes-op-table">
+                <thead>
+                  <tr>
+                    <th>Taller</th><th>Canal</th><th class="r">OPR</th><th class="r">Abiertas</th>
+                    <th class="r">Fuera SLA FS</th><th class="r">Espera Taller*</th>
+                    <th class="r">Tiempo FS*</th><th class="r">Retrabajo</th><th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="hermes-workshop-tb">
+                  <tr><td colspan="9" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <div class="card"><div class="card-hd">Detalle de red</div><div class="card-bd"><div style="overflow:auto"><table class="hermes-op-table">
-          <thead><tr><th>Taller</th><th>Canal</th><th class="r">OPR</th><th class="r">Clientes</th><th class="r">Ticket</th><th class="r">Estancia</th><th class="r">SLA</th><th>Señal</th></tr></thead>
-          <tbody id="hermes-workshop-tb"><tr><td colspan="8" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr></tbody>
-        </table></div></div></div>
       </div>
 
       <div class="hermes-panel" id="hermes-panel-conversion">
         <div class="hermes-op-controls">
           <span class="hermes-source-pill" id="hermes-conv-source">Esperando carga Hermes</span>
         </div>
+
         <div class="hermes-op-kpis" id="hermes-conv-kpis">
-          <div class="hermes-op-kpi"><div class="label">OPR con incidencia</div><div class="value">—</div><div class="sub">Operaciones afectadas</div></div>
-          <div class="hermes-op-kpi"><div class="label">Correcciones</div><div class="value">—</div><div class="sub">Devoluciones / modificaciones</div></div>
-          <div class="hermes-op-kpi"><div class="label">Rechazo total</div><div class="value">—</div><div class="sub">Eventos de rechazo definitivo</div></div>
-          <div class="hermes-op-kpi"><div class="label">Reaperturas</div><div class="value">—</div><div class="sub">Presupuestos reabiertos</div></div>
-          <div class="hermes-op-kpi"><div class="label">Retrabajo ≥2</div><div class="value">—</div><div class="sub">OPR con múltiples eventos</div></div>
+          <div class="hermes-op-kpi"><div class="label">OPR con retrabajo</div><div class="value">—</div><div class="sub">Operaciones afectadas</div></div>
+          <div class="hermes-op-kpi"><div class="label">First Time Right</div><div class="value">—</div><div class="sub">Sin eventos de retrabajo</div></div>
+          <div class="hermes-op-kpi"><div class="label">Rechazo total</div><div class="value">—</div><div class="sub">Operaciones</div></div>
+          <div class="hermes-op-kpi"><div class="label">Reaperturas</div><div class="value">—</div><div class="sub">Operaciones</div></div>
         </div>
-        <div class="hermes-op-grid">
-          <div class="card"><div class="card-hd">Operaciones con mayor fricción <span class="subtle-tag">acción</span></div><div class="card-bd" id="hermes-conv-friction"><div class="hermes-op-empty">Sin datos Hermes cargados.</div></div></div>
-          <div class="card"><div class="card-hd">Lectura</div><div class="card-bd"><div class="hermes-note">Una <b>corrección</b> es una devolución del presupuesto para modificar, justificar, añadir o eliminar información. Se diferencia de <b>rechazo total</b> y <b>reapertura</b>. La app cuenta tanto eventos como operaciones afectadas para no inflar el KPI.</div></div></div>
+
+        <div class="card">
+          <div class="card-hd">Calidad de proceso <span class="subtle-tag">OPR individual</span></div>
+          <div class="card-bd">
+            <div style="overflow:auto">
+              <table class="hermes-op-table">
+                <thead>
+                  <tr>
+                    <th>OPR</th><th>Cliente</th><th>Taller</th>
+                    <th class="r">Correcciones</th><th class="r">Rechazo</th><th class="r">Reapertura</th>
+                    <th>Último motivo</th><th>Último usuario</th><th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="hermes-conv-tb">
+                  <tr><td colspan="9" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="hermes-panel" id="hermes-panel-team">
         <div class="hermes-op-controls">
-          <span class="hermes-source-pill" id="hermes-team-source">Equipo derivado de actividad Hermes</span>
+          <span class="hermes-source-pill" id="hermes-team-source">Actividad real Workflow + Conversión</span>
         </div>
+
         <div class="hermes-op-kpis" id="hermes-team-kpis">
-          <div class="hermes-op-kpi"><div class="label">Técnicos activos</div><div class="value">—</div><div class="sub">Con actividad registrada</div></div>
-          <div class="hermes-op-kpi"><div class="label">Intervenciones</div><div class="value">—</div><div class="sub">Workflow + Conversión</div></div>
-          <div class="hermes-op-kpi"><div class="label">OPR gestionadas</div><div class="value">—</div><div class="sub">Operaciones distintas tocadas</div></div>
+          <div class="hermes-op-kpi"><div class="label">Técnicos activos</div><div class="value">—</div><div class="sub">De 8 técnicos</div></div>
+          <div class="hermes-op-kpi"><div class="label">Intervenciones</div><div class="value">—</div><div class="sub">Actividad registrada</div></div>
+          <div class="hermes-op-kpi"><div class="label">OPR gestionadas</div><div class="value">—</div><div class="sub">Operaciones distintas</div></div>
           <div class="hermes-op-kpi"><div class="label">Correcciones</div><div class="value">—</div><div class="sub">Actividad de revisión</div></div>
-          <div class="hermes-op-kpi"><div class="label">Cierres</div><div class="value">—</div><div class="sub">CIERRE FIRSTSTOP</div></div>
         </div>
-        <div class="card"><div class="card-hd">Actividad por técnico <span class="subtle-tag">no es ranking de horas</span></div><div class="card-bd"><div style="overflow:auto"><table class="hermes-op-table">
-          <thead><tr><th>Técnico</th><th class="r">Interv.</th><th class="r">OPR</th><th class="r">Validaciones</th><th class="r">Correcciones</th><th class="r">Rechazos</th><th class="r">Reaperturas</th><th class="r">Cierres</th></tr></thead>
-          <tbody id="hermes-team-tb"><tr><td colspan="8" class="hermes-op-empty">Sin actividad Hermes cargada.</td></tr></tbody>
-        </table></div></div></div>
+
+        <div class="card">
+          <div class="card-hd">Equipo Hermes <span class="subtle-tag">una persona · una línea</span></div>
+          <div class="card-bd">
+            <div style="overflow:auto">
+              <table class="hermes-op-table">
+                <thead>
+                  <tr>
+                    <th>Técnico</th><th class="r">Intervenciones</th><th class="r">OPR</th>
+                    <th class="r">Validaciones</th><th class="r">Correcciones</th>
+                    <th class="r">Rechazos</th><th class="r">Reaperturas</th><th class="r">Cierres</th>
+                  </tr>
+                </thead>
+                <tbody id="hermes-team-tb">
+                  <tr><td colspan="8" class="hermes-op-empty">Sin actividad Hermes cargada.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div></div>
     </div>
 
@@ -2435,6 +2467,13 @@ async function loadHermesConversion(){
   hermesConversionData=await sbSelectAll('hermes_conversion',
     `select=source_key,opr_id,budget_id,budget_version,event_at,event_type,user_name,fleet_name,comment,is_total_rejection,is_reopening&event_at=gte.${encStart}&event_at=lt.${encEnd}&order=event_at.asc`);
 }
+
+async function loadHermesWorkflow(){
+  const r=hermesActiveRange();
+  const encStart=encodeURIComponent(r.start), encEnd=encodeURIComponent(r.end);
+  hermesWorkflowData=await sbSelectAll('hermes_workflow',
+    `select=source_key,opr_id,event_at,state_name,station_name,user_name,technician_name,client_id,client_name,provider_id,provider_name&event_at=gte.${encStart}&event_at=lt.${encEnd}&order=event_at.asc`);
+}
 async function loadHermesTeam(){
   const r=hermesActiveRange();
   const d1=r.start.slice(0,10), d2=r.end.slice(0,10);
@@ -2447,11 +2486,11 @@ function setHermesTab(tab){
     document.getElementById('hermes-tab-'+x)?.classList.toggle('on',x===tab);
     document.getElementById('hermes-panel-'+x)?.classList.toggle('active',x===tab);
   });
-  if(tab==='control') loadHermesLive();
-  if(tab==='ops') loadHermesLive().then(renderHermesOperations);
-  if(tab==='workshops') loadHermesLive().then(renderHermesWorkshops);
-  if(tab==='conversion') loadHermesConversion().then(renderHermesConversion).catch(console.warn);
-  if(tab==='team') loadHermesTeam().then(renderHermesTeam).catch(console.warn);
+  if(tab==='control') Promise.all([loadHermesLive(),loadHermesWorkflow(),loadHermesConversion()]).then(renderHermesControl);
+  if(tab==='ops') Promise.all([loadHermesLive(),loadHermesWorkflow(),loadHermesConversion()]).then(renderHermesOperations);
+  if(tab==='workshops') Promise.all([loadHermesLive(),loadHermesWorkflow(),loadHermesConversion()]).then(renderHermesWorkshops);
+  if(tab==='conversion') Promise.all([loadHermesLive(),loadHermesConversion()]).then(renderHermesConversion);
+  if(tab==='team') Promise.all([loadHermesWorkflow(),loadHermesConversion()]).then(renderHermesTeam);
 }
 function setHermesOpChannel(ch,btn){
   hermesOpChannel=ch;
@@ -2485,6 +2524,130 @@ function hermesExecutiveSignals(){
   ];
 }
 
+
+function hNormIdentity(v){
+  return String(v||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+const HERMES_TECHNICIANS=[
+  {name:'ROBERTO MUÑOZ', aliases:['ROBERTO MUÑOZ','ROBERTO MUNOZ','ROBERTO.MUNOZ','ROBERTO.MUNOZ@BRIDGESTONE.EU']},
+  {name:'FABIOLA DEL VALLE', aliases:['FABIOLA DEL VALLE','FABIOLA.DEL-VALLE2.EXT@BRIDGESTONE.EU']},
+  {name:'JESSICA MARTINEZ', aliases:['JESSICA MARTINEZ','JESSICA.MARTINEZ.EXT@BRIDGESTONE.EU']},
+  {name:'JESÚS VALDARACETE', aliases:['JESUS VALDARACETE','JESUS-JOSE.VALDARACETE@BRIDGESTONE.EU']},
+  {name:'TIARA PACHECO', aliases:['TIARA PACHECO','TIARA-NICOL.PACHECO-FLORES.EXT@BRIDGESTONE.EU']},
+  {name:'NATIVIDAD SÁNCHEZ', aliases:['NATIVIDAD SANCHEZ','NATIVIDAD.SANCHEZ@BRIDGESTONE.EU']},
+  {name:'VIDAL RUIZ', aliases:['VIDAL RUIZ','VIDAL.RUIZ','VIDAL.RUIZ@BRIDGESTONE.EU']},
+  {name:'SANTIAGO BURGOS', aliases:['SANTIAGO BURGOS','SANTIAGO.BURGOS@BRIDGESTONE.EU']}
+];
+const HERMES_TECH_ALIAS=(()=>{
+  const m=new Map();
+  HERMES_TECHNICIANS.forEach(t=>t.aliases.forEach(a=>m.set(hNormIdentity(a),t.name)));
+  return m;
+})();
+function hermesCanonicalTech(v){
+  return HERMES_TECH_ALIAS.get(hNormIdentity(v))||null;
+}
+function hermesWorkflowByOpr(){
+  const map=new Map();
+  for(const e of (hermesWorkflowData||[])){
+    const k=String(e.opr_id||'');
+    if(!k) continue;
+    if(!map.has(k)) map.set(k,[]);
+    map.get(k).push(e);
+  }
+  for(const arr of map.values()) arr.sort((a,b)=>new Date(a.event_at)-new Date(b.event_at));
+  return map;
+}
+function hermesConversionByOpr(){
+  const map=new Map();
+  for(const e of (hermesConversionData||[])){
+    const k=String(e.opr_id||'');
+    if(!k) continue;
+    if(!map.has(k)) map.set(k,[]);
+    map.get(k).push(e);
+  }
+  for(const arr of map.values()) arr.sort((a,b)=>new Date(a.event_at)-new Date(b.event_at));
+  return map;
+}
+function hermesOprTiming(oprId, wfMap){
+  const ev=(wfMap.get(String(oprId))||[]);
+  const out={TALLER:0,FIRSTSTOP:0,FLOTA:0,total:0};
+  for(let i=0;i<ev.length-1;i++){
+    const a=ev[i], b=ev[i+1];
+    const h=hermesHours(a.event_at,b.event_at);
+    if(h===null || h>24*14) continue;
+    const st=String(a.station_name||'').toUpperCase();
+    if(out[st]!==undefined) out[st]+=h;
+    out.total+=h;
+  }
+  return out;
+}
+function hermesOprRework(oprId, cvMap){
+  const ev=cvMap.get(String(oprId))||[];
+  return {
+    events:ev.length,
+    corrections:ev.filter(x=>x.event_type==='CORRECTION').length,
+    rejects:ev.filter(x=>x.event_type==='TOTAL_REJECTION').length,
+    reopenings:ev.filter(x=>x.event_type==='REOPENING').length,
+    last:ev.length?ev[ev.length-1]:null
+  };
+}
+function hermesIsOutsideSla(op){
+  if(!op.expected_exit_at) return false;
+  const limit=new Date(op.expected_exit_at);
+  if(op.exit_at) return new Date(op.exit_at)>limit;
+  return new Date()>limit;
+}
+function hermesPriority(op,timing,rework){
+  const fsOutside=Number(timing.FIRSTSTOP||0)>hermesFirstStopSlaHours();
+  if(fsOutside || rework.rejects>0 || rework.reopenings>0) return {rank:2,label:'CRÍTICO',cls:'err'};
+  if(rework.corrections>=2 || rework.events>0) return {rank:1,label:'ATENCIÓN',cls:'warn'};
+  return {rank:0,label:'OK',cls:'ok'};
+}
+
+const HERMES_WORKDAY_START=9;
+const HERMES_WORKDAY_END=18;
+
+function hermesBusinessHours(startValue,endValue){
+  if(!startValue || !endValue) return null;
+  let start=new Date(startValue), end=new Date(endValue);
+  if(!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end<=start) return 0;
+  let totalMs=0;
+  let d=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+  const last=new Date(end.getFullYear(),end.getMonth(),end.getDate());
+  while(d<=last){
+    const dow=d.getDay();
+    if(dow>=1 && dow<=5){
+      const ws=new Date(d.getFullYear(),d.getMonth(),d.getDate(),HERMES_WORKDAY_START,0,0,0);
+      const we=new Date(d.getFullYear(),d.getMonth(),d.getDate(),HERMES_WORKDAY_END,0,0,0);
+      const a=new Date(Math.max(start.getTime(),ws.getTime()));
+      const b=new Date(Math.min(end.getTime(),we.getTime()));
+      if(b>a) totalMs += b-a;
+    }
+    d.setDate(d.getDate()+1);
+  }
+  return totalMs/3600000;
+}
+function hermesOprBusinessTiming(oprId,wfMap){
+  const ev=(wfMap.get(String(oprId))||[]);
+  const out={TALLER:0,FIRSTSTOP:0,FLOTA:0,total:0};
+  for(let i=0;i<ev.length-1;i++){
+    const a=ev[i], b=ev[i+1];
+    const h=hermesBusinessHours(a.event_at,b.event_at);
+    if(h===null) continue;
+    const st=String(a.station_name||'').trim().toUpperCase();
+    if(out[st]!==undefined) out[st]+=h;
+    out.total+=h;
+  }
+  return out;
+}
+function hermesFirstStopSlaHours(){
+  return 2; // estándar operativo inicial: atención FS dentro de 2 h laborables
+}
+
+function hermesFmtHours(v){
+  return Number.isFinite(v) && v>0 ? v.toFixed(1)+' h' : '—';
+}
+
 function renderHermesControl(){
   const rows=hermesOpsData||[];
   const r=hermesActiveRange();
@@ -2513,123 +2676,210 @@ function renderHermesOperations(){
   if(!src) return;
   let rows=hermesOpsData||[];
   if(hermesOpChannel!=='TOTAL') rows=rows.filter(r=>r.channel===hermesOpChannel);
-  if(!rows.length){
-    src.textContent='Sin carga Hermes';
-    const tb=document.getElementById('hermes-op-client-tb');
-    if(tb) tb.innerHTML='<tr><td colspan="7" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr>';
-    return;
-  }
+  const wfMap=hermesWorkflowByOpr(), cvMap=hermesConversionByOpr();
+  const detailed=rows.map(op=>{
+    const timing=hermesOprBusinessTiming(op.opr_id,wfMap);
+    const rework=hermesOprRework(op.opr_id,cvMap);
+    const priority=hermesPriority(op,timing,rework);
+    return {op,timing,rework,priority,sla:Number(timing.FIRSTSTOP||0)>hermesFirstStopSlaHours()};
+  }).sort((a,b)=>b.priority.rank-a.priority.rank || Number(b.sla)-Number(a.sla) || b.rework.events-a.rework.events || Number(b.op.opr_id)-Number(a.op.opr_id));
+
   src.textContent=`Hermes · ${rows.length} operaciones`;
-  const total=rows.length;
-  const closed=rows.filter(r=>Number(r.delivery_status)===2).length;
-  const open=total-closed;
-  const amt=rows.reduce((a,r)=>a+(Number(r.fleet_net_amount)||0),0);
-  const ticket=total?amt/total:0;
-  const stays=rows.map(r=>hermesHours(r.entry_at,r.exit_at)).filter(x=>x!==null);
-  const avgStay=stays.length?stays.reduce((a,b)=>a+b,0)/stays.length:null;
+  const open=rows.filter(r=>Number(r.delivery_status)!==2).length;
+  const outside=detailed.filter(x=>x.sla).length;
+  const reworkOps=detailed.filter(x=>x.rework.events>0).length;
+  const ftr=rows.length?1-reworkOps/rows.length:null;
+
   const k=document.getElementById('hermes-op-kpis');
   if(k) k.innerHTML=[
-    ['Operaciones',fmt(total),'Total del período'],
-    ['Cerradas',fmt(closed),total?fmtP(closed/total):'—'],
-    ['Abiertas',fmt(open),total?fmtP(open/total):'—'],
-    ['Ticket medio',fmtM(ticket),'Importe Hermes flota / OPR'],
-    ['Estancia media',avgStay!==null?avgStay.toFixed(1)+' h':'—',`${stays.length} OPR con salida`]
+    ['Operaciones',fmt(rows.length),'Período Hermes'],
+    ['Abiertas',fmt(open),'Pendientes de cierre'],
+    ['Fuera SLA FS',fmt(outside),outside?'Más de 2 h laborables FS':'Sin alertas'],
+    ['First Time Right',ftr!==null?fmtP(ftr):'—',`${reworkOps} OPR con retrabajo`]
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
-  const byClient={};
-  for(const r of rows){
-    const n=r.client_name||'Sin cliente';
-    if(!byClient[n]) byClient[n]={name:n,opr:0,closed:0,open:0,amt:0,stays:[]};
-    const g=byClient[n]; g.opr++; g.amt+=Number(r.fleet_net_amount)||0;
-    if(Number(r.delivery_status)===2) g.closed++; else g.open++;
-    const h=hermesHours(r.entry_at,r.exit_at); if(h!==null) g.stays.push(h);
-  }
+
   const tb=document.getElementById('hermes-op-client-tb');
-  if(tb) tb.innerHTML=Object.values(byClient).sort((a,b)=>b.opr-a.opr).map(g=>{
-    const t=g.opr?g.amt/g.opr:0, st=g.stays.length?g.stays.reduce((a,b)=>a+b,0)/g.stays.length:null;
-    let signal='<span class="hermes-op-badge ok">OK</span>';
-    if(g.open/g.opr>.2) signal='<span class="hermes-op-badge warn">Abiertas altas</span>';
-    if(st!==null&&st>48) signal='<span class="hermes-op-badge err">Estancia alta</span>';
-    return `<tr><td><b>${escHtml(g.name)}</b></td><td class="r">${fmt(g.opr)}</td><td class="r">${fmt(g.closed)}</td><td class="r">${fmt(g.open)}</td><td class="r">${fmtM(t)}</td><td class="r">${st!==null?st.toFixed(1)+' h':'—'}</td><td>${signal}</td></tr>`;
-  }).join('');
-  const ex=document.getElementById('hermes-op-exceptions');
-  if(ex){
-    const late=rows.filter(x=>x.expected_exit_at && ((!x.exit_at&&new Date()>new Date(x.expected_exit_at)) || (x.exit_at&&new Date(x.exit_at)>new Date(x.expected_exit_at)))).slice(0,8);
-    ex.innerHTML=late.length?late.map(x=>`<div class="hermes-alert"><div><b>${escHtml(x.client_name||'Sin cliente')} · ${escHtml(x.provider_name||'Sin taller')}</b><br><span style="color:var(--ink-3)">OPR ${x.opr_id} · fuera de salida prevista</span></div><div class="age">${x.exit_at?'cerrada':'abierta'}</div></div>`).join(''):'<div class="hermes-op-empty">Sin excepciones de salida prevista detectadas.</div>';
-  }
+  if(!tb) return;
+  tb.innerHTML=detailed.map(({op,timing,rework,priority,sla})=>{
+    const closed=Number(op.delivery_status)===2;
+    const state=closed?'Cerrada':'Abierta';
+    const cycle=hermesHours(op.entry_at,op.exit_at) ?? timing.total;
+    return `<tr>
+      <td><b>${op.opr_id}</b></td>
+      <td>${escHtml(op.client_name||'—')}</td>
+      <td>${escHtml(op.provider_name||'—')}</td>
+      <td>${escHtml(op.channel||'—')}</td>
+      <td>${state}${sla?' · fuera SLA':''}</td>
+      <td class="r">${hermesFmtHours(cycle)}</td>
+      <td class="r">${hermesFmtHours(timing.FIRSTSTOP)}</td>
+      <td class="r">${rework.events||0}</td>
+      <td><span class="hermes-op-badge ${priority.cls}">${priority.label}</span></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="9" class="hermes-op-empty">Sin datos Hermes.</td></tr>';
 }
 function renderHermesWorkshops(){
   const rows=hermesOpsData||[];
-  const by={};
-  for(const r of rows){
-    const n=r.provider_name||'Sin taller';
-    if(!by[n]) by[n]={name:n,channel:r.channel||'OTHER',opr:0,clients:new Set(),amt:0,stays:[],slaN:0,slaOk:0};
-    const g=by[n];g.opr++;g.clients.add(r.client_id||r.client_name);g.amt+=Number(r.fleet_net_amount)||0;
-    const h=hermesHours(r.entry_at,r.exit_at);if(h!==null)g.stays.push(h);
-    if(r.expected_exit_at&&r.exit_at){g.slaN++;if(new Date(r.exit_at)<=new Date(r.expected_exit_at))g.slaOk++;}
+  const wfMap=hermesWorkflowByOpr(), cvMap=hermesConversionByOpr();
+  const by=new Map();
+  for(const op of rows){
+    const name=op.provider_name||'Sin taller';
+    if(!by.has(name)) by.set(name,{name,channel:op.channel||'OTHER',ops:[]});
+    by.get(name).ops.push(op);
   }
-  const list=Object.values(by).sort((a,b)=>b.opr-a.opr);
+  const list=[...by.values()].map(g=>{
+    let open=0,outside=0,taller=0,fs=0,reworkOps=0,reworkEvents=0,critical=0;
+    for(const op of g.ops){
+      const timing=hermesOprBusinessTiming(op.opr_id,wfMap);
+      const rw=hermesOprRework(op.opr_id,cvMap);
+      const pr=hermesPriority(op,timing,rw);
+      if(Number(op.delivery_status)!==2) open++;
+      if(Number(timing.FIRSTSTOP||0)>hermesFirstStopSlaHours()) outside++;
+      taller+=timing.TALLER; fs+=timing.FIRSTSTOP;
+      if(rw.events>0) reworkOps++;
+      reworkEvents+=rw.events;
+      critical=Math.max(critical,pr.rank);
+    }
+    const ftr=g.ops.length?1-reworkOps/g.ops.length:null;
+    const state=critical===2?{label:'CRÍTICO',cls:'err'}:critical===1?{label:'ATENCIÓN',cls:'warn'}:{label:'OK',cls:'ok'};
+    return {...g,open,outside,taller,fs,reworkOps,reworkEvents,ftr,state};
+  }).sort((a,b)=>{
+    const ra=a.state.cls==='err'?2:a.state.cls==='warn'?1:0;
+    const rb=b.state.cls==='err'?2:b.state.cls==='warn'?1:0;
+    return rb-ra || b.outside-a.outside || b.reworkOps-a.reworkOps || b.ops.length-a.ops.length;
+  });
+
+  const incidents=list.filter(x=>x.state.cls!=='ok').length;
+  const outsideAll=list.reduce((a,x)=>a+x.outside,0);
+  const reworkAll=list.reduce((a,x)=>a+x.reworkOps,0);
+  const ftrAll=rows.length?1-reworkAll/rows.length:null;
+  const src=document.getElementById('hermes-workshop-source');
+  if(src) src.textContent=`Hermes · ${list.length} talleres`;
+
   const k=document.getElementById('hermes-workshop-kpis');
-  const total=rows.length, active=list.length;
-  const allStays=list.flatMap(x=>x.stays), avg=allStays.length?allStays.reduce((a,b)=>a+b,0)/allStays.length:null;
-  const slaN=list.reduce((a,x)=>a+x.slaN,0),slaOk=list.reduce((a,x)=>a+x.slaOk,0);
   if(k) k.innerHTML=[
-    ['Talleres activos',fmt(active),'Con OPR en período'],
-    ['OPR / taller',active?(total/active).toFixed(1):'—','Actividad media'],
-    ['Ticket medio',total?fmtM(rows.reduce((a,x)=>a+(Number(x.fleet_net_amount)||0),0)/total):'—','Hermes operativo'],
-    ['SLA',slaN?fmtP(slaOk/slaN):'—',`${slaN} OPR comparables`],
-    ['Estancia',avg!==null?avg.toFixed(1)+' h':'—','Media con salida']
+    ['Talleres activos',fmt(list.length),'Con OPR'],
+    ['Con incidencias',fmt(incidents),'Crítico o Atención'],
+    ['OPR fuera SLA FS',fmt(outsideAll),'Más de 2 h laborables FS'],
+    ['First Time Right',ftrAll!==null?fmtP(ftrAll):'—',`${reworkAll} OPR con retrabajo`]
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
+
   const tb=document.getElementById('hermes-workshop-tb');
-  if(tb) tb.innerHTML=list.slice(0,100).map(g=>{
-    const st=g.stays.length?g.stays.reduce((a,b)=>a+b,0)/g.stays.length:null;
-    const sla=g.slaN?g.slaOk/g.slaN:null;
-    const signal=(st!==null&&st>48)?'<span class="hermes-op-badge err">Estancia</span>':(sla!==null&&sla<.9?'<span class="hermes-op-badge warn">SLA</span>':'<span class="hermes-op-badge ok">OK</span>');
-    return `<tr><td><b>${escHtml(g.name)}</b></td><td>${g.channel}</td><td class="r">${fmt(g.opr)}</td><td class="r">${fmt(g.clients.size)}</td><td class="r">${fmtM(g.opr?g.amt/g.opr:0)}</td><td class="r">${st!==null?st.toFixed(1)+' h':'—'}</td><td class="r">${sla!==null?fmtP(sla):'—'}</td><td>${signal}</td></tr>`;
-  }).join('')||'<tr><td colspan="8" class="hermes-op-empty">Sin datos Hermes.</td></tr>';
+  if(tb) tb.innerHTML=list.map(g=>`<tr>
+    <td><b>${escHtml(g.name)}</b></td>
+    <td>${escHtml(g.channel)}</td>
+    <td class="r">${fmt(g.ops.length)}</td>
+    <td class="r">${fmt(g.open)}</td>
+    <td class="r">${fmt(g.outside)}</td>
+    <td class="r">${hermesFmtHours(g.taller)}</td>
+    <td class="r">${hermesFmtHours(g.fs)}</td>
+    <td class="r">${g.reworkOps}${g.ops.length?` · ${fmtP(g.reworkOps/g.ops.length)}`:''}</td>
+    <td><span class="hermes-op-badge ${g.state.cls}">${g.state.label}</span></td>
+  </tr>`).join('')||'<tr><td colspan="9" class="hermes-op-empty">Sin datos Hermes.</td></tr>';
 }
 function renderHermesConversion(){
   const rows=hermesConversionData||[];
-  const src=document.getElementById('hermes-conv-source');if(src)src.textContent=`Hermes · ${fmt(rows.length)} eventos`;
-  const by={};
+  const opMap=new Map((hermesOpsData||[]).map(x=>[String(x.opr_id),x]));
+  const by=new Map();
   for(const r of rows){
-    const k=String(r.opr_id||'');
-    if(!by[k])by[k]={opr:r.opr_id,events:0,c:0,t:0,re:0,last:null};
-    const g=by[k];g.events++;if(r.event_type==='CORRECTION')g.c++;if(r.event_type==='TOTAL_REJECTION')g.t++;if(r.event_type==='REOPENING')g.re++;g.last=r;
+    const key=String(r.opr_id||'');
+    if(!by.has(key)) by.set(key,{opr:r.opr_id,events:[]});
+    by.get(key).events.push(r);
   }
-  const ops=Object.values(by), corrections=rows.filter(r=>r.event_type==='CORRECTION').length;
-  const rejects=rows.filter(r=>r.event_type==='TOTAL_REJECTION').length,reopens=rows.filter(r=>r.event_type==='REOPENING').length;
-  const rework=ops.filter(x=>x.events>=2).length;
+  const list=[...by.values()].map(g=>{
+    g.events.sort((a,b)=>new Date(a.event_at)-new Date(b.event_at));
+    const op=opMap.get(String(g.opr))||{};
+    const c=g.events.filter(x=>x.event_type==='CORRECTION').length;
+    const rej=g.events.filter(x=>x.event_type==='TOTAL_REJECTION').length;
+    const re=g.events.filter(x=>x.event_type==='REOPENING').length;
+    const last=g.events[g.events.length-1]||{};
+    const state=rej||re?{label:'CRÍTICO',cls:'err'}:c>=2?{label:'ATENCIÓN',cls:'warn'}:{label:'RETRABAJO',cls:'warn'};
+    return {opr:g.opr,op,c,rej,re,last,state,total:g.events.length};
+  }).sort((a,b)=>{
+    const ra=a.state.cls==='err'?2:1, rb=b.state.cls==='err'?2:1;
+    return rb-ra || b.total-a.total || Number(b.opr)-Number(a.opr);
+  });
+
+  const totalOps=(hermesOpsData||[]).length;
+  const affected=list.length;
+  const ftr=totalOps?1-affected/totalOps:null;
+  const rejectOps=list.filter(x=>x.rej>0).length;
+  const reopenOps=list.filter(x=>x.re>0).length;
+
+  const src=document.getElementById('hermes-conv-source');
+  if(src) src.textContent=`Hermes · ${fmt(rows.length)} eventos · ${fmt(affected)} OPR`;
+
   const k=document.getElementById('hermes-conv-kpis');
   if(k) k.innerHTML=[
-    ['OPR con incidencia',fmt(ops.length),'Operaciones afectadas'],
-    ['Correcciones',fmt(corrections),ops.length?`${(corrections/ops.length).toFixed(2)} / OPR afectada`:'—'],
-    ['Rechazo total',fmt(rejects),'Eventos'],
-    ['Reaperturas',fmt(reopens),'Eventos'],
-    ['Retrabajo ≥2',fmt(rework),ops.length?fmtP(rework/ops.length):'—']
+    ['OPR con retrabajo',fmt(affected),'Operaciones afectadas'],
+    ['First Time Right',ftr!==null?fmtP(ftr):'—',`${totalOps-affected} OPR sin retrabajo`],
+    ['Rechazo total',fmt(rejectOps),'Operaciones'],
+    ['Reaperturas',fmt(reopenOps),'Operaciones']
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
-  const fr=document.getElementById('hermes-conv-friction');
-  if(fr) fr.innerHTML=ops.sort((a,b)=>b.events-a.events).slice(0,10).map(x=>`<div class="hermes-alert"><div><b>OPR ${x.opr}</b><br><span style="color:var(--ink-3)">${x.c} correcciones · ${x.t} rechazo total · ${x.re} reaperturas</span></div><div class="age">${x.events} eventos</div></div>`).join('')||'<div class="hermes-op-empty">Sin incidencias en el período.</div>';
+
+  const tb=document.getElementById('hermes-conv-tb');
+  if(tb) tb.innerHTML=list.map(g=>`<tr>
+    <td><b>${g.opr}</b></td>
+    <td>${escHtml(g.op.client_name||'—')}</td>
+    <td>${escHtml(g.op.provider_name||'—')}</td>
+    <td class="r">${g.c}</td>
+    <td class="r">${g.rej}</td>
+    <td class="r">${g.re}</td>
+    <td title="${escHtml(g.last.comment||'')}">${escHtml((g.last.comment||'—').slice(0,85))}${(g.last.comment||'').length>85?'…':''}</td>
+    <td>${escHtml(g.last.user_name||'—')}</td>
+    <td><span class="hermes-op-badge ${g.state.cls}">${g.state.label}</span></td>
+  </tr>`).join('')||'<tr><td colspan="9" class="hermes-op-empty">Sin retrabajo en el período.</td></tr>';
 }
 function renderHermesTeam(){
-  const rows=hermesTeamData||[];
-  const by={};
-  for(const r of rows){
-    const n=r.operator_name||'Sin técnico';
-    if(!by[n])by[n]={name:n,int:0,opr:0,val:0,c:0,t:0,re:0,cl:0};
-    const g=by[n];g.int+=Number(r.interventions)||0;g.opr+=Number(r.operations_touched)||0;g.val+=Number(r.validations)||0;g.c+=Number(r.corrections)||0;g.t+=Number(r.total_rejections)||0;g.re+=Number(r.reopenings)||0;g.cl+=Number(r.closures)||0;
+  const people=new Map(HERMES_TECHNICIANS.map(t=>[t.name,{name:t.name,events:new Set(),oprs:new Set(),validations:0,corrections:0,rejects:0,reopenings:0,closures:0}]));
+
+  for(const e of (hermesWorkflowData||[])){
+    const who=hermesCanonicalTech(e.technician_name)||hermesCanonicalTech(e.user_name);
+    if(!who || !people.has(who)) continue;
+    const g=people.get(who);
+    g.events.add('WF:'+String(e.source_key));
+    if(e.opr_id!=null) g.oprs.add(String(e.opr_id));
+    const st=String(e.state_name||'').toUpperCase();
+    if(st==='VALIDANDO FIRSTSTOP') g.validations++;
+    if(st==='CIERRE FIRSTSTOP') g.closures++;
   }
-  const list=Object.values(by).sort((a,b)=>b.int-a.int);
-  const totals=list.reduce((a,g)=>({int:a.int+g.int,opr:a.opr+g.opr,c:a.c+g.c,cl:a.cl+g.cl}),{int:0,opr:0,c:0,cl:0});
+
+  for(const e of (hermesConversionData||[])){
+    const who=hermesCanonicalTech(e.user_name);
+    if(!who || !people.has(who)) continue;
+    const g=people.get(who);
+    g.events.add('CV:'+String(e.source_key));
+    if(e.opr_id!=null) g.oprs.add(String(e.opr_id));
+    if(e.event_type==='CORRECTION') g.corrections++;
+    if(e.event_type==='TOTAL_REJECTION') g.rejects++;
+    if(e.event_type==='REOPENING') g.reopenings++;
+  }
+
+  const list=[...people.values()].map(g=>({...g,interventions:g.events.size,oprCount:g.oprs.size}));
+  const active=list.filter(x=>x.interventions>0).length;
+  const totalInt=list.reduce((a,x)=>a+x.interventions,0);
+  const uniqueOprs=new Set();
+  list.forEach(x=>x.oprs.forEach(o=>uniqueOprs.add(o)));
+  const totalCorrections=list.reduce((a,x)=>a+x.corrections,0);
+
   const k=document.getElementById('hermes-team-kpis');
   if(k) k.innerHTML=[
-    ['Técnicos activos',fmt(list.length),'Con actividad registrada'],
-    ['Intervenciones',fmt(totals.int),'Workflow + Conversión'],
-    ['OPR gestionadas',fmt(totals.opr),'Suma diaria de OPR tocadas'],
-    ['Correcciones',fmt(totals.c),'Actividad de revisión'],
-    ['Cierres',fmt(totals.cl),'CIERRE FIRSTSTOP']
+    ['Técnicos activos',fmt(active),'De 8 técnicos'],
+    ['Intervenciones',fmt(totalInt),'Workflow + Conversión'],
+    ['OPR gestionadas',fmt(uniqueOprs.size),'Operaciones distintas'],
+    ['Correcciones',fmt(totalCorrections),'Actividad de revisión']
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
+
   const tb=document.getElementById('hermes-team-tb');
-  if(tb) tb.innerHTML=list.map(g=>`<tr><td><b>${escHtml(g.name)}</b></td><td class="r">${fmt(g.int)}</td><td class="r">${fmt(g.opr)}</td><td class="r">${fmt(g.val)}</td><td class="r">${fmt(g.c)}</td><td class="r">${fmt(g.t)}</td><td class="r">${fmt(g.re)}</td><td class="r">${fmt(g.cl)}</td></tr>`).join('')||'<tr><td colspan="8" class="hermes-op-empty">Sin actividad Hermes.</td></tr>';
+  if(tb) tb.innerHTML=list.map(g=>`<tr>
+    <td><b>${escHtml(g.name)}</b></td>
+    <td class="r">${fmt(g.interventions)}</td>
+    <td class="r">${fmt(g.oprCount)}</td>
+    <td class="r">${fmt(g.validations)}</td>
+    <td class="r">${fmt(g.corrections)}</td>
+    <td class="r">${fmt(g.rejects)}</td>
+    <td class="r">${fmt(g.reopenings)}</td>
+    <td class="r">${fmt(g.closures)}</td>
+  </tr>`).join('');
 }
 
 let _viewHistory=['resumen'];
@@ -2684,7 +2934,7 @@ function nav(id,el,fromBack=false){
   else if(id==='alertas') refreshAlertas();
   else if(id==='hermes') { setHermesTab(hermesTab||'control'); }
   else if(id==='neumaticos') refreshNeumaticos();
-  if(id==='hermes') loadHermesLive(true);
+  if(id==='hermes') Promise.all([loadHermesLive(true),loadHermesWorkflow(),loadHermesConversion()]).then(()=>renderHermesControl());
   else if(id==='periodos') refreshPeriodos();
   document.getElementById('global-search-results').style.display='none';
   document.getElementById('global-search').value='';
@@ -5462,7 +5712,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V18.1 validada. Hermes Quality preparado; NULL normalizados.',
+        validation_message:'Carga V19.1 validada. SLA FS en horario L–V 09:00–18:00; NULL normalizados.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

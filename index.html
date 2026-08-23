@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V19.2 · Hermes Quality Semantics === */
+/* === V19.3 · Hermes Quality vs SLA === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -1542,7 +1542,7 @@ body,.main{background:var(--app-bg)}
 
       <div class="hermes-panel" id="hermes-panel-conversion">
         <div class="hermes-op-controls">
-          <span class="hermes-source-pill" id="hermes-conv-source">Esperando carga Hermes</span><span class="hermes-source-pill">OK · Revisar · Retrabajo · Rechazada · Crítico</span>
+          <span class="hermes-source-pill" id="hermes-conv-source">Esperando carga Hermes</span><span class="hermes-source-pill">Calidad: Revisar = 1 corrección · Retrabajo = ≥2/reapertura · Rechazada = rechazo total</span>
         </div>
 
         <div class="hermes-op-kpis" id="hermes-conv-kpis">
@@ -2603,17 +2603,16 @@ function hermesIsOutsideSla(op){
   return new Date()>limit;
 }
 function hermesPriority(op,timing,rework){
-  const fsOutside=Number(timing.FIRSTSTOP||0)>hermesFirstStopSlaHours();
-  const severeRework =
-    (rework.reopenings>0 && rework.rejects>0) ||
-    rework.corrections>=3 ||
-    (fsOutside && (rework.corrections>0 || rework.reopenings>0));
+  /* Calidad de proceso y SLA son dimensiones independientes.
+     Esta función clasifica EXCLUSIVAMENTE calidad/retrabajo. */
+  const c=Number(rework.corrections||0);
+  const rej=Number(rework.rejects||0);
+  const re=Number(rework.reopenings||0);
 
-  if(severeRework) return {rank:4,label:'CRÍTICO',cls:'err'};
-  if(rework.rejects>0) return {rank:3,label:'RECHAZADA',cls:'reject'};
-  if(rework.reopenings>0 || rework.corrections>=2) return {rank:2,label:'RETRABAJO',cls:'warn'};
-  if(rework.corrections===1) return {rank:1,label:'REVISAR',cls:'review'};
-  if(fsOutside) return {rank:1,label:'SLA FS',cls:'warn'};
+  if((rej>0 && re>0) || re>=2 || c>=4) return {rank:5,label:'CRÍTICO',cls:'err'};
+  if(rej>0) return {rank:4,label:'RECHAZADA',cls:'reject'};
+  if(re>0 || c>=2) return {rank:3,label:'RETRABAJO',cls:'warn'};
+  if(c===1) return {rank:2,label:'REVISAR',cls:'review'};
   return {rank:0,label:'OK',cls:'ok'};
 }
 
@@ -5737,7 +5736,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V19.2 validada. FTR sin corrección/reapertura; rechazo separado; SLA FS L–V 09:00–18:00.',
+        validation_message:'Carga V19.3 validada. Calidad separada de SLA; FTR sin corrección/reapertura; SLA FS L–V 09:00–18:00.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

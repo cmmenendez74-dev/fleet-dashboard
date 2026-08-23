@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V19.4 · Hermes SLA by Episode === */
+/* === V19.5 · Hermes Historical Safe === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -957,6 +957,9 @@ body,.main{background:var(--app-bg)}
               <option value="DAILY">Actualización diaria</option>
               <option value="MONTHLY">Histórico mensual</option>
             </select>
+          </label>
+          <label id="hermes-month-wrap" style="display:none">Mes histórico
+            <input type="month" id="hermes-period-month" style="border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px">
           </label>
           <div class="hermes-live-state"><span class="dot"></span><span>Power BI/Navision permanece aislado: esta carga solo escribe tablas hermes_*</span></div>
         </div>
@@ -5486,7 +5489,7 @@ function setUploadMode(mode){
 
 // ── HERMES · VALIDACIÓN + CARGA REAL ────────────────────────────────────────
 const HERMES_REQUIRED_SHEETS=['OPERACIONES','WORKFLOW','CONVERSION'];
-let hermesStage={valid:false,file:null,fileHash:null,operations:[],workflow:[],conversion:[],periodStart:null,periodEnd:null};
+let hermesStage={valid:false,file:null,fileHash:null,operations:[],workflow:[],conversion:[],periodStart:null,periodEnd:null,orphanConversion:0};
 
 function normHermesSheet(v){return String(v||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 function normHermesHeader(v){return normHermesSheet(v).replace(/\s+/g,'_');}
@@ -5611,6 +5614,24 @@ function mapHermesConversion(r){
     rejection_reason:hText(r.COMMENT)
   };
 }
+
+function hermesMonthFromFilename(name){
+  const m=String(name||'').match(/(?:^|[^0-9])(\d{4})[-_](\d{2})(?:[^0-9]|$)/);
+  if(!m) return null;
+  const month=Number(m[2]);
+  return month>=1&&month<=12 ? `${m[1]}-${m[2]}` : null;
+}
+function hermesMonthlyPeriod(monthValue){
+  if(!/^\d{4}-\d{2}$/.test(String(monthValue||''))) return null;
+  const [y,m]=monthValue.split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const next=new Date(y,m,1);
+  const endExclusive=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-01`;
+  const endDay=new Date(next.getTime()-86400000);
+  const end=`${endDay.getFullYear()}-${String(endDay.getMonth()+1).padStart(2,'0')}-${String(endDay.getDate()).padStart(2,'0')}`;
+  return {start,end,endExclusive};
+}
+
 function hermesPeriodFromRows(ops,wf,cv){
   const dates=[];
   ops.forEach(x=>{if(x.entry_at)dates.push(x.entry_at.slice(0,10));});
@@ -5625,7 +5646,7 @@ function setHermesProgress(p){
 async function validateHermesWorkbook(file){
   const status=document.getElementById('hermes-load-status');
   const confirm=document.getElementById('hermes-confirm-btn');
-  hermesStage={valid:false,file:null,fileHash:null,operations:[],workflow:[],conversion:[],periodStart:null,periodEnd:null};
+  hermesStage={valid:false,file:null,fileHash:null,operations:[],workflow:[],conversion:[],periodStart:null,periodEnd:null,orphanConversion:0};
   confirm.disabled=true;
   status.className='hermes-load-status warn';status.textContent='Validando libro Hermes…';
   try{
@@ -5658,6 +5679,16 @@ async function validateHermesWorkbook(file){
     const d1=dedupeRows(ops,'opr_id'),d2=dedupeRows(wf,'source_key'),d3=dedupeRows(cv,'source_key');
     ops=d1.rows;wf=d2.rows;cv=d3.rows;
 
+    // Conversion can retain isolated GTGlobal rejection events with no operative OPR.
+    // They are excluded from the analytical dataset to keep Operations/Workflow coherent.
+    const operativeOprs=new Set([
+      ...ops.map(x=>String(x.opr_id)),
+      ...wf.map(x=>String(x.opr_id))
+    ]);
+    const cvBefore=cv.length;
+    cv=cv.filter(x=>operativeOprs.has(String(x.opr_id)));
+    const orphanConversion=cvBefore-cv.length;
+
     const badChannel=ops.filter(x=>!['EQ','VC','OTHER'].includes(x.channel));
     if(badChannel.length) throw new Error(`OPERACIONES: ${badChannel.length} filas con CHANNEL no válido.`);
 
@@ -5671,20 +5702,33 @@ async function validateHermesWorkbook(file){
     ];
     if(literalNulls.length) throw new Error(`Quedan valores NULL literales tras normalizar: ${literalNulls.slice(0,5).join('; ')}`);
 
-    const period=hermesPeriodFromRows(ops,wf,cv);
+    const gran=document.getElementById('hermes-granularity').value;
+    let period;
+    if(gran==='MONTHLY'){
+      const monthInput=document.getElementById('hermes-period-month');
+      if(!monthInput.value){
+        monthInput.value=hermesMonthFromFilename(file.name)||'';
+      }
+      const mp=hermesMonthlyPeriod(monthInput.value);
+      if(!mp) throw new Error('Selecciona el mes histórico que representa esta carga.');
+      period={start:mp.start,end:mp.end};
+    }else{
+      period=hermesPeriodFromRows(ops,wf,cv);
+    }
+
     const fileHash=await sha256File(file);
-    hermesStage={valid:true,file,fileHash,operations:ops,workflow:wf,conversion:cv,periodStart:period.start,periodEnd:period.end};
+    hermesStage={valid:true,file,fileHash,operations:ops,workflow:wf,conversion:cv,periodStart:period.start,periodEnd:period.end,orphanConversion};
 
     const sum=document.getElementById('hermes-stage-summary');
     sum.style.display='';
     sum.innerHTML=[
       ['OPERACIONES',fmt(ops.length),`${d1.duplicates} duplicados consolidados`],
       ['WORKFLOW',fmt(wf.length),`${d2.duplicates} duplicados consolidados`],
-      ['CONVERSION',fmt(cv.length),`${d3.duplicates} duplicados consolidados`],
+      ['CONVERSION',fmt(cv.length),`${d3.duplicates} duplicados · ${orphanConversion} huérfanos excluidos`],
       ['PERÍODO',period.start&&period.end?`${period.start}<br>${period.end}`:'—','Detectado en el fichero']
     ].map(x=>`<div class="hermes-stage-metric"><div class="v">${x[1]}</div><div class="l">${x[0]} · ${x[2]}</div></div>`).join('');
     status.className='hermes-load-status ok';
-    status.innerHTML=`<b>Validación OK.</b> ${escHtml(file.name)} · Hash ${fileHash.slice(0,10)}…<br>No se ha escrito nada todavía. Pulsa <b>Confirmar carga Hermes</b> para hacer UPSERT seguro.`;
+    status.innerHTML=`<b>Validación OK.</b> ${escHtml(file.name)} · ${gran} · período ${period.start} → ${period.end} · Hash ${fileHash.slice(0,10)}…<br>${orphanConversion?orphanConversion+' evento(s) huérfano(s) de CONVERSION excluido(s). ':''}No se ha escrito nada todavía. El UPSERT actualizará solapamientos sin duplicarlos.`;
     confirm.disabled=!isAdmin();
   }catch(e){
     status.className='hermes-load-status err';status.textContent='Libro rechazado: '+(e.message||e);
@@ -5756,7 +5800,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V19.4 validada. SLA FS por episodio >2 h laborables; tiempo FS acumulado separado; calidad independiente.',
+        validation_message:'Carga V19.5 validada. Histórico mensual explícito; huérfanos excluidos; UPSERT seguro; SLA FS por episodio.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}
@@ -5775,15 +5819,40 @@ async function commitHermesStage(){
     btn.disabled=false;
   }
 }
+
+const hermesGranularity=document.getElementById('hermes-granularity');
+const hermesMonthWrap=document.getElementById('hermes-month-wrap');
+const hermesMonthInput=document.getElementById('hermes-period-month');
+function syncHermesGranularityUI(){
+  const monthly=hermesGranularity&&hermesGranularity.value==='MONTHLY';
+  if(hermesMonthWrap) hermesMonthWrap.style.display=monthly?'':'none';
+}
+if(hermesGranularity){
+  hermesGranularity.addEventListener('change',()=>{
+    syncHermesGranularityUI();
+    if(hermesStage.file && hermesGranularity.value==='MONTHLY' && !hermesMonthInput.value){
+      hermesMonthInput.value=hermesMonthFromFilename(hermesStage.file.name)||'';
+    }
+  });
+  syncHermesGranularityUI();
+}
+
 const hermesFileInput=document.getElementById('hermes-file-input');
 if(hermesFileInput) hermesFileInput.onchange=e=>{
-  const f=e.target.files&&e.target.files[0];if(f)validateHermesWorkbook(f);hermesFileInput.value='';
+  const f=e.target.files&&e.target.files[0];
+  if(f){
+    if(hermesGranularity?.value==='MONTHLY' && !hermesMonthInput.value){
+      hermesMonthInput.value=hermesMonthFromFilename(f.name)||'';
+    }
+    validateHermesWorkbook(f);
+  }
+  hermesFileInput.value='';
 };
 const hermesDrop=document.getElementById('hermes-drop-zone');
 if(hermesDrop){
   hermesDrop.ondragover=e=>{e.preventDefault();hermesDrop.classList.add('drag');};
   hermesDrop.ondragleave=()=>hermesDrop.classList.remove('drag');
-  hermesDrop.ondrop=e=>{e.preventDefault();hermesDrop.classList.remove('drag');const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f)validateHermesWorkbook(f);};
+  hermesDrop.ondrop=e=>{e.preventDefault();hermesDrop.classList.remove('drag');const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f){if(hermesGranularity?.value==='MONTHLY'&&!hermesMonthInput.value)hermesMonthInput.value=hermesMonthFromFilename(f.name)||'';validateHermesWorkbook(f);}};
 }
 
 // ── CARGA MASIVA HISTÓRICA ──────────────────────────────────────────────────

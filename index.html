@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V19.5 · Hermes Historical Safe === */
+/* === V19.6 · Hermes Control Clarity === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -659,6 +659,12 @@ body,.main{background:var(--app-bg)}
 /* === V19.2 · Quality semantics === */
 .hermes-op-badge.reject{background:#eef1f4;color:#39434d;border:1px solid #d9dee3}
 .hermes-op-badge.review{background:#eef4ff;color:#315a9c;border:1px solid #d7e4fb}
+
+
+/* === V19.6 · Hermes Control clarity === */
+.hermes-control-summary{margin-bottom:.65rem;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:#fafbfc;font-size:10.5px;color:var(--ink-2)}
+.hermes-method-note{margin:.15rem 0 .8rem;color:var(--muted);font-size:11px}
+#hermes-panel-control .hermes-op-table th,#hermes-panel-control .hermes-op-table td{white-space:nowrap}
 
 </style>
 </head>
@@ -1445,30 +1451,38 @@ body,.main{background:var(--app-bg)}
       <div class="hermes-panel active" id="hermes-panel-control">
         <div class="hermes-state" id="hermes-control-state">
           <span class="hermes-dot"></span>
-          <div><b>Hermes preparado</b><br><span style="color:var(--ink-2)">Carga un libro Hermes para activar el control operativo. Los KPIs económicos oficiales siguen viniendo exclusivamente de Power BI/Navision.</span></div>
+          <div><b>Hermes preparado</b><br><span style="color:var(--ink-2)">Carga un libro Hermes para activar el control operativo.</span></div>
         </div>
 
         <div class="hermes-kpis" id="hermes-control-kpis">
-          <div class="hermes-kpi"><div class="hk-label">Operaciones</div><div class="hk-value">—</div><div class="hk-sub">Período Hermes activo.</div></div>
-          <div class="hermes-kpi"><div class="hk-label">EQ</div><div class="hk-value">—</div><div class="hk-sub">Canal Equity.</div></div>
-          <div class="hermes-kpi"><div class="hk-label">VC</div><div class="hk-value">—</div><div class="hk-sub">Canal Partners.</div></div>
-          <div class="hermes-kpi"><div class="hk-label">Cerrado sin factura</div><div class="hk-value">—</div><div class="hk-sub">Alerta operativa Hermes.</div></div>
+          <div class="hermes-kpi"><div class="hk-label">OPR con actividad</div><div class="hk-value">—</div><div class="hk-sub">Período Hermes</div></div>
+          <div class="hermes-kpi"><div class="hk-label">EQ</div><div class="hk-value">—</div><div class="hk-sub">Canal Equity</div></div>
+          <div class="hermes-kpi"><div class="hk-label">VC</div><div class="hk-value">—</div><div class="hk-sub">Canal Partners</div></div>
+          <div class="hermes-kpi"><div class="hk-label">Entregadas sin facturar</div><div class="hk-value">—</div><div class="hk-sub">OPR · venta neta</div></div>
         </div>
 
         <div class="card" style="margin-bottom:.8rem">
           <div class="card-hd">Qué requiere atención <span class="subtle-tag">prioridad</span></div>
-          <div class="card-bd" id="hermes-control-alerts"><div class="hermes-op-empty">Sin datos Hermes cargados.</div></div>
+          <div class="card-bd">
+            <div id="hermes-control-alert-summary" class="hermes-control-summary"></div>
+            <div style="overflow:auto">
+              <table class="hermes-op-table">
+                <thead>
+                  <tr>
+                    <th>OPR</th><th>Cliente</th><th>Taller</th><th>Incidencia</th>
+                    <th class="r">Venta neta</th><th class="r">Antigüedad</th>
+                  </tr>
+                </thead>
+                <tbody id="hermes-control-alerts">
+                  <tr><td colspan="6" class="hermes-op-empty">Sin datos Hermes cargados.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <div class="hermes-method-note" style="margin:.15rem 0 .8rem;color:var(--muted);font-size:11px">
+        <div class="hermes-method-note">
           <strong>Lectura:</strong> ciclo total ≠ tiempo First Stop. El control separa Taller · First Stop · Flota y prioriza SLA + retrabajo.
-        </div>
-
-        <div class="cockpit-section-title">Ir al detalle</div>
-        <div class="hermes-actions" style="grid-template-columns:repeat(3,1fr)">
-          <div class="hermes-action" onclick="setHermesTab('ops')"><div class="ha-title">Operaciones</div><div class="ha-desc">Abiertas, ciclo, SLA y tiempo atribuible por estación.</div></div>
-          <div class="hermes-action" onclick="setHermesTab('workshops')"><div class="ha-title">Talleres</div><div class="ha-desc">Dónde se concentra el volumen y las incidencias.</div></div>
-          <div class="hermes-action" onclick="setHermesTab('conversion')"><div class="ha-title">Calidad del proceso</div><div class="ha-desc">First Time Right, correcciones, rechazo total y reaperturas.</div></div>
         </div>
       </div>
 
@@ -2682,27 +2696,66 @@ function hermesFmtHours(v){
   return Number.isFinite(v) && v>0 ? v.toFixed(1)+' h' : '—';
 }
 
-function renderHermesControl(){
-  const rows=hermesOpsData||[];
+
+function hermesActiveOprIdsForCurrentRange(){
   const r=hermesActiveRange();
+  const start=new Date(r.start), end=new Date(r.end);
+  const ids=new Set();
+  for(const e of (hermesWorkflowData||[])){
+    if(!e.event_at || e.opr_id==null) continue;
+    const d=new Date(e.event_at);
+    if(d>=start && d<end) ids.add(String(e.opr_id));
+  }
+  return ids;
+}
+
+function renderHermesControl(){
+  const r=hermesActiveRange();
+  const activeIds=hermesActiveOprIdsForCurrentRange();
+  const rows=(hermesOpsData||[]).filter(x=>activeIds.size===0 || activeIds.has(String(x.opr_id)));
+
+  const label=(r.months&&r.months.length===1)?`${MN[r.months[0]-1]} ${r.year}`:r.label;
   const state=document.getElementById('hermes-control-state');
-  if(state) state.innerHTML=`<span class="hermes-dot"></span><div><b>Hermes conectado · ${escHtml(r.label)}</b><br><span style="color:var(--ink-2)">${fmt(rows.length)} operaciones. Fuente operativa separada de Power BI/Navision.</span></div>`;
-  const eq=rows.filter(x=>x.channel==='EQ').length, vc=rows.filter(x=>x.channel==='VC').length;
+  if(state) state.innerHTML=`<span class="hermes-dot"></span><div><b>Hermes conectado · ${escHtml(label)}</b><br><span style="color:var(--ink-2)">${fmt(rows.length)} OPR con actividad en el período · Fuente operativa separada de Power BI/Navision.</span></div>`;
+
+  const eq=rows.filter(x=>x.channel==='EQ').length;
+  const vc=rows.filter(x=>x.channel==='VC').length;
+  const other=rows.filter(x=>x.channel!=='EQ' && x.channel!=='VC').length;
+
   const pending=rows.filter(x=>Number(x.delivery_status)===2 && Number(x.fleet_invoice_status||0)===0);
+  const pendingNet=pending.reduce((a,x)=>a+(Number(x.fleet_net_amount)||0),0);
+
   const k=document.getElementById('hermes-control-kpis');
   if(k) k.innerHTML=[
-    ['Operaciones',fmt(rows.length),r.label],
-    ['EQ',fmt(eq),rows.length?fmtP(eq/rows.length):'—'],
+    ['OPR con actividad',fmt(rows.length),label],
+    ['EQ',fmt(eq),rows.length?`${fmtP(eq/rows.length)}${other?` · Otros ${other}`:''}`:'—'],
     ['VC',fmt(vc),rows.length?fmtP(vc/rows.length):'—'],
-    ['Cerrado sin factura',fmt(pending.length),'Hermes · no modifica NS oficial']
+    ['Entregadas sin facturar',`${fmt(pending.length)} · ${fmtM(pendingNet)}`,'OPR · venta neta']
   ].map(x=>`<div class="hermes-kpi"><div class="hk-label">${x[0]}</div><div class="hk-value">${x[1]}</div><div class="hk-sub">${x[2]}</div></div>`).join('');
-  const al=document.getElementById('hermes-control-alerts');
-  if(al){
-    const list=pending.sort((a,b)=>new Date(a.exit_at||0)-new Date(b.exit_at||0)).slice(0,8);
-    al.innerHTML=list.length?list.map(x=>{
-      const age=x.exit_at?Math.floor((Date.now()-new Date(x.exit_at))/864e5):null;
-      return `<div class="hermes-alert"><div><b>${escHtml(x.client_name||'Sin cliente')} · ${escHtml(x.provider_name||'Sin taller')}</b><br><span style="color:var(--ink-3)">OPR ${x.opr_id} · cerrado sin factura</span></div><div class="money">${fmtM(Number(x.fleet_net_amount)||0)}</div><div class="age">${age!==null?age+' d':'—'}</div></div>`;
-    }).join(''):'<div class="hermes-op-empty">Sin operaciones cerradas pendientes de factura en el período.</div>';
+
+  const today=new Date();
+  const aging=pending.map(x=>{
+    const base=x.exit_at?new Date(x.exit_at):null;
+    const days=base&&!isNaN(base)?Math.max(0,Math.floor((today-base)/864e5)):null;
+    return {...x,_age:days};
+  });
+
+  const over7=aging.filter(x=>x._age!==null&&x._age>7).length;
+  const over15=aging.filter(x=>x._age!==null&&x._age>15).length;
+  const summary=document.getElementById('hermes-control-alert-summary');
+  if(summary) summary.innerHTML=`<b>${fmt(pending.length)} OPR</b> entregadas sin facturar · <b>${fmtM(pendingNet)}</b> venta neta · ${fmt(over7)} con &gt;7 días · ${fmt(over15)} con &gt;15 días`;
+
+  const tb=document.getElementById('hermes-control-alerts');
+  if(tb){
+    const list=aging.sort((a,b)=>(b._age??-1)-(a._age??-1)).slice(0,20);
+    tb.innerHTML=list.length?list.map(x=>`<tr>
+      <td><b>${x.opr_id}</b></td>
+      <td>${escHtml(x.client_name||'—')}</td>
+      <td>${escHtml(x.provider_name||'—')}</td>
+      <td>Entregada sin facturar</td>
+      <td class="r">${fmtM(Number(x.fleet_net_amount)||0)}</td>
+      <td class="r">${x._age!==null?`${x._age} días`:'—'}</td>
+    </tr>`).join(''):'<tr><td colspan="6" class="hermes-op-empty">Sin operaciones entregadas pendientes de factura en el período.</td></tr>';
   }
 }
 function renderHermesOperations(){
@@ -5800,7 +5853,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V19.5 validada. Histórico mensual explícito; huérfanos excluidos; UPSERT seguro; SLA FS por episodio.',
+        validation_message:'Carga V19.6 validada. Control Hermes por actividad del período; histórico seguro; SLA FS por episodio.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

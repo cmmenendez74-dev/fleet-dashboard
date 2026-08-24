@@ -618,7 +618,7 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1050px){.hermes-load-grid{grid-template-columns:1fr 1fr}}
 
 
-/* === V19.6 · Hermes Control Clarity === */
+/* === V19.7.1 · Hermes Operations Action Safe === */
 .hermes-load-toolbar{display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin:.65rem 0}
 .hermes-load-toolbar label{font-size:9px;font-weight:700;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
 .hermes-load-toolbar select{border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 8px;font-size:10px}
@@ -665,6 +665,13 @@ body,.main{background:var(--app-bg)}
 .hermes-control-summary{margin-bottom:.65rem;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:#fafbfc;font-size:10.5px;color:var(--ink-2)}
 .hermes-method-note{margin:.15rem 0 .8rem;color:var(--muted);font-size:11px}
 #hermes-panel-control .hermes-op-table th,#hermes-panel-control .hermes-op-table td{white-space:nowrap}
+
+
+/* === V19.7.1 · Operations performance safe === */
+#hermes-panel-ops .hermes-op-kpis{grid-template-columns:repeat(4,1fr)}
+#hermes-op-action-filter{flex-wrap:wrap}
+#hermes-panel-ops .hermes-op-table tbody tr:hover{background:#fafbfc}
+#hermes-panel-ops .hermes-op-table td{vertical-align:middle}
 
 </style>
 </head>
@@ -2481,7 +2488,7 @@ async function loadHermesLive(force=false){
   try{
     const encStart=encodeURIComponent(r.start), encEnd=encodeURIComponent(r.end);
     hermesOpsData=await sbSelectAll('hermes_operations',
-      `select=opr_id,channel,provider_id,provider_name,provider_synergy_code,client_id,client_name,vehicle_plate,entry_at,exit_at,expected_exit_at,delivery_status,invoice_status,fleet_invoice_status,budget_id,fleet_net_amount,gt_integrated&entry_at=gte.${encStart}&entry_at=lt.${encEnd}&order=entry_at.asc`);
+      `select=opr_id,channel,provider_id,provider_name,provider_synergy_code,client_id,client_name,vehicle_plate,entry_at,exit_at,expected_exit_at,delivery_status,invoice_status,fleet_invoice_status,budget_id,fleet_net_amount,gt_integrated&order=entry_at.asc`);
     hermesLiveLoaded=true;
     renderHermesControl();
     if(hermesTab==='ops') renderHermesOperations();
@@ -2653,23 +2660,40 @@ const HERMES_WORKDAY_END=18;
 
 function hermesBusinessHours(startValue,endValue){
   if(!startValue || !endValue) return null;
-  let start=new Date(startValue), end=new Date(endValue);
+  const start=new Date(startValue), end=new Date(endValue);
   if(!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end<=start) return 0;
-  let totalMs=0;
-  let d=new Date(start.getFullYear(),start.getMonth(),start.getDate());
-  const last=new Date(end.getFullYear(),end.getMonth(),end.getDate());
-  while(d<=last){
-    const dow=d.getDay();
-    if(dow>=1 && dow<=5){
-      const ws=new Date(d.getFullYear(),d.getMonth(),d.getDate(),HERMES_WORKDAY_START,0,0,0);
-      const we=new Date(d.getFullYear(),d.getMonth(),d.getDate(),HERMES_WORKDAY_END,0,0,0);
-      const a=new Date(Math.max(start.getTime(),ws.getTime()));
-      const b=new Date(Math.min(end.getTime(),we.getTime()));
-      if(b>a) totalMs += b-a;
+
+  const dayStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate(),HERMES_WORKDAY_START,0,0,0);
+  const dayEnd=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate(),HERMES_WORKDAY_END,0,0,0);
+  const isWorkday=d=>{const x=d.getDay();return x>=1&&x<=5;};
+  const overlapDay=(d,a,b)=>{
+    if(!isWorkday(d)) return 0;
+    const x=Math.max(a.getTime(),dayStart(d).getTime());
+    const y=Math.min(b.getTime(),dayEnd(d).getTime());
+    return Math.max(0,y-x)/36e5;
+  };
+
+  const sDay=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+  const eDay=new Date(end.getFullYear(),end.getMonth(),end.getDate());
+  if(sDay.getTime()===eDay.getTime()) return overlapDay(sDay,start,end);
+
+  let hours=overlapDay(sDay,start,dayEnd(sDay))+overlapDay(eDay,dayStart(eDay),end);
+
+  const first=new Date(sDay); first.setDate(first.getDate()+1);
+  const last=new Date(eDay); last.setDate(last.getDate()-1);
+  if(first<=last){
+    const totalDays=Math.floor((last-first)/86400000)+1;
+    const fullWeeks=Math.floor(totalDays/7);
+    let weekdays=fullWeeks*5;
+    const rem=totalDays%7;
+    const remStart=new Date(first); remStart.setDate(remStart.getDate()+fullWeeks*7);
+    for(let i=0;i<rem;i++){
+      const d=new Date(remStart); d.setDate(d.getDate()+i);
+      if(isWorkday(d)) weekdays++;
     }
-    d.setDate(d.getDate()+1);
+    hours+=weekdays*(HERMES_WORKDAY_END-HERMES_WORKDAY_START);
   }
-  return totalMs/3600000;
+  return hours;
 }
 function hermesOprBusinessTiming(oprId,wfMap){
   const ev=(wfMap.get(String(oprId))||[]);
@@ -2773,13 +2797,13 @@ function renderHermesControl(){
     </tr>`).join(''):'<tr><td colspan="6" class="hermes-op-empty">Sin operaciones entregadas pendientes de factura en el período.</td></tr>';
   }
 }
+
 function hermesCurrentStage(op,wfMap){
   const ev=(wfMap.get(String(op.opr_id))||[]);
   if(!ev.length) return {station:'—',since:null,wait:null};
   const last=ev[ev.length-1];
   const station=String(last.station_name||'').trim().toUpperCase()||'—';
-  const end=Number(op.delivery_status)===2 ? (op.exit_at||last.event_at) : new Date();
-  const wait=hermesBusinessHours(last.event_at,end);
+  const wait=Number(op.delivery_status)===2 ? 0 : hermesBusinessHours(last.event_at,new Date());
   return {station,since:last.event_at,wait};
 }
 function hermesOperationSignal(op,timing,rework,current){
@@ -2788,20 +2812,26 @@ function hermesOperationSignal(op,timing,rework,current){
   const retrabajo=Number(rework.corrections||0)>0 || Number(rework.reopenings||0)>0;
   const rejection=Number(rework.rejects||0)>0;
   const actionable=sla || retrabajo || rejection;
-  let level='VIGILAR', cls='warn', reason='Corrección';
-  if(rework.reopenings>0){ level='ACTUAR'; cls='err'; reason='Reapertura'; }
-  else if(rejection){ level='ACTUAR'; cls='err'; reason='Rechazo total'; }
-  else if(sla){ level='ACTUAR'; cls='err'; reason=currentFsBreach?'SLA First Stop >2 h ahora':`SLA First Stop incumplido ×${timing.fsBreaches}`; }
-  else if(rework.corrections>0){ reason=rework.corrections===1?'1 corrección':`${rework.corrections} correcciones`; }
-  return {actionable,sla,retrabajo,rejection,level,cls,reason};
+
+  if(rework.reopenings>0) return {actionable,sla,retrabajo,rejection,level:'ACTUAR',cls:'err',reason:'Reapertura'};
+  if(rejection) return {actionable,sla,retrabajo,rejection,level:'ACTUAR',cls:'err',reason:'Rechazo total'};
+  if(currentFsBreach) return {actionable,sla,retrabajo,rejection,level:'ACTUAR',cls:'err',reason:'SLA First Stop >2 h ahora'};
+  if(Number(timing.fsBreaches||0)>0) return {actionable,sla,retrabajo,rejection,level:'ACTUAR',cls:'err',reason:`SLA First Stop incumplido ×${timing.fsBreaches}`};
+  if(rework.corrections>0) return {actionable,sla,retrabajo,rejection,level:'VIGILAR',cls:'review',reason:rework.corrections===1?'1 corrección':`${rework.corrections} correcciones`};
+  return {actionable:false,sla:false,retrabajo:false,rejection:false,level:'',cls:'',reason:''};
 }
+
 function renderHermesOperations(){
   const src=document.getElementById('hermes-op-source');
   if(!src) return;
-  let rows=hermesOpsData||[];
+
+  const activeIds=hermesActiveOprIdsForCurrentRange();
+  let rows=(hermesOpsData||[]).filter(op=>activeIds.has(String(op.opr_id)));
   if(hermesOpChannel!=='TOTAL') rows=rows.filter(r=>r.channel===hermesOpChannel);
+
   const wfMap=hermesWorkflowByOpr(), cvMap=hermesConversionByOpr();
   const openRows=rows.filter(r=>Number(r.delivery_status)!==2);
+
   let detailed=openRows.map(op=>{
     const timing=hermesOprBusinessTiming(op.opr_id,wfMap);
     const rework=hermesOprRework(op.opr_id,cvMap);
@@ -2809,11 +2839,12 @@ function renderHermesOperations(){
     const signal=hermesOperationSignal(op,timing,rework,current);
     return {op,timing,rework,current,signal};
   });
+
   const actionable=detailed.filter(x=>x.signal.actionable);
   const outside=actionable.filter(x=>x.signal.sla).length;
   const reworkOpen=actionable.filter(x=>x.signal.retrabajo).length;
 
-  src.textContent=`Hermes · ${fmt(rows.length)} OPR · ${fmt(openRows.length)} abiertas · ${hermesWorkflowCoverageNote()}`;
+  src.textContent=`Hermes · ${fmt(rows.length)} OPR con actividad · ${fmt(openRows.length)} abiertas`;
   const k=document.getElementById('hermes-op-kpis');
   if(k) k.innerHTML=[
     ['Abiertas ahora',fmt(openRows.length),'Pendientes de cierre'],
@@ -2822,36 +2853,38 @@ function renderHermesOperations(){
     ['Retrabajo abierto',fmt(reworkOpen),'Corrección o reapertura']
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
 
+  const counts={ALL:actionable.length,FIRSTSTOP:0,TALLER:0,FLOTA:0,REWORK:reworkOpen};
+  actionable.forEach(x=>{if(Object.prototype.hasOwnProperty.call(counts,x.current.station)) counts[x.current.station]++;});
+  document.querySelectorAll('#hermes-op-action-filter button').forEach(b=>{
+    const key=b.dataset.haf;
+    const base={ALL:'Todas con incidencia',FIRSTSTOP:'First Stop',TALLER:'Taller',FLOTA:'Flota',REWORK:'Retrabajo'}[key];
+    b.textContent=`${base} (${counts[key]||0})`;
+  });
+
   detailed=actionable.filter(x=>{
     if(hermesActionFilter==='ALL') return true;
     if(hermesActionFilter==='REWORK') return x.signal.retrabajo;
     return x.current.station===hermesActionFilter;
   }).sort((a,b)=>{
-    const la=a.signal.level==='ACTUAR'?2:1, lb=b.signal.level==='ACTUAR'?2:1;
-    return lb-la || Number(b.signal.sla)-Number(a.signal.sla) || Number(b.current.wait||0)-Number(a.current.wait||0) || Number(b.op.opr_id)-Number(a.op.opr_id);
-  });
-
-  const counts={ALL:actionable.length,FIRSTSTOP:0,TALLER:0,FLOTA:0,REWORK:reworkOpen};
-  actionable.forEach(x=>{if(counts[x.current.station]!==undefined) counts[x.current.station]++;});
-  document.querySelectorAll('#hermes-op-action-filter button').forEach(b=>{
-    const key=b.dataset.haf, base={ALL:'Todas con incidencia',FIRSTSTOP:'First Stop',TALLER:'Taller',FLOTA:'Flota',REWORK:'Retrabajo'}[key];
-    b.textContent=`${base} (${counts[key]??0})`;
+    const pa=a.signal.level==='ACTUAR'?2:1, pb=b.signal.level==='ACTUAR'?2:1;
+    return pb-pa || Number(b.current.wait||0)-Number(a.current.wait||0) || Number(b.op.opr_id)-Number(a.op.opr_id);
   });
 
   const tb=document.getElementById('hermes-op-client-tb');
   if(!tb) return;
   tb.innerHTML=detailed.map(({op,current,signal})=>`<tr>
-      <td><b>${op.opr_id}</b></td>
-      <td>${escHtml(op.client_name||'—')}</td>
-      <td>${escHtml(op.provider_name||'—')}</td>
-      <td><b>${escHtml(current.station==='FIRSTSTOP'?'FIRST STOP':current.station)}</b></td>
-      <td class="r">${hermesFmtHours(current.wait)}</td>
-      <td>${escHtml(signal.reason)}</td>
-      <td><span class="hermes-op-badge ${signal.cls}">${signal.level}</span></td>
-    </tr>`).join('')||'<tr><td colspan="7" class="hermes-op-empty">No hay OPR abiertas que requieran actuación con este filtro.</td></tr>';
+    <td><b>${op.opr_id}</b></td>
+    <td>${escHtml(op.client_name||'—')}</td>
+    <td>${escHtml(op.provider_name||'—')}</td>
+    <td><b>${escHtml(current.station==='FIRSTSTOP'?'FIRST STOP':current.station)}</b></td>
+    <td class="r">${hermesFmtHours(current.wait)}</td>
+    <td>${escHtml(signal.reason)}</td>
+    <td><span class="hermes-op-badge ${signal.cls}">${signal.level}</span></td>
+  </tr>`).join('')||'<tr><td colspan="7" class="hermes-op-empty">No hay OPR abiertas que requieran actuación con este filtro.</td></tr>';
 }
 function renderHermesWorkshops(){
-  const rows=hermesOpsData||[];
+  const activeIds=hermesActiveOprIdsForCurrentRange();
+  const rows=(hermesOpsData||[]).filter(op=>activeIds.has(String(op.opr_id)));
   const wfMap=hermesWorkflowByOpr(), cvMap=hermesConversionByOpr();
   const by=new Map();
   for(const op of rows){
@@ -5898,7 +5931,7 @@ async function commitHermesStage(){
         rows_conversion:hermesStage.conversion.length,
         rows_team:0,
         status:'COMPLETED',
-        validation_message:'Carga V19.6 validada. Control Hermes por actividad del período; histórico seguro; SLA FS por episodio.',
+        validation_message:'Carga V19.7.1 validada. Operaciones por excepción; actividad Workflow; cálculo laboral optimizado; histórico seguro.',
         completed_at:new Date().toISOString()
       }),
       headers:{'Prefer':'return=minimal'}

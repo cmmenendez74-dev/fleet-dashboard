@@ -723,6 +723,14 @@ body,.main{background:var(--app-bg)}
 @media(max-width:1000px){.hermes-exec-story{grid-template-columns:1fr}}
 
 </style>
+
+<style id="hermes-v22-clarity">
+#view-hermes .hermes-subnav{position:sticky;top:0;z-index:5;background:var(--bg);padding:.35rem 0 .55rem}
+#hermes-panel-intelligence .hermes-intel-kpis{margin-top:.75rem}
+#hermes-panel-intelligence .hermes-exec-story{border:1px solid var(--line);box-shadow:none}
+#hermes-panel-intelligence .hermes-exec-action{line-height:1.45}
+#hermes-data-context{font-size:12px;line-height:1.55}
+</style>
 </head>
 <body>
 <!-- ACCESS OVERLAY -->
@@ -1492,15 +1500,15 @@ body,.main{background:var(--app-bg)}
       </div>
 
       <div class="hermes-subnav" style="display:flex;align-items:center;gap:.45rem;flex-wrap:wrap">
-        <span class="chip" id="hermes-tab-control" onclick="setHermesTab('control')">Control</span>
+        <span class="chip on" id="hermes-tab-intelligence" onclick="setHermesTab('intelligence')">Resumen ejecutivo</span>
         <span class="chip" id="hermes-tab-ops" onclick="setHermesTab('ops')">Operaciones</span>
         <span class="chip" id="hermes-tab-workshops" onclick="setHermesTab('workshops')">Talleres</span>
-        <span class="chip on" id="hermes-tab-intelligence" onclick="setHermesTab('intelligence')">Resumen ejecutivo</span>
+        <span class="chip" id="hermes-tab-team" onclick="setHermesTab('team')">Equipo</span>
         <details class="hermes-more" style="margin-left:auto;position:relative">
-          <summary class="chip" style="list-style:none;cursor:pointer">Más análisis ▾</summary>
-          <div style="position:absolute;right:0;top:34px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.35rem;box-shadow:0 8px 20px rgba(0,0,0,.08);z-index:20;min-width:135px">
+          <summary class="chip" style="list-style:none;cursor:pointer">Diagnóstico ▾</summary>
+          <div style="position:absolute;right:0;top:34px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.35rem;box-shadow:0 8px 20px rgba(0,0,0,.08);z-index:20;min-width:155px">
+            <span class="chip" id="hermes-tab-control" onclick="setHermesTab('control');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Control operativo</span>
             <span class="chip" id="hermes-tab-conversion" onclick="setHermesTab('conversion');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Calidad de proceso</span>
-            <span class="chip" id="hermes-tab-team" onclick="setHermesTab('team');this.closest('details').removeAttribute('open')" style="display:block;margin:.2rem">Equipo Hermes</span>
           </div>
         </details>
       </div>
@@ -1686,14 +1694,19 @@ body,.main{background:var(--app-bg)}
       <div class="hermes-panel active" id="hermes-panel-intelligence">
         <div class="hermes-intro">
           <div>
-            <h3>Hermes · Resumen ejecutivo V21</h3>
+            <h3>Hermes · Resumen ejecutivo V22</h3>
             <p>Diagnóstico directo del proceso con las métricas ya validadas: qué ocurre, dónde actuar y qué está funcionando. El detalle operativo queda como drill-down, no como punto de partida.</p>
           </div>
           <span class="hermes-source-pill" id="hermes-intel-source">Capa analítica V20</span>
         </div>
 
+        <div id="hermes-data-context" class="hermes-method-note" style="margin-bottom:.8rem;background:#fff;border-left:4px solid var(--red)">
+          <strong>Qué datos estás viendo:</strong> <span id="hermes-intel-coverage">calculando cobertura…</span><br>
+          <span style="color:var(--ink-2)">El Resumen ejecutivo usa el snapshot analítico consolidado de Hermes. Las pantallas operativas y Equipo sí respetan el período seleccionado en cabecera.</span>
+        </div>
+
         <div class="hermes-exec-story" id="hermes-exec-story">
-          <div class="hermes-exec-story-main"><div class="label">Lectura ejecutiva</div><div class="headline">Cargando diagnóstico…</div><div class="body">La app está leyendo la capa analítica validada.</div></div>
+          <div class="hermes-exec-story-main"><div class="label">1 · QUÉ ESTÁ PASANDO</div><div class="headline">Cargando diagnóstico…</div><div class="body">La app está leyendo la capa analítica validada.</div></div>
           <div class="hermes-exec-actions" id="hermes-exec-actions"></div>
         </div>
 
@@ -1766,8 +1779,10 @@ body,.main{background:var(--app-bg)}
 
       <div class="hermes-panel" id="hermes-panel-team">
         <div class="hermes-op-controls">
-          <span class="hermes-source-pill" id="hermes-team-source">Actividad real Workflow + Conversión</span>
+          <span class="hermes-source-pill" id="hermes-team-source">Equipo · vista diaria agregada</span>
+          <span class="hermes-source-pill" id="hermes-team-period">Periodo: —</span>
         </div>
+        <div class="hermes-method-note" style="margin-bottom:.8rem"><strong>Lectura:</strong> esta pestaña sí se filtra por el período global de cabecera. No descarga Workflow ni Conversión completos.</div>
 
         <div class="hermes-op-kpis" id="hermes-team-kpis">
           <div class="hermes-op-kpi"><div class="label">Técnicos activos</div><div class="value">—</div><div class="sub">De 8 técnicos</div></div>
@@ -2637,6 +2652,22 @@ let hermesExecutiveData=[];
 let hermesRootCauseData=[];
 let hermesProviderIntelData=[];
 let hermesArvalGtData=[];
+let hermesCoverage={min:null,max:null};
+async function loadHermesCoverage(){
+  try{
+    const [a,b]=await Promise.all([
+      sbSelect('hermes_case','select=entry_at&entry_at=not.is.null&order=entry_at.asc&limit=1'),
+      sbSelect('hermes_case','select=entry_at&entry_at=not.is.null&order=entry_at.desc&limit=1')
+    ]);
+    hermesCoverage.min=a&&a[0]?a[0].entry_at:null;
+    hermesCoverage.max=b&&b[0]?b[0].entry_at:null;
+  }catch(e){ console.warn('Hermes coverage',e); }
+}
+function hermesDateES(v){
+  if(!v) return '—';
+  const d=new Date(v);
+  return isNaN(d)?String(v).slice(0,10):d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
 
 function hermesActiveRange(){
   const years=(S.years&&S.years.size?[...S.years]:[new Date().getFullYear()]).map(Number).sort((a,b)=>a-b);
@@ -2690,6 +2721,7 @@ async function loadHermesTeam(){
 async function loadHermesIntelligence(force=false){
   if(hermesIntelLoaded&&!force) return;
   try{
+    await loadHermesCoverage();
     const [exec,causes,providers,gt]=await Promise.all([
       sbSelectAll('hermes_app_executive_v1','select=scope,total_opr,corrected_opr,correction_events,correction_rate_pct,opr_with_rework,rework_rate_pct,opr_with_repeated_rework,opr_with_severe_rework,rework_cycles,sla_eligible_episodes,sla_breached_episodes,sla_breach_episode_pct'),
       sbSelectAll('hermes_app_root_cause_v1','select=primary_cause,opr,correction_events,opr_with_rework,rework_pct,opr_with_repeated_rework,opr_with_severe_rework,rework_cycles,eligible_opr,opr_with_sla_breach,eligible_opr_sla_breach_pct&order=correction_events.desc'),
@@ -2723,6 +2755,11 @@ function renderHermesIntelligence(){
   const total=hermesExecutiveData.find(x=>String(x.scope)==='TOTAL')||scope;
   const eq=hermesExecutiveData.find(x=>String(x.scope)==='EQ')||{};
   const vc=hermesExecutiveData.find(x=>String(x.scope)==='VC')||{};
+  const cov=document.getElementById('hermes-intel-coverage');
+  if(cov){
+    const txt=(hermesCoverage.min&&hermesCoverage.max)?`${hermesDateES(hermesCoverage.min)} → ${hermesDateES(hermesCoverage.max)}`:'snapshot completo disponible';
+    cov.innerHTML=`<b>${txt}</b> · ${fmt(Number(scope.total_opr||0))} OPR en el scope seleccionado`;
+  }
   const topVolume=[...hermesRootCauseData].sort((a,b)=>Number(b.correction_events||0)-Number(a.correction_events||0))[0]||{};
   const meaningful=hermesRootCauseData.filter(x=>Number(x.opr||0)>=20);
   const topSla=[...meaningful].sort((a,b)=>Number(b.eligible_opr_sla_breach_pct||0)-Number(a.eligible_opr_sla_breach_pct||0))[0]||{};
@@ -2731,14 +2768,14 @@ function renderHermesIntelligence(){
   if(story){
     const cr=Number(scope.correction_rate_pct||0), rr=Number(scope.rework_rate_pct||0), severe=Number(scope.opr_with_severe_rework||0);
     story.querySelector('.headline').textContent=`${hermesPct(cr)} de las OPR requieren corrección`;
-    story.querySelector('.body').innerHTML=`${fmt(Number(scope.corrected_opr||0))} OPR acumulan ${fmt(Number(scope.correction_events||0))} eventos de corrección. El rework afecta al <b>${hermesPct(rr)}</b> y hay <b>${fmt(severe)} OPR</b> con rework severo. La prioridad no es mirar más filas: es actuar sobre los drivers con volumen e impacto.`;
+    story.querySelector('.body').innerHTML=`De ${fmt(Number(scope.total_opr||0))} OPR, <b>${fmt(Number(scope.corrected_opr||0))}</b> necesitan al menos una corrección (${fmt(Number(scope.correction_events||0))} eventos). <b>${fmt(Number(scope.opr_with_rework||0))}</b> entran en rework (${hermesPct(rr)}) y <b>${fmt(severe)}</b> llegan a rework severo. Este bloque resume magnitud, causa y foco de actuación.`;
   }
   const actions=document.getElementById('hermes-exec-actions');
   if(actions) actions.innerHTML=[
-    `<div class="hermes-exec-action"><b>Mayor volumen · ${escHtml(hermesCauseLabel(topVolume.primary_cause))}</b>${fmt(Number(topVolume.correction_events||0))} eventos en ${fmt(Number(topVolume.opr||0))} OPR.</div>`,
-    `<div class="hermes-exec-action"><b>Mayor riesgo SLA · ${escHtml(hermesCauseLabel(topSla.primary_cause))}</b>${hermesPct(topSla.eligible_opr_sla_breach_pct)} de OPR elegibles con breach (muestra ≥20 OPR).</div>`,
-    `<div class="hermes-exec-action"><b>Mayor rework · ${escHtml(hermesCauseLabel(topRework.primary_cause))}</b>${hermesPct(topRework.rework_pct)} con rework (muestra ≥20 OPR).</div>`,
-    `<div class="hermes-exec-action"><b>Canal · EQ ${hermesPct(eq.correction_rate_pct)} vs VC ${hermesPct(vc.correction_rate_pct)}</b>Brecha bruta condicionada por cliente y variante; usar como señal, no como causalidad.</div>`
+    `<div class="hermes-exec-action"><b>2 · Mayor volumen · ${escHtml(hermesCauseLabel(topVolume.primary_cause))}</b>${fmt(Number(topVolume.correction_events||0))} eventos en ${fmt(Number(topVolume.opr||0))} OPR.</div>`,
+    `<div class="hermes-exec-action"><b>3 · Mayor riesgo SLA · ${escHtml(hermesCauseLabel(topSla.primary_cause))}</b>${hermesPct(topSla.eligible_opr_sla_breach_pct)} de OPR elegibles con breach (muestra ≥20 OPR).</div>`,
+    `<div class="hermes-exec-action"><b>4 · Mayor rework · ${escHtml(hermesCauseLabel(topRework.primary_cause))}</b>${hermesPct(topRework.rework_pct)} con rework (muestra ≥20 OPR).</div>`,
+    `<div class="hermes-exec-action"><b>5 · Canal · EQ ${hermesPct(eq.correction_rate_pct)} vs VC ${hermesPct(vc.correction_rate_pct)}</b>Brecha bruta condicionada por cliente y variante; usar como señal, no como causalidad.</div>`
   ].join('');
   const k=document.getElementById('hermes-intel-kpis');
   if(k) k.innerHTML=[
@@ -2776,7 +2813,7 @@ function renderHermesIntelligence(){
   const ptb=document.getElementById('hermes-intel-providers');
   if(ptb) ptb.innerHTML=providers.map(x=>`<tr><td><b>${escHtml(x.provider_name||'Sin taller')}</b></td><td>${escHtml(x.channel||'—')}</td><td class="r">${fmt(Number(x.corrected_opr||0))}</td><td class="r">${hermesPct(x.rework_pct)}</td><td class="r">${fmt(Number(x.opr_with_severe_rework||0))}</td><td class="r">${fmt(Number(x.rework_cycles||0))}</td><td class="r">${hermesPct(x.sla_breach_pct)}</td></tr>`).join('')||'<tr><td colspan="7" class="hermes-op-empty">Sin talleres con muestra suficiente.</td></tr>';
 
-  const src=document.getElementById('hermes-intel-source'); if(src) src.textContent='Supabase · capa analítica V21';
+  const src=document.getElementById('hermes-intel-source'); if(src) src.textContent='Supabase · capa analítica V22';
 }
 
 function setHermesTab(tab){
@@ -2790,7 +2827,7 @@ function setHermesTab(tab){
   if(tab==='workshops') Promise.all([loadHermesLive(),loadHermesWorkflow(),loadHermesConversion()]).then(renderHermesWorkshops);
   if(tab==='intelligence') loadHermesIntelligence();
   if(tab==='conversion') Promise.all([loadHermesLive(),loadHermesConversion()]).then(renderHermesConversion);
-  if(tab==='team') Promise.all([loadHermesWorkflow(),loadHermesConversion()]).then(renderHermesTeam);
+  if(tab==='team') loadHermesTeam().then(renderHermesTeam);
 }
 function setHermesOpChannel(ch,btn){
   hermesOpChannel=ch;
@@ -3354,56 +3391,50 @@ function renderHermesConversion(){
   </tr>`).join('')||'<tr><td colspan="9" class="hermes-op-empty">Sin eventos de calidad en el período.</td></tr>';
 }
 function renderHermesTeam(){
-  const people=new Map(HERMES_TECHNICIANS.map(t=>[t.name,{name:t.name,events:new Set(),oprs:new Set(),validations:0,corrections:0,rejects:0,reopenings:0,closures:0}]));
+  const r=hermesActiveRange();
+  const per=document.getElementById('hermes-team-period');
+  if(per) per.textContent=`Periodo: ${r.label}`;
+  const src=document.getElementById('hermes-team-source');
+  if(src) src.textContent='Supabase · v_hermes_team_daily_v2';
 
-  for(const e of (hermesWorkflowData||[])){
-    const who=hermesCanonicalTech(e.technician_name)||hermesCanonicalTech(e.user_name);
-    if(!who || !people.has(who)) continue;
-    const g=people.get(who);
-    g.events.add('WF:'+String(e.source_key));
-    if(e.opr_id!=null) g.oprs.add(String(e.opr_id));
-    const st=String(e.state_name||'').toUpperCase();
-    if(st==='VALIDANDO FIRSTSTOP') g.validations++;
-    if(st==='CIERRE FIRSTSTOP') g.closures++;
+  const map=new Map();
+  for(const row of (hermesTeamData||[])){
+    const name=String(row.operator_name||'Sin asignar').trim();
+    if(!map.has(name)) map.set(name,{name,interventions:0,opr:0,validations:0,corrections:0,rejects:0,reopenings:0,closures:0});
+    const g=map.get(name);
+    g.interventions+=Number(row.interventions||0);
+    g.opr+=Number(row.operations_touched||0);
+    g.validations+=Number(row.validations||0);
+    g.corrections+=Number(row.corrections||0);
+    g.rejects+=Number(row.total_rejections||0);
+    g.reopenings+=Number(row.reopenings||0);
+    g.closures+=Number(row.closures||0);
   }
-
-  for(const e of (hermesConversionData||[])){
-    const who=hermesCanonicalTech(e.user_name);
-    if(!who || !people.has(who)) continue;
-    const g=people.get(who);
-    g.events.add('CV:'+String(e.source_key));
-    if(e.opr_id!=null) g.oprs.add(String(e.opr_id));
-    if(e.event_type==='CORRECTION') g.corrections++;
-    if(e.event_type==='TOTAL_REJECTION') g.rejects++;
-    if(e.event_type==='REOPENING') g.reopenings++;
-  }
-
-  const list=[...people.values()].map(g=>({...g,interventions:g.events.size,oprCount:g.oprs.size}));
-  const active=list.filter(x=>x.interventions>0).length;
+  const list=[...map.values()].filter(x=>x.interventions||x.opr||x.corrections||x.validations).sort((a,b)=>b.interventions-a.interventions);
+  const active=list.length;
   const totalInt=list.reduce((a,x)=>a+x.interventions,0);
-  const uniqueOprs=new Set();
-  list.forEach(x=>x.oprs.forEach(o=>uniqueOprs.add(o)));
+  const totalOpr=list.reduce((a,x)=>a+x.opr,0);
   const totalCorrections=list.reduce((a,x)=>a+x.corrections,0);
 
   const k=document.getElementById('hermes-team-kpis');
   if(k) k.innerHTML=[
-    ['Técnicos activos',fmt(active),'De 8 técnicos'],
-    ['Intervenciones',fmt(totalInt),'Workflow + Conversión'],
-    ['OPR gestionadas',fmt(uniqueOprs.size),'Operaciones distintas'],
-    ['Correcciones',fmt(totalCorrections),'Actividad de revisión']
+    ['Técnicos activos',fmt(active),r.label],
+    ['Intervenciones',fmt(totalInt),'Actividad agregada del período'],
+    ['OPR gestionadas',fmt(totalOpr),'Suma diaria de OPR tocadas'],
+    ['Correcciones',fmt(totalCorrections),'Correcciones registradas en el período']
   ].map(x=>`<div class="hermes-op-kpi"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
 
   const tb=document.getElementById('hermes-team-tb');
   if(tb) tb.innerHTML=list.map(g=>`<tr>
     <td><b>${escHtml(g.name)}</b></td>
     <td class="r">${fmt(g.interventions)}</td>
-    <td class="r">${fmt(g.oprCount)}</td>
+    <td class="r">${fmt(g.opr)}</td>
     <td class="r">${fmt(g.validations)}</td>
     <td class="r">${fmt(g.corrections)}</td>
     <td class="r">${fmt(g.rejects)}</td>
     <td class="r">${fmt(g.reopenings)}</td>
     <td class="r">${fmt(g.closures)}</td>
-  </tr>`).join('');
+  </tr>`).join('')||'<tr><td colspan="8" class="hermes-op-empty">Sin actividad en el período seleccionado.</td></tr>';
 }
 
 let _viewHistory=['resumen'];
@@ -6287,6 +6318,8 @@ async function commitHermesStage(){
     status.className='hermes-load-status ok';
     status.innerHTML=`<b>Carga Hermes completada.</b> ${fmt(hermesStage.operations.length)} operaciones · ${fmt(hermesStage.workflow.length)} eventos workflow · ${fmt(hermesStage.conversion.length)} eventos conversión.<br>Power BI/Navision no ha sido modificado.`;
     hermesLiveLoaded=false;
+    hermesIntelLoaded=false;
+    hermesTeamData=[];
     await loadHermesLive(true);
   }catch(e){
     if(loadId){

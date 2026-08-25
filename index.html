@@ -731,6 +731,11 @@ body,.main{background:var(--app-bg)}
 #hermes-panel-intelligence .hermes-exec-action{line-height:1.45}
 #hermes-data-context{font-size:12px;line-height:1.55}
 </style>
+
+<style id="hermes-clarity-v222">
+.clarity-section{margin:0 0 1rem}.clarity-section-title{display:flex;gap:.7rem;align-items:center;margin:.9rem 0 .6rem}.clarity-section-title>span{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#171717;color:#fff;font-weight:800}.clarity-section-title b{display:block;font-size:1rem}.clarity-section-title small{display:block;color:var(--ink-2);margin-top:.08rem}.hermes-clarity-context{display:flex;justify-content:space-between;gap:1rem;align-items:center;background:#fff;border:1px solid var(--line);border-left:4px solid var(--red);border-radius:12px;padding:.7rem .85rem;margin-bottom:.65rem}.clarity-kicker{font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--ink-2);display:block}.clarity-context-note{max-width:720px;color:var(--ink-2);font-size:.78rem}.hermes-clarity-filter{margin-bottom:.5rem}.clarity-filter-label{font-size:.72rem;font-weight:800;color:var(--ink-2)}.clarity-kpis .hermes-intel-kpi{min-height:104px}.clarity-definitions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem;margin-top:.55rem}.clarity-definitions>div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:.62rem .7rem}.clarity-definitions b{display:block;font-size:.78rem;margin-bottom:.2rem}.clarity-definitions span{font-size:.72rem;color:var(--ink-2);line-height:1.35}.clarity-reading{display:inline-flex;align-items:center;border-radius:999px;padding:.2rem .48rem;font-size:.67rem;font-weight:800;white-space:nowrap}.clarity-reading.volume{background:#fff4df;color:#855400}.clarity-reading.sla{background:#fdeaea;color:#9b1c1c}.clarity-reading.rework{background:#f2eafd;color:#5e2c83}.clarity-reading.balanced{background:#eaf4ee;color:#21613b}.clarity-reading.watch{background:#eef1f4;color:#4d5863}.clarity-table td:nth-child(2){min-width:150px}.clarity-details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:.7rem .85rem;margin-top:.75rem}.clarity-details summary{cursor:pointer;font-weight:700}.clarity-gt-card .hermes-benchmark{margin-bottom:.65rem}
+@media(max-width:1000px){.clarity-definitions{grid-template-columns:repeat(2,minmax(0,1fr))}.hermes-clarity-context{align-items:flex-start;flex-direction:column}}
+</style>
 </head>
 <body>
 <!-- ACCESS OVERLAY -->
@@ -1694,87 +1699,100 @@ body,.main{background:var(--app-bg)}
       <div class="hermes-panel active" id="hermes-panel-intelligence">
         <div class="hermes-intro">
           <div>
-            <h3>Hermes · Resumen ejecutivo V22</h3>
-            <p>Diagnóstico directo del proceso con las métricas ya validadas: qué ocurre, dónde actuar y qué está funcionando. El detalle operativo queda como drill-down, no como punto de partida.</p>
+            <h3>Hermes · Resumen ejecutivo</h3>
+            <p>Una lectura en tres pasos: <b>qué está pasando</b>, <b>qué lo provoca</b> y <b>dónde actuar</b>. El detalle operativo queda después.</p>
           </div>
-          <span class="hermes-source-pill" id="hermes-intel-source">Capa analítica V20</span>
+          <span class="hermes-source-pill" id="hermes-intel-source">Capa analítica validada</span>
         </div>
 
-        <div id="hermes-data-context" class="hermes-method-note" style="margin-bottom:.8rem;background:#fff;border-left:4px solid var(--red)">
-          <strong>Qué datos estás viendo:</strong> <span id="hermes-intel-coverage">calculando cobertura…</span><br>
-          <span style="color:var(--ink-2)">El Resumen ejecutivo usa el snapshot analítico consolidado de Hermes. Las pantallas operativas y Equipo sí respetan el período seleccionado en cabecera.</span>
+        <div id="hermes-data-context" class="hermes-clarity-context">
+          <div><span class="clarity-kicker">COBERTURA</span><strong id="hermes-intel-coverage">calculando…</strong></div>
+          <div class="clarity-context-note">Los indicadores de este resumen usan el snapshot analítico consolidado de Hermes. Las pantallas operativas y Equipo usan el período de cabecera.</div>
         </div>
 
-        <div class="hermes-exec-story" id="hermes-exec-story">
-          <div class="hermes-exec-story-main"><div class="label">1 · QUÉ ESTÁ PASANDO</div><div class="headline">Cargando diagnóstico…</div><div class="body">La app está leyendo la capa analítica validada.</div></div>
-          <div class="hermes-exec-actions" id="hermes-exec-actions"></div>
-        </div>
-
-        <div class="hermes-op-controls">
+        <div class="hermes-op-controls hermes-clarity-filter">
+          <span class="clarity-filter-label">VER:</span>
           <div class="seg" id="hermes-intel-channel">
             <button class="on" data-hic="TOTAL" onclick="setHermesIntelChannel('TOTAL',this)">Total</button>
             <button data-hic="EQ" onclick="setHermesIntelChannel('EQ',this)">EQ</button>
             <button data-hic="VC" onclick="setHermesIntelChannel('VC',this)">VC</button>
           </div>
-          <span class="hermes-source-pill">SLA First Stop · 2 h laborables</span>
-          <span class="hermes-source-pill">Rework = retorno a presupuesto + reenvío posterior</span>
+          <span class="hermes-source-pill">SLA FS: 2 h laborables</span>
+          <span class="hermes-source-pill">Rework: vuelta a presupuesto + nuevo envío</span>
         </div>
 
-        <div class="hermes-intel-kpis" id="hermes-intel-kpis">
-          <div class="hermes-intel-kpi"><div class="label">OPR</div><div class="value">—</div><div class="sub">Universo analítico</div></div>
-          <div class="hermes-intel-kpi"><div class="label">Tasa corrección</div><div class="value">—</div><div class="sub">OPR con ≥1 corrección</div></div>
-          <div class="hermes-intel-kpi"><div class="label">Rework</div><div class="value">—</div><div class="sub">Ciclo confirmado</div></div>
-          <div class="hermes-intel-kpi"><div class="label">Rework severo</div><div class="value">—</div><div class="sub">≥3 ciclos</div></div>
-          <div class="hermes-intel-kpi"><div class="label">Breach SLA</div><div class="value">—</div><div class="sub">Episodios elegibles</div></div>
-        </div>
+        <section class="clarity-section">
+          <div class="clarity-section-title"><span>1</span><div><b>Situación actual</b><small>Magnitud del problema, sin interpretación técnica innecesaria.</small></div></div>
+          <div class="hermes-exec-story" id="hermes-exec-story">
+            <div class="hermes-exec-story-main"><div class="label">LECTURA PRINCIPAL</div><div class="headline">Cargando diagnóstico…</div><div class="body">La app está leyendo la capa analítica validada.</div></div>
+            <div class="hermes-exec-actions" id="hermes-exec-actions"></div>
+          </div>
+          <div class="hermes-intel-kpis clarity-kpis" id="hermes-intel-kpis"></div>
+          <div class="clarity-definitions">
+            <div><b>Corrección</b><span>OPR que necesitó modificar el presupuesto al menos una vez.</span></div>
+            <div><b>Rework</b><span>La OPR vuelve a presupuesto y posteriormente se vuelve a enviar a First Stop.</span></div>
+            <div><b>Rework severo</b><span>La misma OPR completa 3 o más ciclos de rework.</span></div>
+            <div><b>Breach SLA</b><span>Un episodio elegible de First Stop supera las 2 horas laborables.</span></div>
+          </div>
+        </section>
 
-        <div class="hermes-intel-grid">
+        <section class="clarity-section">
+          <div class="clarity-section-title"><span>2</span><div><b>Qué está provocando el problema</b><small>Las causas se leen por volumen, rework y riesgo SLA. No son el mismo problema.</small></div></div>
           <div class="card">
-            <div class="card-hd">Causas de corrección <span class="subtle-tag">volumen × impacto</span></div>
+            <div class="card-hd">Causas prioritarias <span class="subtle-tag">volumen · rework · SLA</span></div>
             <div class="card-bd" style="overflow:auto">
-              <table class="hermes-op-table">
-                <thead><tr><th>Causa</th><th class="r">Eventos</th><th class="r">OPR</th><th class="r">Rework</th><th class="r">Breach SLA</th></tr></thead>
-                <tbody id="hermes-intel-causes"><tr><td colspan="5" class="hermes-op-empty">Cargando capa analítica…</td></tr></tbody>
+              <table class="hermes-op-table clarity-table">
+                <thead><tr><th>Causa</th><th>Lectura</th><th class="r">OPR</th><th class="r">Eventos</th><th class="r">Rework</th><th class="r">Breach SLA</th></tr></thead>
+                <tbody id="hermes-intel-causes"><tr><td colspan="6" class="hermes-op-empty">Cargando capa analítica…</td></tr></tbody>
               </table>
             </div>
           </div>
-          <div class="card">
-            <div class="card-hd">EQ vs VC <span class="subtle-tag">no confundir con efecto causal puro</span></div>
+        </section>
+
+        <section class="clarity-section">
+          <div class="clarity-section-title"><span>3</span><div><b>Dónde actuar</b><small>Canal, integración GT y talleres con muestra suficiente.</small></div></div>
+          <div class="hermes-intel-grid">
+            <div class="card">
+              <div class="card-hd">EQ vs VC <span class="subtle-tag">comparación bruta</span></div>
+              <div class="card-bd" style="overflow:auto">
+                <table class="hermes-op-table">
+                  <thead><tr><th>Canal</th><th class="r">OPR</th><th class="r">Corrección</th><th class="r">Rework</th><th class="r">Severo</th><th class="r">Breach SLA</th></tr></thead>
+                  <tbody id="hermes-intel-channels"><tr><td colspan="6" class="hermes-op-empty">Cargando…</td></tr></tbody>
+                </table>
+                <div class="hermes-evidence" style="margin-top:.65rem"><b>Cómo leerlo:</b> EQ/VC no es una causa por sí sola. El resultado cambia según cliente y variante de proceso; se usa para localizar dónde profundizar.</div>
+              </div>
+            </div>
+            <div class="card clarity-gt-card">
+              <div class="card-hd">ARVAL · Integración GT <span class="subtle-tag">automatización en despliegue</span></div>
+              <div class="card-bd">
+                <div class="hermes-benchmark">
+                  <div class="side"><div class="cap">Standard · VC</div><div class="big" id="hermes-gt-standard-rate">—</div><div class="mini" id="hermes-gt-standard-detail">OPR corregidas</div></div>
+                  <div class="arrow">→</div>
+                  <div class="side"><div class="cap">GT · VC</div><div class="big" id="hermes-gt-rate">—</div><div class="mini" id="hermes-gt-detail">OPR corregidas</div></div>
+                </div>
+                <div class="hermes-evidence" id="hermes-gt-evidence">GT es el modelo objetivo de automatización y está incorporando talleres progresivamente.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:.8rem">
+            <div class="card-hd">Talleres a revisar <span class="subtle-tag">mínimo 5 OPR corregidas</span></div>
             <div class="card-bd" style="overflow:auto">
               <table class="hermes-op-table">
-                <thead><tr><th>Canal</th><th class="r">OPR</th><th class="r">Corrección</th><th class="r">Rework</th><th class="r">Severo</th><th class="r">Breach SLA</th></tr></thead>
-                <tbody id="hermes-intel-channels"><tr><td colspan="6" class="hermes-op-empty">Cargando…</td></tr></tbody>
+                <thead><tr><th>Taller</th><th>Canal</th><th class="r">OPR corr.</th><th class="r">Rework</th><th class="r">Severo</th><th class="r">Ciclos</th><th class="r">Breach SLA</th></tr></thead>
+                <tbody id="hermes-intel-providers"><tr><td colspan="7" class="hermes-op-empty">Cargando…</td></tr></tbody>
               </table>
-              <div class="hermes-evidence" style="margin-top:.65rem">El agregado de canal está afectado por <b>cliente × variante de proceso</b>. La comparación debe interpretarse junto con ARVAL GT y el mix de clientes.</div>
+              <div class="hermes-sample-note" style="margin-top:.55rem">Este ranking sirve para priorizar revisión. No convierte una muestra aislada en un juicio sobre el taller.</div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card" style="margin-bottom:.8rem">
-          <div class="card-hd">ARVAL · Impacto de la integración GT <span class="subtle-tag">proyecto de automatización en despliegue</span></div>
-          <div class="card-bd">
-            <div class="hermes-benchmark">
-              <div class="side"><div class="cap">ARVAL Standard · VC</div><div class="big" id="hermes-gt-standard-rate">—</div><div class="mini" id="hermes-gt-standard-detail">Tasa de OPR corregidas</div></div>
-              <div class="arrow">→</div>
-              <div class="side"><div class="cap">ARVAL GT · VC</div><div class="big" id="hermes-gt-rate">—</div><div class="mini" id="hermes-gt-detail">Tasa de OPR corregidas</div></div>
-            </div>
-            <div class="hermes-evidence" id="hermes-gt-evidence">Comparación observacional entre dos vías de proceso. GT es el modelo objetivo de automatización y está incorporando talleres progresivamente.</div>
-            <div style="overflow:auto;margin-top:.7rem">
-              <table class="hermes-op-table"><thead><tr><th>Proceso</th><th>Canal</th><th class="r">OPR</th><th class="r">Manual/OPR</th><th class="r">Auto/OPR</th><th class="r">Corrección</th></tr></thead><tbody id="hermes-gt-tb"></tbody></table>
-            </div>
+        <details class="clarity-details">
+          <summary>Ver detalle técnico de ARVAL GT</summary>
+          <div style="overflow:auto;margin-top:.7rem">
+            <table class="hermes-op-table"><thead><tr><th>Proceso</th><th>Canal</th><th class="r">OPR</th><th class="r">Manual/OPR</th><th class="r">Auto/OPR</th><th class="r">Corrección</th></tr></thead><tbody id="hermes-gt-tb"></tbody></table>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-hd">Talleres a revisar <span class="subtle-tag">muestra mínima 5 OPR corregidas</span></div>
-          <div class="card-bd" style="overflow:auto">
-            <table class="hermes-op-table">
-              <thead><tr><th>Taller</th><th>Canal</th><th class="r">OPR corr.</th><th class="r">Rework</th><th class="r">Severo</th><th class="r">Ciclos</th><th class="r">Breach SLA</th></tr></thead>
-              <tbody id="hermes-intel-providers"><tr><td colspan="7" class="hermes-op-empty">Cargando…</td></tr></tbody>
-            </table>
-            <div class="hermes-sample-note" style="margin-top:.55rem">El ranking prioriza severidad, ciclos y volumen. No etiqueta como “mal taller” una muestra aislada.</div>
-          </div>
-        </div>
+        </details>
       </div>
 
       <div class="hermes-panel" id="hermes-panel-team">
@@ -2768,14 +2786,14 @@ function renderHermesIntelligence(){
   if(story){
     const cr=Number(scope.correction_rate_pct||0), rr=Number(scope.rework_rate_pct||0), severe=Number(scope.opr_with_severe_rework||0);
     story.querySelector('.headline').textContent=`${hermesPct(cr)} de las OPR requieren corrección`;
-    story.querySelector('.body').innerHTML=`De ${fmt(Number(scope.total_opr||0))} OPR, <b>${fmt(Number(scope.corrected_opr||0))}</b> necesitan al menos una corrección (${fmt(Number(scope.correction_events||0))} eventos). <b>${fmt(Number(scope.opr_with_rework||0))}</b> entran en rework (${hermesPct(rr)}) y <b>${fmt(severe)}</b> llegan a rework severo. Este bloque resume magnitud, causa y foco de actuación.`;
+    story.querySelector('.body').innerHTML=`De <b>${fmt(Number(scope.total_opr||0))} OPR</b>, ${fmt(Number(scope.corrected_opr||0))} necesitan corrección. Además, <b>${fmt(Number(scope.opr_with_rework||0))} OPR</b> completan al menos un ciclo real de rework y <b>${fmt(severe)}</b> alcanzan 3 o más ciclos. La prioridad no es una sola: volumen, SLA y rework se gestionan por separado.`;
   }
   const actions=document.getElementById('hermes-exec-actions');
   if(actions) actions.innerHTML=[
-    `<div class="hermes-exec-action"><b>2 · Mayor volumen · ${escHtml(hermesCauseLabel(topVolume.primary_cause))}</b>${fmt(Number(topVolume.correction_events||0))} eventos en ${fmt(Number(topVolume.opr||0))} OPR.</div>`,
-    `<div class="hermes-exec-action"><b>3 · Mayor riesgo SLA · ${escHtml(hermesCauseLabel(topSla.primary_cause))}</b>${hermesPct(topSla.eligible_opr_sla_breach_pct)} de OPR elegibles con breach (muestra ≥20 OPR).</div>`,
-    `<div class="hermes-exec-action"><b>4 · Mayor rework · ${escHtml(hermesCauseLabel(topRework.primary_cause))}</b>${hermesPct(topRework.rework_pct)} con rework (muestra ≥20 OPR).</div>`,
-    `<div class="hermes-exec-action"><b>5 · Canal · EQ ${hermesPct(eq.correction_rate_pct)} vs VC ${hermesPct(vc.correction_rate_pct)}</b>Brecha bruta condicionada por cliente y variante; usar como señal, no como causalidad.</div>`
+    `<div class="hermes-exec-action"><b>Principal por volumen · ${escHtml(hermesCauseLabel(topVolume.primary_cause))}</b>${fmt(Number(topVolume.correction_events||0))} eventos en ${fmt(Number(topVolume.opr||0))} OPR. Prioridad: reducir frecuencia.</div>`,
+    `<div class="hermes-exec-action"><b>Principal riesgo SLA · ${escHtml(hermesCauseLabel(topSla.primary_cause))}</b>${hermesPct(topSla.eligible_opr_sla_breach_pct)} de OPR elegibles presentan breach. Prioridad: reducir tiempo de resolución.</div>`,
+    `<div class="hermes-exec-action"><b>Principal por rework · ${escHtml(hermesCauseLabel(topRework.primary_cause))}</b>${hermesPct(topRework.rework_pct)} entra en rework. Prioridad: evitar vueltas Taller ↔ First Stop.</div>`,
+    `<div class="hermes-exec-action"><b>Señal de canal · EQ ${hermesPct(eq.correction_rate_pct)} vs VC ${hermesPct(vc.correction_rate_pct)}</b>No se interpreta sola: depende de cliente y variante de proceso.</div>`
   ].join('');
   const k=document.getElementById('hermes-intel-kpis');
   if(k) k.innerHTML=[
@@ -2788,7 +2806,17 @@ function renderHermesIntelligence(){
 
   const causes=[...hermesRootCauseData].sort((a,b)=>Number(b.correction_events||0)-Number(a.correction_events||0)).slice(0,10);
   const ctb=document.getElementById('hermes-intel-causes');
-  if(ctb) ctb.innerHTML=causes.map(x=>`<tr><td><b>${escHtml(hermesCauseLabel(x.primary_cause))}</b></td><td class="r">${fmt(Number(x.correction_events||0))}</td><td class="r">${fmt(Number(x.opr||0))}</td><td class="r">${hermesPct(x.rework_pct)}</td><td class="r">${hermesPct(x.eligible_opr_sla_breach_pct)}</td></tr>`).join('');
+  if(ctb) ctb.innerHTML=causes.map(x=>{
+    const op=Number(x.opr||0), rw=Number(x.rework_pct||0), sla=Number(x.eligible_opr_sla_breach_pct||0);
+    let cls='watch', label='Vigilar';
+    if(op>=100 && sla>=25){cls='sla';label='Riesgo SLA';}
+    else if(op>=100 && rw>=18){cls='rework';label='Rework';}
+    else if(op>=150){cls='volume';label='Volumen';}
+    else if(op>=20 && rw>=20){cls='rework';label='Alta intensidad';}
+    else if(op>=20 && sla>=20){cls='sla';label='Riesgo SLA';}
+    else if(op>=75){cls='balanced';label='Relevante';}
+    return `<tr><td><b>${escHtml(hermesCauseLabel(x.primary_cause))}</b></td><td><span class="clarity-reading ${cls}">${label}</span></td><td class="r">${fmt(op)}</td><td class="r">${fmt(Number(x.correction_events||0))}</td><td class="r">${hermesPct(rw)}</td><td class="r">${hermesPct(sla)}</td></tr>`;
+  }).join('');
 
   const channels=hermesExecutiveData.filter(x=>['EQ','VC'].includes(String(x.scope))).sort((a,b)=>String(a.scope).localeCompare(String(b.scope)));
   const chtb=document.getElementById('hermes-intel-channels');
@@ -2813,7 +2841,7 @@ function renderHermesIntelligence(){
   const ptb=document.getElementById('hermes-intel-providers');
   if(ptb) ptb.innerHTML=providers.map(x=>`<tr><td><b>${escHtml(x.provider_name||'Sin taller')}</b></td><td>${escHtml(x.channel||'—')}</td><td class="r">${fmt(Number(x.corrected_opr||0))}</td><td class="r">${hermesPct(x.rework_pct)}</td><td class="r">${fmt(Number(x.opr_with_severe_rework||0))}</td><td class="r">${fmt(Number(x.rework_cycles||0))}</td><td class="r">${hermesPct(x.sla_breach_pct)}</td></tr>`).join('')||'<tr><td colspan="7" class="hermes-op-empty">Sin talleres con muestra suficiente.</td></tr>';
 
-  const src=document.getElementById('hermes-intel-source'); if(src) src.textContent='Supabase · capa analítica V22';
+  const src=document.getElementById('hermes-intel-source'); if(src) src.textContent='Supabase · capa analítica validada';
 }
 
 function setHermesTab(tab){
@@ -3395,12 +3423,14 @@ function renderHermesTeam(){
   const per=document.getElementById('hermes-team-period');
   if(per) per.textContent=`Periodo: ${r.label}`;
   const src=document.getElementById('hermes-team-source');
-  if(src) src.textContent='Supabase · v_hermes_team_daily_v2';
+  if(src) src.textContent='Supabase · v_hermes_team_daily_v2 · filtro: 8 técnicos Hermes';
 
-  const map=new Map();
+  // V22.1: Equipo Hermes = sólo los 8 técnicos definidos y sus alias conocidos.
+  // v_hermes_team_daily_v2 contiene también otros actores/usuarios; no deben mostrarse como técnicos Hermes.
+  const map=new Map(HERMES_TECHNICIANS.map(t=>[t.name,{name:t.name,interventions:0,opr:0,validations:0,corrections:0,rejects:0,reopenings:0,closures:0}]));
   for(const row of (hermesTeamData||[])){
-    const name=String(row.operator_name||'Sin asignar').trim();
-    if(!map.has(name)) map.set(name,{name,interventions:0,opr:0,validations:0,corrections:0,rejects:0,reopenings:0,closures:0});
+    const name=hermesCanonicalTech(row.operator_name);
+    if(!name) continue;
     const g=map.get(name);
     g.interventions+=Number(row.interventions||0);
     g.opr+=Number(row.operations_touched||0);
@@ -3410,7 +3440,7 @@ function renderHermesTeam(){
     g.reopenings+=Number(row.reopenings||0);
     g.closures+=Number(row.closures||0);
   }
-  const list=[...map.values()].filter(x=>x.interventions||x.opr||x.corrections||x.validations).sort((a,b)=>b.interventions-a.interventions);
+  const list=[...map.values()].filter(x=>x.interventions||x.opr||x.corrections||x.validations||x.rejects||x.reopenings||x.closures).sort((a,b)=>b.interventions-a.interventions);
   const active=list.length;
   const totalInt=list.reduce((a,x)=>a+x.interventions,0);
   const totalOpr=list.reduce((a,x)=>a+x.opr,0);

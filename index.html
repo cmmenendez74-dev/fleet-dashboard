@@ -1505,9 +1505,16 @@ body,.main{background:var(--app-bg)}
     <div class="view" id="view-hermes">
       <div class="page-title hermes-clean-title">
         <div><h1>Hermes</h1><div class="muted" id="hermes-page-period">—</div></div>
-        <div class="chip-group" style="margin-left:auto">
-          <span class="chip on" id="hermes-period-prevmonth" onclick="setHermesPeriodMode('prevmonth')">Mes anterior</span>
-          <span class="chip" id="hermes-period-year" onclick="setHermesPeriodMode('year')">Año completo</span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <div class="chip-group">
+            <span class="chip" onclick="setHermesPeriodPreset(7)">7 días</span>
+            <span class="chip" onclick="setHermesPeriodPreset(30)">30 días</span>
+            <span class="chip" onclick="setHermesPeriodPreset(90)">90 días</span>
+          </div>
+          <span class="filter-label">Desde</span>
+          <input type="date" id="hermes-period-from" onchange="setHermesPeriodCustom()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px">
+          <span class="filter-label">Hasta</span>
+          <input type="date" id="hermes-period-to" onchange="setHermesPeriodCustom()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:3px 8px">
         </div>
       </div>
 
@@ -2503,32 +2510,54 @@ let hermesNavisionDaily=[];
 let hermesActiveNow=[];
 let hermesEqBillingDaily=[];
 // Periodo propio de Hermes, independiente del filtro de Resumen/Por flota
-// (evita que cambiar el periodo aquí afecte a otras pestañas del
-// dashboard). null = usar el valor por defecto (mes anterior).
-let hermesPeriodMode='prevmonth'; // 'prevmonth' | 'year'
-
-function hermesActiveRange(){
-  const now=new Date();
-  if(hermesPeriodMode==='year'){
-    const year=now.getFullYear();
-    const start=`${year}-01-01T00:00:00`;
-    const end=`${year+1}-01-01T00:00:00`;
-    return {year,months:[1,12],start,end,label:`${MN[0]}–${MN[11]} ${year}`};
-  }
-  // Por defecto: mes anterior (con salto de año si estamos en enero).
-  let y=now.getFullYear(), m=now.getMonth(); // getMonth() ya es "mes actual - 1" en índice 0
-  if(m===0){ y-=1; m=12; } else { /* m ya es el mes anterior en índice 1..11 */ }
-  const year=y, m1=m===0?12:m;
-  const start=`${year}-${String(m1).padStart(2,'0')}-01T00:00:00`;
-  const e=new Date(year,m1,1);
-  const end=`${e.getFullYear()}-${String(e.getMonth()+1).padStart(2,'0')}-01T00:00:00`;
-  return {year,months:[m1],start,end,label:`${MN[m1-1]} ${year}`};
+// (evita que cambiar el periodo aquí afecte a otras pestañas). Por
+// defecto: últimos 7 días -- una visión cercana a "ahora", que es lo que
+// necesita una herramienta operativa. El usuario puede ampliar el rango
+// libremente con el selector de fechas.
+let hermesPeriodFrom=null, hermesPeriodTo=null;
+function hermesDefaultPeriod(){
+  const to=new Date();
+  const from=new Date();
+  from.setDate(to.getDate()-6); // 7 días incluyendo hoy
+  return {from:localDateStr(from), to:localDateStr(to)};
 }
 
-function setHermesPeriodMode(mode){
-  hermesPeriodMode=(mode==='year')?'year':'prevmonth';
-  document.getElementById('hermes-period-prevmonth')?.classList.toggle('on',hermesPeriodMode==='prevmonth');
-  document.getElementById('hermes-period-year')?.classList.toggle('on',hermesPeriodMode==='year');
+function hermesActiveRange(){
+  if(!hermesPeriodFrom||!hermesPeriodTo){
+    const d=hermesDefaultPeriod();
+    hermesPeriodFrom=d.from; hermesPeriodTo=d.to;
+  }
+  const start=`${hermesPeriodFrom}T00:00:00`;
+  const toDate=new Date(hermesPeriodTo+'T00:00:00');
+  toDate.setDate(toDate.getDate()+1); // fin exclusivo: incluye todo el día "hasta"
+  const end=localDateStr(toDate)+'T00:00:00';
+  return {from:hermesPeriodFrom,to:hermesPeriodTo,start,end,label:`${hermesPeriodFrom} — ${hermesPeriodTo}`};
+}
+
+function setHermesPeriodPreset(days){
+  const to=new Date();
+  const from=new Date();
+  from.setDate(to.getDate()-(days-1));
+  hermesPeriodFrom=localDateStr(from); hermesPeriodTo=localDateStr(to);
+  syncHermesPeriodInputs();
+  reloadHermesPeriod();
+}
+
+function setHermesPeriodCustom(){
+  const f=document.getElementById('hermes-period-from')?.value;
+  const t=document.getElementById('hermes-period-to')?.value;
+  if(!f||!t) return;
+  hermesPeriodFrom=f; hermesPeriodTo=t;
+  reloadHermesPeriod();
+}
+
+function syncHermesPeriodInputs(){
+  const fe=document.getElementById('hermes-period-from'), te=document.getElementById('hermes-period-to');
+  if(fe) fe.value=hermesPeriodFrom||'';
+  if(te) te.value=hermesPeriodTo||'';
+}
+
+function reloadHermesPeriod(){
   hermesIntelLoaded=false; hermesLiveLoaded=false;
   setHermesTab(hermesTab||'intelligence');
 }
@@ -2588,7 +2617,7 @@ function hermesCauseLabel(v){
 }
 function hermesPeriodLabel(){
   const r=hermesActiveRange();
-  return (r.months&&r.months.length===1)?`${MN[r.months[0]-1]} ${r.year}`:r.label;
+  return r.label;
 }
 function hermesScopeRows(rows){
   if(hermesIntelChannel==='TOTAL') return rows||[];
@@ -2736,6 +2765,8 @@ function openHermesSection(id){
 function setHermesTab(tab){
   const allowed=['intelligence','ops','workshops','billing','alerts','causes','team'];
   hermesTab=allowed.includes(tab)?tab:'intelligence';
+  hermesActiveRange(); // asegura que hermesPeriodFrom/To tengan un valor por defecto
+  syncHermesPeriodInputs();
   allowed.forEach(x=>{
     document.getElementById('hermes-tab-'+x)?.classList.toggle('on',x===hermesTab);
     document.getElementById('hermes-panel-'+x)?.classList.toggle('active',x===hermesTab);

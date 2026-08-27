@@ -4260,6 +4260,7 @@ let _execCache=null;
 // simple "la app está actualizada".
 let _execScope='dia';
 let _execDayDate=null; // fecha elegida a mano en el selector de "Día"; null = usar el último snapshot cargado
+let _execRangeFrom=null, _execRangeTo=null; // rango libre de fechas para el modo "Rango"
 
 function fmtDateEs(d){
   if(!d) return '—';
@@ -4332,12 +4333,31 @@ function setExecDay(d){
 
 function execScopeToolbarHtml(mode){
   const dayVal=_execDayDate||_lastDailyDate||todayISO();
+  const rangeDef=execDefaultRange();
   return `<div class="exec-scope-bar">
     <span class="chip${mode==='dia'?' on':''}" onclick="setExecScope('dia')">Día</span>
     <span class="chip${mode==='mes'?' on':''}" onclick="setExecScope('mes')">Mes actual</span>
     <span class="chip${mode==='periodo'?' on':''}" onclick="setExecScope('periodo')">Período</span>
+    <span class="chip${mode==='rango'?' on':''}" onclick="setExecScope('rango')">Rango</span>
     ${mode==='dia'?`<input type="date" id="exec-day-picker" value="${dayVal}" max="${todayISO()}" onchange="setExecDay(this.value)">`:''}
+    ${mode==='rango'?`<span class="filter-label" style="margin-left:.4rem">Desde</span><input type="date" id="exec-range-from" value="${_execRangeFrom||rangeDef.from}" max="${todayISO()}" onchange="setExecRange()">
+      <span class="filter-label">Hasta</span><input type="date" id="exec-range-to" value="${_execRangeTo||rangeDef.to}" max="${todayISO()}" onchange="setExecRange()">`:''}
   </div>`;
+}
+
+function execDefaultRange(){
+  const to=new Date();
+  const from=new Date();
+  from.setDate(to.getDate()-29); // últimos 30 días por defecto
+  return {from:localDateStr(from), to:localDateStr(to)};
+}
+
+function setExecRange(){
+  const f=document.getElementById('exec-range-from')?.value;
+  const t=document.getElementById('exec-range-to')?.value;
+  if(!f||!t) return;
+  _execRangeFrom=f; _execRangeTo=t;
+  renderExecScope('rango');
 }
 
 async function renderExecScope(mode){
@@ -4362,6 +4382,8 @@ async function renderExecScope(mode){
       html=isFleetDetail?await buildFleetDayExecSummary():isKamDetail?await buildKamDayExecSummary():await buildDayExecSummary();
     }else if(mode==='mes'){
       html=isFleetDetail?await buildFleetMonthExecSummary():isKamDetail?await buildKamMonthExecSummary():await buildMonthExecSummary();
+    }else if(mode==='rango'){
+      html=await buildRangeExecSummary();
     }else{
       if(isFleetDetail){
         html=buildFleetExecSummary();
@@ -4603,6 +4625,74 @@ function execTopDriver(byFleet){
   if(!arr.length) return null;
   const total=arr.reduce((a,x)=>a+x[1],0);
   return {name:arr[0][0],ns:arr[0][1],share:total>0?arr[0][1]/total:0};
+}
+
+// ── ALCANCE: RANGO DE FECHAS LIBRE (para enviar por WhatsApp/email con el
+// período que se necesite, no solo Día/Mes/Período fijos) ──────────────────
+// Incluye NS€/GM€ (fleet_data_daily, EQ+VC) + facturación EQ pendiente de
+// conciliar con Navision (mismo cálculo que la pestaña Facturación del
+// cockpit de Hermes), sobre el mismo rango de fechas elegido.
+async function buildRangeExecSummary(){
+  const from=_execRangeFrom||execDefaultRange().from;
+  const to=_execRangeTo||execDefaultRange().to;
+  _execRangeFrom=from; _execRangeTo=to;
+
+  const rows=await sbSelectAll('fleet_data_daily',
+    `select=snap_date,canal,fleet_norm,ns,gm&snap_date=gte.${from}&snap_date=lte.${to}&order=snap_date.asc,canal.asc,fleet_norm.asc`);
+  if(!rows?.length) return `<div class="exec-scope">Global · rango de fechas</div><div class="exec-title">${fmtDateEs(from)} — ${fmtDateEs(to)}</div><div class="exec-period">Generado el ${nowEs()}</div><div class="no-data">Sin datos guardados en este rango de fechas.</div>`;
+
+  let totNS=0,totGM=0,eqNS=0,eqGM=0,vcNS=0,vcGM=0; const byFleet={};
+  for(const r of rows){
+    totNS+=r.ns; totGM+=r.gm;
+    if(r.canal==='EQ'){eqNS+=r.ns;eqGM+=r.gm;}else{vcNS+=r.ns;vcGM+=r.gm;}
+    byFleet[r.fleet_norm]=(byFleet[r.fleet_norm]||0)+r.ns;
+  }
+  const gmPct=totNS>0?totGM/totNS:0;
+  const eqPct=eqNS>0?eqGM/eqNS:0, vcPct=vcNS>0?vcGM/vcNS:0;
+  const top=execTopDriver(byFleet);
+
+  // Facturación pendiente de conciliar (EQ vs Navision), mismo cálculo que
+  // la pestaña Facturación del cockpit de Hermes, sobre el mismo rango.
+  let pendingEur=0, pendingClients=0;
+  try{
+    const [eqBilling,navRows]=await Promise.all([
+      sbSelectAll('hermes_eq_billing_daily',`select=snap_date,fleet_norm,ns_eur&snap_date=gte.${from}&snap_date=lte.${to}`),
+      sbSelectAll('fleet_data_daily',`select=snap_date,fleet_norm,ns&snap_date=gte.${from}&snap_date=lte.${to}&canal=eq.EQ`)
+    ]);
+    const rec={};
+    (eqBilling||[]).forEach(x=>{const k=x.fleet_norm||'Sin cliente';rec[k]=rec[k]||{h:0,n:0};rec[k].h+=Number(x.ns_eur)||0;});
+    (navRows||[]).forEach(x=>{const k=x.fleet_norm||'Sin cliente';rec[k]=rec[k]||{h:0,n:0};rec[k].n+=Number(x.ns)||0;});
+    Object.values(rec).forEach(q=>{const gap=q.h-q.n; if(gap>1){pendingEur+=gap;pendingClients++;}});
+  }catch(e){ console.warn('No se pudo calcular la facturación pendiente para el informe',e); }
+
+  const kpis=[
+    {l:'NS del rango',v:fmtM(totNS),s:`${fmtDateEs(from)} — ${fmtDateEs(to)}`},
+    {l:'GM%',v:fmtP(gmPct),s:`GM ${fmtM(totGM)}`},
+    {l:'Cliente principal',v:top?fmtM(top.ns):'—',s:top?`${top.name} · ${fmtP(top.share)}`:'Sin actividad'},
+    {l:'Pendiente Navision (EQ)',v:fmtM(pendingEur),s:pendingClients?`${pendingClients} cliente(s) con hueco`:'Sin pendiente detectado'},
+  ];
+
+  const msgs=[
+    `<b>Canales</b> EQ ${fmtM(eqNS)} (GM% ${fmtP(eqPct)}) · VC ${fmtM(vcNS)} (GM% ${fmtP(vcPct)}).`,
+    top?`<b>Concentración</b> ${top.name} aporta ${fmtP(top.share)} del NS del rango.`:'<b>Concentración</b> Sin datos suficientes.',
+    pendingEur>0
+      ?`<b>Facturación</b> ${fmtM(pendingEur)} cerrados en Hermes (EQ) aún no reflejados en Navision, repartidos en ${pendingClients} cliente(s).`
+      :'<b>Facturación</b> Sin hueco relevante detectado entre Hermes (EQ) y Navision en este rango.'
+  ];
+
+  let action='Mantener seguimiento del rango sin necesidad de intervención específica.';
+  if(pendingEur>=5000) action=`Revisar con Navision el pendiente de facturación EQ (${fmtM(pendingEur)}) antes de cerrar el período.`;
+
+  return `
+    <div class="exec-scope">Global · rango de fechas</div>
+    <div class="exec-title">${fmtDateEs(from)} — ${fmtDateEs(to)}</div>
+    <div class="exec-period">Generado el ${nowEs()}</div>
+    ${execFiltersHtml([{l:'Rango',v:`${from} a ${to}`},{l:'Canal',v:'EQ + VC'}])}
+    ${execDayWarnHtml()}
+    <div class="exec-kpis">${kpis.map(execKpiHtml).join('')}</div>
+    <div class="exec-channel-strip">${execChannelCard('EQ · Equity',eqNS,null,eqPct)}${execChannelCard('VC · Partners',vcNS,null,vcPct)}</div>
+    <div class="exec-section-title">Tres mensajes</div><ul class="exec-narrative">${msgs.map(x=>`<li>${x}</li>`).join('')}</ul>
+    <div class="exec-action-box"><b>Acción:</b> ${action}</div>`;
 }
 
 

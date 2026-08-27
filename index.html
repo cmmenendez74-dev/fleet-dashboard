@@ -1505,6 +1505,10 @@ body,.main{background:var(--app-bg)}
     <div class="view" id="view-hermes">
       <div class="page-title hermes-clean-title">
         <div><h1>Hermes</h1><div class="muted" id="hermes-page-period">—</div></div>
+        <div class="chip-group" style="margin-left:auto">
+          <span class="chip on" id="hermes-period-prevmonth" onclick="setHermesPeriodMode('prevmonth')">Mes anterior</span>
+          <span class="chip" id="hermes-period-year" onclick="setHermesPeriodMode('year')">Año completo</span>
+        </div>
       </div>
 
       <div class="hermes-subnav hermes-clean-nav">
@@ -2498,16 +2502,35 @@ let hermesPeriodClosures=[];
 let hermesNavisionDaily=[];
 let hermesActiveNow=[];
 let hermesEqBillingDaily=[];
+// Periodo propio de Hermes, independiente del filtro de Resumen/Por flota
+// (evita que cambiar el periodo aquí afecte a otras pestañas del
+// dashboard). null = usar el valor por defecto (mes anterior).
+let hermesPeriodMode='prevmonth'; // 'prevmonth' | 'year'
 
 function hermesActiveRange(){
-  const years=(S.years&&S.years.size?[...S.years]:[new Date().getFullYear()]).map(Number).sort((a,b)=>a-b);
-  const year=years[years.length-1]||new Date().getFullYear();
-  const months=(S.months&&S.months.size?[...S.months]:[new Date().getMonth()+1]).map(Number).sort((a,b)=>a-b);
-  const m1=months[0]||1, m2=months[months.length-1]||12;
+  const now=new Date();
+  if(hermesPeriodMode==='year'){
+    const year=now.getFullYear();
+    const start=`${year}-01-01T00:00:00`;
+    const end=`${year+1}-01-01T00:00:00`;
+    return {year,months:[1,12],start,end,label:`${MN[0]}–${MN[11]} ${year}`};
+  }
+  // Por defecto: mes anterior (con salto de año si estamos en enero).
+  let y=now.getFullYear(), m=now.getMonth(); // getMonth() ya es "mes actual - 1" en índice 0
+  if(m===0){ y-=1; m=12; } else { /* m ya es el mes anterior en índice 1..11 */ }
+  const year=y, m1=m===0?12:m;
   const start=`${year}-${String(m1).padStart(2,'0')}-01T00:00:00`;
-  const e=new Date(year,m2,1);
+  const e=new Date(year,m1,1);
   const end=`${e.getFullYear()}-${String(e.getMonth()+1).padStart(2,'0')}-01T00:00:00`;
-  return {year,months,start,end,label:`${MN[m1-1]}–${MN[m2-1]} ${year}`};
+  return {year,months:[m1],start,end,label:`${MN[m1-1]} ${year}`};
+}
+
+function setHermesPeriodMode(mode){
+  hermesPeriodMode=(mode==='year')?'year':'prevmonth';
+  document.getElementById('hermes-period-prevmonth')?.classList.toggle('on',hermesPeriodMode==='prevmonth');
+  document.getElementById('hermes-period-year')?.classList.toggle('on',hermesPeriodMode==='year');
+  hermesIntelLoaded=false; hermesLiveLoaded=false;
+  setHermesTab(hermesTab||'intelligence');
 }
 
 async function loadHermesLive(force=false){
@@ -7997,6 +8020,6 @@ bootAccess();
 
 <style>@media screen{.exec-source{display:none}.exec-filter-badge{background:#fff}}
 /* V29 Hermes clean management module */
-.hermes-clean-title{margin-bottom:.45rem}.hermes-clean-nav{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem}.hermes-clean-card{margin-bottom:.85rem}.hermes-clean-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}.hermes-screen-head.compact{padding:.25rem 0 .55rem}.hermes-management-table td{vertical-align:middle}.hermes-priority-line{display:grid;grid-template-columns:110px minmax(150px,1fr) 2fr 90px;gap:.6rem;padding:.7rem 0;border-bottom:1px solid var(--border)}
+.hermes-clean-title{margin-bottom:.45rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem}.hermes-clean-nav{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem}.hermes-clean-card{margin-bottom:.85rem}.hermes-clean-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}.hermes-screen-head.compact{padding:.25rem 0 .55rem}.hermes-management-table td{vertical-align:middle}.hermes-priority-line{display:grid;grid-template-columns:110px minmax(150px,1fr) 2fr 90px;gap:.6rem;padding:.7rem 0;border-bottom:1px solid var(--border)}
 @media(max-width:1050px){.hermes-clean-grid-2{grid-template-columns:1fr}.hermes-priority-line{grid-template-columns:1fr}}
 </style>

@@ -83,6 +83,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:var(--text);ba
 .kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:.25rem}
 .kpi-val{font-size:20px;font-weight:700;line-height:1;letter-spacing:-.3px}
 .kpi-sub{font-size:11px;margin-top:.3rem;color:var(--muted)}
+.kpi-delta{font-size:11px;font-weight:700;margin-top:.35rem}
+.kpi-delta.pos{color:var(--gr)}.kpi-delta.neg{color:var(--red)}
+.ej-manual-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.03em;color:var(--am);background:#FFF3E0;border:1px solid #FFCC80;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle;text-transform:uppercase}
+.btn-sm{background:var(--bg2);border:1px solid var(--border);color:var(--dg);padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer}
+.btn-sm:hover{background:var(--lg)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin-bottom:.85rem}
+@media (max-width:900px){.grid-2{grid-template-columns:1fr}}
 .kpi-sub.up{color:var(--gr)}.kpi-sub.dn{color:var(--red)}
 
 /* CARDS */
@@ -908,6 +915,10 @@ body,.main{background:var(--app-bg)}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>
     Hermes
   </div>
+  <div class="nav-item" id="nav-ejecutivo" onclick="nav('ejecutivo',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-7"/></svg>
+    Ejecutivo
+  </div>
   <details class="admin-menu admin-only"><summary>Administración</summary>
   <div class="nav-item admin-only" id="nav-upload" onclick="nav('upload',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -1655,6 +1666,34 @@ body,.main{background:var(--app-bg)}
       </div>
     </div>
 
+    <!-- EJECUTIVO: resumen visual VC / EQ / TOTAL con gráficos (Chart.js) -->
+    <div class="view" id="view-ejecutivo">
+      <div class="section-eyebrow">Análisis · resumen visual</div>
+      <h1 style="margin:.1rem 0 .9rem">Resumen ejecutivo</h1>
+
+      <div class="card">
+        <div class="card-bd" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <div class="hermes-tabs" style="display:flex;gap:.35rem">
+            <span class="chip on" id="ej-tab-VC" onclick="setEjCanal('VC')">VC</span>
+            <span class="chip" id="ej-tab-EQ" onclick="setEjCanal('EQ')">EQ</span>
+            <span class="chip" id="ej-tab-TOTAL" onclick="setEjCanal('TOTAL')">Total</span>
+          </div>
+          <div style="width:1px;height:22px;background:var(--border)"></div>
+          <span class="chip" id="ej-preset-mtd" onclick="setEjPreset('mtd')">Mes actual</span>
+          <span class="chip" id="ej-preset-q" onclick="setEjPreset('q')">Trimestre actual</span>
+          <span class="chip" id="ej-preset-ytd" onclick="setEjPreset('ytd')">YTD</span>
+          <span class="chip on" id="ej-preset-90" onclick="setEjPreset('90')">Últimos 90 días</span>
+          <span class="filter-label" style="margin-left:.4rem">Desde</span>
+          <input type="date" id="ej-from" max="" onchange="setEjRange()">
+          <span class="filter-label">Hasta</span>
+          <input type="date" id="ej-to" max="" onchange="setEjRange()">
+          <span class="muted" id="ej-range-label" style="margin-left:auto;font-size:12px"></span>
+        </div>
+      </div>
+
+      <div id="ej-content"><div class="loading-msg"><span class="spinner"></span>Cargando resumen ejecutivo…</div></div>
+    </div>
+
     <!-- NEUMATICOS -->
     <div class="view" id="view-neumaticos">
       <div class="page-title">
@@ -2289,6 +2328,13 @@ async function loadSummary(){
   const rows=await sbSelectAll('fleet_data',
     'select=year,month,canal&order=year.asc,month.asc,canal.asc');
   S.summary=rows||[];
+  // 01/09/2026: loadSummary() se llama tras CUALQUIER operación que cambia datos
+  // (subida normal, masiva, recálculo de período). Invalidamos aquí la caché de
+  // Alertas para que nunca se quede mostrando números de antes de la subida —
+  // antes solo se invalidaba en la carga inicial de la app (buildFleetIndex),
+  // así que si subías datos y mirabas Alertas en la misma sesión sin recargar
+  // la página, veías el período anterior sin ningún aviso.
+  _alertData=null;
   const years=new Set(S.summary.map(r=>r.year));
   const months=new Set(S.summary.map(r=>r.month));
   S.years=years; S.months=months;
@@ -2465,7 +2511,7 @@ function updatePills(){
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════════════════════
 const TITLES={resumen:'Resumen',historico:'Evolución',flotas:'Clientes',kam:'KAM',
-               alertas:'Atención',hermes:'Hermes',neumaticos:'Neumáticos',upload:'Cargar archivos',periodos:'Períodos'};
+               alertas:'Atención',hermes:'Hermes',neumaticos:'Neumáticos',ejecutivo:'Ejecutivo',upload:'Cargar archivos',periodos:'Períodos'};
 
 // ── Resumen: EQ vs VC ahora siempre visible, sin pestaña (ver refreshResumen) ──
 
@@ -3197,6 +3243,27 @@ function backBar(label='Volver'){
   return `<div class="view-backbar"><button class="back-btn" onclick="viewBack()" title="Volver a la pantalla anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>${label}</button></div>`;
 }
 
+// 01/09/2026: aviso visible cuando una vista falla al cargar. Antes, si
+// refreshResumen/refreshHistorico/refreshFlotas/etc lanzaban un error (red,
+// Supabase caído, RLS mal puesto en una tabla nueva...), la vista se quedaba
+// a medio pintar sin ningún aviso — el único rastro quedaba en la consola del
+// navegador, invisible para un usuario no técnico. Esto no cambia ninguna
+// lógica de negocio, solo hace visible el fallo cuando ocurre.
+function showViewErrorBanner(msg){
+  let b=document.getElementById('nav-error-banner');
+  if(!b){
+    b=document.createElement('div');
+    b.id='nav-error-banner';
+    b.style.cssText='position:fixed;bottom:16px;right:16px;max-width:360px;background:#c0392b;color:#fff;padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.4;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:9999;cursor:pointer';
+    b.title='Clic para cerrar';
+    b.onclick=()=>b.remove();
+    document.body.appendChild(b);
+  }
+  b.textContent='⚠ '+msg+' (clic para cerrar)';
+  clearTimeout(b._hideTimer);
+  b._hideTimer=setTimeout(()=>b.remove(),8000);
+}
+
 function nav(id,el,fromBack=false){
   if((id==='upload'||id==='periodos')&&!isAdmin()){alert('Solo el usuario administrador puede acceder a esta sección.');return;}
   if(!fromBack && _viewHistory[_viewHistory.length-1]!==id) _viewHistory.push(id);
@@ -3210,30 +3277,38 @@ function nav(id,el,fromBack=false){
   }
   el.classList.add('active');
   document.getElementById('topbar-title').textContent=TITLES[id]||id;
-  if(id==='resumen') refreshResumen();
-  else if(id==='historico'){
-    buildChipsH(); buildChipsMesH(); applyHistMode();
-    if(S.histMode==='mtd') refreshMTD();
-    else if(S.histMode==='diario') initDiario();
-    else if(S.histMode==='comparar') initComparar();
-    else refreshHistorico();
-  }
-  else if(id==='flotas'){
-    document.getElementById('flotas-detail-view').style.display='none';
-    document.getElementById('flotas-table-view').style.display='block';
-    if(fleetHistChart){fleetHistChart.destroy();fleetHistChart=null;}
-    buildChipsF(); buildChipsCanalF(); buildChipsMoF(); refreshFlotas();
-  }
-  else if(id==='kam'){
-    document.getElementById('kam-detail-view').style.display='none';
-    document.getElementById('kam-table-view').style.display='block';
-    if(kamHistChart){kamHistChart.destroy();kamHistChart=null;}
-    buildChipsK(); buildChipsCanalK(); buildChipsMoK(); refreshKam();
-  }
-  else if(id==='alertas') refreshAlertas();
-  else if(id==='hermes') { setHermesTab(hermesTab||'control'); }
-  else if(id==='neumaticos') refreshNeumaticos();
-  if(id==='periodos') refreshPeriodos();
+  (async()=>{
+    try{
+      if(id==='resumen') await refreshResumen();
+      else if(id==='historico'){
+        buildChipsH(); buildChipsMesH(); applyHistMode();
+        if(S.histMode==='mtd') await refreshMTD();
+        else if(S.histMode==='diario') await initDiario();
+        else if(S.histMode==='comparar') await initComparar();
+        else await refreshHistorico();
+      }
+      else if(id==='flotas'){
+        document.getElementById('flotas-detail-view').style.display='none';
+        document.getElementById('flotas-table-view').style.display='block';
+        if(fleetHistChart){fleetHistChart.destroy();fleetHistChart=null;}
+        buildChipsF(); buildChipsCanalF(); buildChipsMoF(); await refreshFlotas();
+      }
+      else if(id==='kam'){
+        document.getElementById('kam-detail-view').style.display='none';
+        document.getElementById('kam-table-view').style.display='block';
+        if(kamHistChart){kamHistChart.destroy();kamHistChart=null;}
+        buildChipsK(); buildChipsCanalK(); buildChipsMoK(); await refreshKam();
+      }
+      else if(id==='alertas') await refreshAlertas();
+      else if(id==='hermes') { await setHermesTab(hermesTab||'control'); }
+      else if(id==='neumaticos') await refreshNeumaticos();
+      else if(id==='ejecutivo') await refreshEjecutivo();
+      if(id==='periodos') await refreshPeriodos();
+    }catch(e){
+      console.error('Error cargando vista', id, e);
+      showViewErrorBanner('No se pudo cargar "'+(TITLES[id]||id)+'". '+(e.message||'Revisa tu conexión o inténtalo de nuevo.'));
+    }
+  })();
   document.getElementById('global-search-results').style.display='none';
   document.getElementById('global-search').value='';
 }
@@ -4693,6 +4768,247 @@ async function buildRangeExecSummary(){
     <div class="exec-channel-strip">${execChannelCard('EQ · Equity',eqNS,null,eqPct)}${execChannelCard('VC · Partners',vcNS,null,vcPct)}</div>
     <div class="exec-section-title">Tres mensajes</div><ul class="exec-narrative">${msgs.map(x=>`<li>${x}</li>`).join('')}</ul>
     <div class="exec-action-box"><b>Acción:</b> ${action}</div>`;
+}
+
+// ── EJECUTIVO: resumen visual VC / EQ / Total (01/09/2026) ──────────────────
+// GM€: por defecto se lee de fleet_data_daily (real, la misma tabla que usa
+// todo el dashboard). Si existe un override manual guardado para el canal +
+// rango exacto seleccionado (tabla exec_gm_override, hay que crearla en
+// Supabase — ver instrucciones aparte), se usa ese valor y se marca con la
+// insignia "manual". Pensado para poder reportar una cifra preliminar de
+// Power BI sin esperar a la carga oficial del mes. TOTAL siempre se calcula
+// sumando EQ+VC en el momento, nunca tiene override propio.
+let ejCanal='VC';
+let ejCharts={};
+let ejData=null;
+
+function ejDefaultRange(){
+  const to=new Date(); const from=new Date(); from.setDate(to.getDate()-89);
+  return {from:localDateStr(from), to:localDateStr(to)};
+}
+function setEjPreset(p){
+  const now=new Date(); let from, to=new Date(now);
+  if(p==='mtd') from=new Date(now.getFullYear(),now.getMonth(),1);
+  else if(p==='q'){ const q=Math.floor(now.getMonth()/3); from=new Date(now.getFullYear(),q*3,1); }
+  else if(p==='ytd') from=new Date(now.getFullYear(),0,1);
+  else { from=new Date(now); from.setDate(now.getDate()-89); }
+  document.getElementById('ej-from').value=localDateStr(from);
+  document.getElementById('ej-to').value=localDateStr(to);
+  ['mtd','q','ytd','90'].forEach(k=>document.getElementById('ej-preset-'+k).classList.toggle('on', k===p));
+  refreshEjecutivo();
+}
+function setEjRange(){
+  ['mtd','q','ytd','90'].forEach(k=>document.getElementById('ej-preset-'+k).classList.remove('on'));
+  refreshEjecutivo();
+}
+function setEjCanal(c){
+  ejCanal=c;
+  ['VC','EQ','TOTAL'].forEach(k=>document.getElementById('ej-tab-'+k).classList.toggle('on', k===c));
+  renderEjecutivo();
+}
+function ejPriorYearRange(from,to){
+  const f=new Date(from+'T00:00:00'), t=new Date(to+'T00:00:00');
+  f.setFullYear(f.getFullYear()-1); t.setFullYear(t.getFullYear()-1);
+  return {from:localDateStr(f), to:localDateStr(t)};
+}
+function ejMonthKey(d){ return d.slice(0,7); }
+
+async function refreshEjecutivo(){
+  const maxD=todayISO();
+  document.getElementById('ej-from').max=maxD;
+  document.getElementById('ej-to').max=maxD;
+  const def=ejDefaultRange();
+  const from=document.getElementById('ej-from').value||def.from;
+  const to=document.getElementById('ej-to').value||def.to;
+  document.getElementById('ej-from').value=from;
+  document.getElementById('ej-to').value=to;
+  document.getElementById('ej-range-label').textContent=`${fmtDateEs(from)} — ${fmtDateEs(to)}`;
+  const prior=ejPriorYearRange(from,to);
+  const content=document.getElementById('ej-content');
+  content.innerHTML='<div class="loading-msg"><span class="spinner"></span>Cargando resumen ejecutivo…</div>';
+  try{
+    const [curRows,priorRows,overrides]=await Promise.all([
+      sbSelectAll('fleet_data_daily',`select=snap_date,canal,fleet_norm,ns,gm&snap_date=gte.${from}&snap_date=lte.${to}&order=snap_date.asc`),
+      sbSelectAll('fleet_data_daily',`select=snap_date,canal,fleet_norm,ns,gm&snap_date=gte.${prior.from}&snap_date=lte.${prior.to}&order=snap_date.asc`),
+      sbSelectAll('exec_gm_override',`select=canal,period_from,period_to,gm&period_from=eq.${from}&period_to=eq.${to}`).catch(()=>[])
+    ]);
+    ejData={from,to,prior,curRows:curRows||[],priorRows:priorRows||[],overrides:overrides||[]};
+    renderEjecutivo();
+  }catch(e){
+    console.error('Error cargando el resumen ejecutivo',e);
+    content.innerHTML='<div class="no-data">No se pudo cargar el resumen ejecutivo. Revisa la consola (F12). Si el error menciona "exec_gm_override", esa tabla aún no existe en Supabase — el resto de la vista debería funcionar igualmente.</div>';
+  }
+}
+
+function ejAggregate(rows, canal){
+  let ns=0, gm=0; const byFleet={}, byMonth={};
+  for(const r of rows){
+    if(canal!=='TOTAL' && r.canal!==canal) continue;
+    ns+=Number(r.ns)||0; gm+=Number(r.gm)||0;
+    const f=r.fleet_norm||'Sin cliente';
+    byFleet[f]=(byFleet[f]||0)+(Number(r.ns)||0);
+    const mk=ejMonthKey(r.snap_date);
+    byMonth[mk]=(byMonth[mk]||0)+(Number(r.ns)||0);
+  }
+  return {ns,gm,byFleet,byMonth};
+}
+function ejOverrideFor(canal){
+  if(!ejData) return null;
+  if(canal==='TOTAL'){
+    const eq=ejData.overrides.find(o=>o.canal==='EQ');
+    const vc=ejData.overrides.find(o=>o.canal==='VC');
+    if(!eq && !vc) return null;
+    return (Number(eq?.gm)||0)+(Number(vc?.gm)||0);
+  }
+  const o=ejData.overrides.find(o=>o.canal===canal);
+  return o? Number(o.gm) : null;
+}
+function ejKpi(lbl,val,sub,delta){
+  return `<div class="kpi">
+    <div class="kpi-lbl">${lbl}</div>
+    <div class="kpi-val">${val}</div>
+    <div class="kpi-sub">${sub}</div>
+    ${delta?`<div class="kpi-delta ${delta.pos?'pos':'neg'}">${delta.txt}</div>`:''}
+  </div>`;
+}
+function ejDeltaTxt(cur,prior){
+  if(!prior) return {txt:'— vs año anterior', pos:true};
+  const d=(cur-prior)/Math.abs(prior)*100;
+  return {txt:(d>=0?'▲ +':'▼ ')+d.toFixed(1)+'% vs año anterior', pos:d>=0};
+}
+
+function renderEjecutivo(){
+  if(!ejData) return;
+  const {curRows,priorRows,from,to}=ejData;
+  const cur=ejAggregate(curRows, ejCanal);
+  const pri=ejAggregate(priorRows, ejCanal);
+  const override=ejOverrideFor(ejCanal);
+  const gmShown = override!==null ? override : cur.gm;
+  const isManual = override!==null;
+  const gmPct = cur.ns>0 ? gmShown/cur.ns : 0;
+  const gmPctPrior = pri.ns>0 ? pri.gm/pri.ns : 0;
+  const dNs=ejDeltaTxt(cur.ns,pri.ns);
+  const dGm=ejDeltaTxt(gmShown,pri.gm);
+  const ppDiff=(gmPct-gmPctPrior)*100;
+  const dGmPct={txt:(ppDiff>=0?'▲ +':'▼ ')+ppDiff.toFixed(1)+' pp vs año anterior', pos:ppDiff>=0};
+
+  const content=document.getElementById('ej-content');
+  content.innerHTML=`
+    <div class="kpi-row">
+      ${ejKpi('NS TOTAL '+ejCanal, fmtM(cur.ns), fmtDateEs(from)+' — '+fmtDateEs(to), dNs)}
+      ${ejKpi('GM TOTAL '+ejCanal+(isManual?' <span class="ej-manual-badge" title="Valor introducido a mano">manual</span>':''), fmtM(gmShown), 'GM% '+fmtP(gmPct), dGm)}
+      ${ejKpi('GM%', fmtP(gmPct), 'vs '+fmtP(gmPctPrior)+' año anterior', dGmPct)}
+    </div>
+    <div class="card">
+      <div class="card-bd" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:12.5px">
+        <span class="muted">GM€ ${ejCanal==='TOTAL'?'(EQ+VC)':ejCanal} ${isManual?'introducido a mano para este rango.':'leído automáticamente de fleet_data_daily.'}</span>
+        ${ejCanal!=='TOTAL'?`<button class="btn-sm" onclick="ejOpenGmEdit()">✎ Editar GM€ manualmente</button>`:''}
+        ${isManual && ejCanal!=='TOTAL'?`<button class="btn-sm" onclick="ejClearGmOverride()">Quitar y volver a automático</button>`:''}
+        <span id="ej-gm-edit-inline"></span>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-hd">Evolución NS€ — ${ejCanal} vs año anterior</div>
+        <div class="card-bd"><div class="chart-box"><canvas id="ej-chart-line"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">${ejCanal==='TOTAL'?'Reparto EQ vs VC':'Top clientes por NS'}</div>
+        <div class="card-bd"><div class="chart-box"><canvas id="ej-chart-2"></canvas></div></div>
+      </div>
+    </div>
+    ${ejCanal==='TOTAL'?`<div class="card"><div class="card-hd">Top clientes por NS (EQ+VC)</div><div class="card-bd"><div class="chart-box" style="height:260px"><canvas id="ej-chart-top"></canvas></div></div></div>`:''}
+  `;
+
+  ejRenderLineChart(cur.byMonth, pri.byMonth);
+  if(ejCanal==='TOTAL'){
+    ejRenderDonut(ejAggregate(curRows,'EQ').ns, ejAggregate(curRows,'VC').ns);
+    ejRenderTopClients('ej-chart-top', cur.byFleet);
+  }else{
+    ejRenderTopClients('ej-chart-2', cur.byFleet);
+  }
+}
+
+function ejMonthLabel(mk){
+  const [y,m]=mk.split('-');
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return meses[+m-1]+' '+y.slice(2);
+}
+function ejRenderLineChart(byMonthCur, byMonthPrior){
+  const ctx=document.getElementById('ej-chart-line');
+  if(!ctx) return;
+  const months=Object.keys(byMonthCur).sort();
+  const labels=months.map(ejMonthLabel);
+  const curVals=months.map(m=>byMonthCur[m]||0);
+  const priorVals=months.map(m=>{
+    const [y,mo]=m.split('-'); const pk=(+y-1)+'-'+mo;
+    return byMonthPrior[pk]||0;
+  });
+  if(ejCharts.line) ejCharts.line.destroy();
+  ejCharts.line=new Chart(ctx,{
+    type:'line',
+    data:{labels, datasets:[
+      {label:'Año anterior', data:priorVals, borderColor:'#8b9198', backgroundColor:'transparent', tension:.3, pointRadius:3},
+      {label:'Actual', data:curVals, borderColor:'#E2001A', backgroundColor:'rgba(226,0,26,.08)', tension:.3, pointRadius:3, fill:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+      scales:{y:{ticks:{callback:v=>fmtM(v)}}}}
+  });
+}
+function ejRenderDonut(eqNs,vcNs){
+  const ctx=document.getElementById('ej-chart-2');
+  if(!ctx) return;
+  if(ejCharts.donut) ejCharts.donut.destroy();
+  ejCharts.donut=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels:['EQ','VC'], datasets:[{data:[eqNs,vcNs], backgroundColor:['#1565C0','#E2001A']}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{label:c=>c.label+': '+fmtM(c.parsed)}}}}
+  });
+}
+function ejRenderTopClients(canvasId, byFleet){
+  const ctx=document.getElementById(canvasId);
+  if(!ctx) return;
+  const top=Object.entries(byFleet).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const key=canvasId==='ej-chart-top'?'top':'bar2';
+  if(ejCharts[key]) ejCharts[key].destroy();
+  ejCharts[key]=new Chart(ctx,{
+    type:'bar',
+    data:{labels:top.map(t=>t[0]), datasets:[{data:top.map(t=>t[1]), backgroundColor:'#1A1A1A'}]},
+    options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtM(c.parsed.x)}}},
+      scales:{x:{ticks:{callback:v=>fmtM(v)}}}}
+  });
+}
+function ejOpenGmEdit(){
+  const box=document.getElementById('ej-gm-edit-inline');
+  const current=ejOverrideFor(ejCanal);
+  box.innerHTML=`<input type="number" step="0.01" id="ej-gm-input" style="width:130px" placeholder="GM€" value="${current!==null?current:''}">
+    <button class="btn-sm" onclick="ejSaveGmOverride()">Guardar</button>`;
+}
+async function ejSaveGmOverride(){
+  const v=parseFloat(document.getElementById('ej-gm-input').value);
+  if(!isFinite(v)){ alert('Introduce un número válido.'); return; }
+  try{
+    await sbUpsert('exec_gm_override',[{canal:ejCanal, period_from:ejData.from, period_to:ejData.to, gm:v, updated_at:new Date().toISOString()}]);
+    await refreshEjecutivo();
+  }catch(e){
+    console.error('Error guardando GM manual',e);
+    showViewErrorBanner('No se pudo guardar el GM€ manual. Comprueba que la tabla exec_gm_override existe y tiene permisos (RLS).');
+  }
+}
+async function ejClearGmOverride(){
+  try{
+    const enc=s=>encodeURIComponent(s);
+    await fetch(`${SB_URL}/rest/v1/exec_gm_override?canal=eq.${enc(ejCanal)}&period_from=eq.${enc(ejData.from)}&period_to=eq.${enc(ejData.to)}`,{
+      method:'DELETE', headers:authHeaders({'Prefer':'return=minimal'})
+    });
+    await refreshEjecutivo();
+  }catch(e){
+    console.error('Error quitando el override de GM',e);
+    showViewErrorBanner('No se pudo quitar el valor manual de GM€.');
+  }
 }
 
 

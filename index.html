@@ -2019,9 +2019,58 @@ function saveConfig(){
 
 
 // Supabase REST helpers
-async function sb(path,opts={}){
+// 07/09/2026 -- antes, cuando el JWT caducaba (tras un rato sin usar la
+// app), sb() lanzaba el error tal cual y cada llamada seguía fallando con
+// el mismo token caducado -- se veía como la app "congelada". Ahora, si
+// una petición devuelve 401, intentamos renovar la sesión con el
+// refresh_token que ya se guarda en el login (nunca se usaba hasta hoy),
+// y si se consigue, repetimos la petición una vez con el token nuevo, sin
+// que el usuario note nada. Solo si la renovación falla de verdad (sesión
+// realmente caducada del todo) se cierra la sesión y se vuelve al login,
+// con un mensaje claro en vez de quedarse esperando para siempre.
+let _refreshingSession=null; // evita renovar varias veces a la vez si llegan varias peticiones 401 juntas
+
+async function refreshSupabaseSession(){
+  if(_refreshingSession) return _refreshingSession;
+  _refreshingSession=(async()=>{
+    const rt=CURRENT_SESSION?.refresh_token;
+    if(!rt) return false;
+    try{
+      const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`,{
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({refresh_token:rt})
+      });
+      if(!r.ok) return false;
+      const session=await r.json();
+      if(!session?.access_token) return false;
+      CURRENT_SESSION=session;
+      localStorage.setItem(LS_AUTH,JSON.stringify(session));
+      return true;
+    }catch(e){
+      return false;
+    }finally{
+      _refreshingSession=null;
+    }
+  })();
+  return _refreshingSession;
+}
+
+function sessionExpiredLogout(){
+  logoutAccess();
+  const msg=document.getElementById('access-msg');
+  if(msg){ msg.textContent='Tu sesión ha caducado. Vuelve a iniciar sesión.'; msg.style.color='var(--red)'; }
+}
+
+async function sb(path,opts={},_retried=false){
   const headers=authHeaders(opts.headers||{});
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{...opts,headers});
+  if(r.status===401 && !_retried){
+    const renovado=await refreshSupabaseSession();
+    if(renovado) return sb(path,opts,true);
+    sessionExpiredLogout();
+    throw new Error('Sesión caducada. Vuelve a iniciar sesión.');
+  }
   const t=await r.text();
   if(!r.ok&&r.status!==200){throw new Error(t||('HTTP '+r.status))}
   return t ? JSON.parse(t) : null;

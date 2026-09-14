@@ -5013,15 +5013,21 @@ function renderEjecutivo(){
   const gmPctPrior = pri.ns>0 ? pri.gm/pri.ns : 0;
   const dNs=ejDeltaTxt(cur.ns,pri.ns);
   const dGm=ejDeltaTxt(gmShown,pri.gm);
+  // Antes: si no había año anterior, pri.ns era 0 y ppDiff se calculaba
+  // igualmente contra un "0%" falso (mostrando p.ej. "+48.6pp vs año
+  // anterior" en vez de reconocer que no hay dato con el que comparar).
+  // Ahora usa la misma comprobación que dNs/dGm: sin año anterior → "—".
   const ppDiff=(gmPct-gmPctPrior)*100;
-  const dGmPct={txt:(ppDiff>=0?'▲ +':'▼ ')+ppDiff.toFixed(1)+' pp vs año anterior', pos:ppDiff>=0};
+  const dGmPct = pri.ns>0
+    ? {txt:(ppDiff>=0?'▲ +':'▼ ')+ppDiff.toFixed(1)+' pp vs año anterior', pos:ppDiff>=0}
+    : {txt:'— vs año anterior', pos:true};
 
   const content=document.getElementById('ej-content');
   content.innerHTML=`
     <div class="kpi-row">
       ${ejKpi('NS TOTAL '+ejCanal, fmtM(cur.ns), fmtDateEs(from)+' — '+fmtDateEs(to), dNs)}
       ${ejKpi('GM TOTAL '+ejCanal+(isManual?' <span class="ej-manual-badge" title="Valor introducido a mano">manual</span>':''), fmtM(gmShown), 'GM% '+fmtP(gmPct), dGm)}
-      ${ejKpi('GM%', fmtP(gmPct), 'vs '+fmtP(gmPctPrior)+' año anterior', dGmPct)}
+      ${ejKpi('GM%', fmtP(gmPct), pri.ns>0?('vs '+fmtP(gmPctPrior)+' año anterior'):'Sin año anterior', dGmPct)}
     </div>
     <div class="card">
       <div class="card-bd" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:12.5px">

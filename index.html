@@ -775,6 +775,31 @@ body,.main{background:var(--app-bg)}
 /* V29 Hermes clean management module */
 .hermes-clean-title{margin-bottom:.45rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem}.hermes-clean-nav{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem}.hermes-clean-card{margin-bottom:.85rem}.hermes-clean-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}.hermes-screen-head.compact{padding:.25rem 0 .55rem}.hermes-management-table td{vertical-align:middle}.hermes-priority-line{display:grid;grid-template-columns:110px minmax(150px,1fr) 2fr 90px;gap:.6rem;padding:.7rem 0;border-bottom:1px solid var(--border)}
 @media(max-width:1050px){.hermes-clean-grid-2{grid-template-columns:1fr}.hermes-priority-line{grid-template-columns:1fr}}
+
+/* --- v101: informe limpio y Radar del mes --- */
+#exec-summary-overlay .exec-source,#exec-summary-overlay .exec-daywarn,#exec-summary-overlay .exec-filters{display:none!important}
+.radar-card{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.radar-head{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(200px,1fr) auto;gap:1.2rem;align-items:center;padding:1.1rem 1.3rem;border-bottom:1px solid var(--border)}
+.radar-eyebrow{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.radar-big{font-size:32px;font-weight:800;letter-spacing:-.8px;line-height:1.05;margin:.15rem 0;font-variant-numeric:tabular-nums}
+.radar-sub{font-size:12px;color:var(--muted)}
+.radar-ch{display:flex;flex-direction:column;gap:.35rem;font-size:12px}
+.radar-ch b{font-variant-numeric:tabular-nums}
+.radar-bar{position:relative;height:14px;background:var(--bg2);border-radius:7px;margin:1rem 1.3rem 1.6rem}
+.radar-bar .rb-real{position:absolute;left:0;top:0;bottom:0;background:var(--dg);border-radius:7px 0 0 7px}
+.radar-bar .rb-est{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(0,0,0,.18) 0 5px,rgba(0,0,0,.07) 5px 10px);border-radius:0 7px 7px 0}
+.radar-bar .rb-mark{position:absolute;top:-4px;bottom:-4px;width:2px}
+.radar-bar .rb-mark span{position:absolute;top:20px;transform:translateX(-50%);font-size:10px;white-space:nowrap;font-weight:600}
+.radar-cols{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)}
+.radar-col{padding:.8rem 1.3rem}
+.radar-col+.radar-col{border-left:1px solid var(--border)}
+.radar-col h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.45rem;color:var(--muted)}
+.radar-row{display:grid;grid-template-columns:1fr auto;gap:.6rem;padding:.32rem 0;border-bottom:1px solid var(--lg);font-size:12px;cursor:pointer}
+.radar-row:last-child{border-bottom:none}
+.radar-row:hover{color:var(--bl)}
+.radar-row small{display:block;color:var(--muted);font-size:10.5px}
+.radar-row .d{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+@media(max-width:860px){.radar-head{grid-template-columns:1fr}.radar-cols{grid-template-columns:1fr}.radar-col+.radar-col{border-left:none;border-top:1px solid var(--border)}}
 </style>
 
 
@@ -851,7 +876,8 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
       <div class="loading-msg"><span class="spinner"></span>Generando resumen...</div>
     </div>
     <div class="exec-modal-ft">
-      <button class="btn sm" onclick="copyExecutiveSummary(this)">Copiar para email</button>
+      <button class="btn primary sm" onclick="sendExecWhatsApp()">Enviar por WhatsApp</button>
+      <button class="btn sm" onclick="copyExecutiveSummary(this)">Copiar</button>
       <button class="btn sm" onclick="closeExecutiveSummary()">Cerrar</button>
     </div>
   </div>
@@ -879,6 +905,10 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
   </div>
 
   <div class="nav-section">Análisis</div>
+  <div class="nav-item" id="nav-ejecutivo" onclick="nav('ejecutivo',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+    Ejecutivo
+  </div>
   <div class="nav-item" id="nav-hermes" onclick="nav('hermes',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>
     Hermes
@@ -921,7 +951,7 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
         <summary>Acciones ▾</summary>
         <div class="top-actions-menu">
           <button id="exact-euros-btn" onclick="toggleExactEuros()" title="Alternar formato"><span id="exact-euros-label">€ exactos</span></button>
-          <button id="exec-summary-btn" onclick="openExecutiveSummary()">Informe para email</button>
+          <button id="exec-summary-btn" onclick="openExecutiveSummary()">Informe WhatsApp</button>
           <button id="presentation-btn" onclick="goResumenSub('report')">Presentación (PDF)</button>
           <button class="export-btn xl" onclick="exportExcel()">Exportar Excel</button>
         </div>
@@ -1125,11 +1155,18 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
         <div><div class="section-eyebrow">Cockpit ejecutivo</div><h1>Resumen</h1><p>Qué está pasando, qué lo explica y dónde merece la pena actuar.</p></div>
       </div>
       <details style="margin:.4rem 0"><summary style="cursor:pointer;color:var(--muted)">Qué significan las cifras</summary><p class="muted" style="padding:.5rem 0">NS: venta neta · GM €: margen bruto · GM%: margen sobre venta neta · PY: año anterior · Forecast FY: previsión anual estimada. La comparativa comercial mide el período indicado; el objetivo procede del presupuesto compartido del año seleccionado. Una previsión requiere meses cerrados y un año anterior completo confirmado. El cierre de meses se revisa en Administración.</p></details>
-      <div id="summary-source-context" class="action-message" style="margin-bottom:.65rem"></div>
+      <div id="summary-source-context" class="action-message" style="display:none"></div>
       <div class="filter-bar" style="flex-wrap:wrap">
         <span class="filter-label">Año</span><div class="chip-group" id="yr-chips"></div>
         <span class="filter-label">Mes</span><div class="chip-group" id="mo-chips"></div>
       </div>
+
+      <div class="cockpit-section-title">Panel ejecutivo</div>
+      <div class="kpi-row" id="kpis-r"></div>
+      <div class="obj-grid" id="objective-cards"></div>
+
+      <div class="cockpit-section-title">Radar del mes</div>
+      <div id="month-radar" style="margin-bottom:.9rem"></div>
 
       <div class="cockpit-section-title">1 · ¿Estamos cumpliendo?</div>
       <div class="business-action-grid" id="business-action-grid"></div>
@@ -1168,7 +1205,7 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
 
       <!-- Compatibilidad: destinos usados por funciones validadas, ocultos para no duplicar información. -->
       <div style="display:none" aria-hidden="true">
-        <div id="kpis-r"></div><div id="objective-cards"></div><div id="kpis-eq"></div><div id="kpis-vc"></div>
+        <div id="kpis-eq"></div><div id="kpis-vc"></div>
         <table><tbody id="top-up-tb"></tbody></table><table><tbody id="top-down-tb"></tbody></table><table><tbody id="top-tb"></tbody></table>
         <canvas id="ch-gmpct"></canvas><canvas id="ch-eq"></canvas><canvas id="ch-vc"></canvas><canvas id="ch-canal"></canvas>
       </div>
@@ -1181,7 +1218,7 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
 
     <!-- HISTORICO -->
     <div class="view" id="view-historico">
-      <button class="btn" style="margin-bottom:.7rem" onclick="nav('ejecutivo',document.getElementById('nav-resumen'))">Análisis por fechas · datos diarios</button>
+      <button class="btn" style="margin-bottom:.7rem" onclick="nav('ejecutivo',document.getElementById('nav-ejecutivo'))">Análisis por fechas · datos diarios</button>
       <div class="filter-bar">
         <span class="filter-label">Año</span>
         <div class="chip-group" id="yr-chips-h"></div>
@@ -1725,7 +1762,7 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION='v100'; // Numeración unificada con la serie de producción (GitHub)
+const APP_VERSION='v101'; // Numeración unificada con la serie de producción (GitHub)
 document.addEventListener('DOMContentLoaded',()=>{const v=document.getElementById('app-version');if(v)v.textContent='Versión '+APP_VERSION;});
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG & SUPABASE
@@ -2311,16 +2348,15 @@ function sumMonthly(monthlyObj,monthsFilter){
 // la forma estacional real del año anterior ajustada por el crecimiento de
 // este año — sin romper ninguna llamada existente que no los pase.
 function annualizeYTD(value,months,nsSamePeriodLY,nsFullYearLY,context){
-  if(!context)return NaN; // Unverified detail projections are deliberately unavailable.
-  const channels=context.canals|| (context.canal?[context.canal]:['EQ','VC']);
-  const closed=(year,m)=>channels.every(c=>sharedConfig.closures.some(r=>r.year===year&&r.month===m&&r.canal===c&&r.closed));
-  const period=[...new Set((months||[]).map(Number))].sort((a,b)=>a-b);
-  if(!period.length||period.some((m,i)=>m!==i+1)||!period.every(m=>closed(context.year,m)))return NaN;
-  const v=Number(value);if(!Number.isFinite(v))return NaN;
-  if(period.length===12)return v;
-  const priorComplete=Array.from({length:12},(_,i)=>i+1).every(m=>closed(context.year-1,m));
-  if(!priorComplete||!(nsSamePeriodLY>0)||!(nsFullYearLY>=nsSamePeriodLY))return NaN;
-  return v/nsSamePeriodLY*nsFullYearLY;
+  // v101: el forecast vuelve a calcularse siempre (los cierres de mes ya no
+  // lo bloquean). Con año anterior completo usa su estacionalidad real;
+  // sin él, el método lineal de siempre.
+  const period=[...new Set((months||[]).map(Number))].filter(m=>m>=1&&m<=12);
+  const v=Number(value);
+  if(!period.length||!Number.isFinite(v)) return NaN;
+  if(period.length===12) return v;
+  if(nsSamePeriodLY>0&&nsFullYearLY>=nsSamePeriodLY) return v/nsSamePeriodLY*nsFullYearLY;
+  return v/period.length*12;
 }
 
 function statusClass(c){if(!Number.isFinite(c))return '';return c>=1?'ok':c>=.95?'warn':'bad'}
@@ -2364,15 +2400,28 @@ async function initApp(){
 // estimado vs año completo" en vez de "parcial vs año completo". Se usa en
 // todas las comparativas de mes en curso: KPI de Resumen, Resumen ejecutivo
 // (Mes en curso) y sus movimientos de flotas.
+// v101: estimación de cierre por DÍAS HÁBILES (lun-vie sin festivos
+// nacionales). Los fines de semana ya se suman al viernes, así que contar
+// días naturales infravaloraba el cierre en cada lunes.
+function easterDate(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
+const _holidayCache={};
+function esHolidays(y){
+  if(_holidayCache[y]) return _holidayCache[y];
+  const set=new Set(['01-01','01-06','05-01','08-15','10-12','11-01','12-06','12-08','12-25'].map(x=>`${y}-${x}`));
+  const gf=easterDate(y);gf.setDate(gf.getDate()-2);set.add(localDateStr(gf));
+  return _holidayCache[y]=set;
+}
+function isBizDay(dt){const w=dt.getDay();return w!==0&&w!==6&&!esHolidays(dt.getFullYear()).has(localDateStr(dt));}
+function bizDaysInMonth(y,m){let n=0;const last=new Date(y,m,0).getDate();for(let d=1;d<=last;d++)if(isBizDay(new Date(y,m-1,d)))n++;return n;}
+function bizDaysElapsed(dateStr){const t=new Date(dateStr+'T00:00:00');let n=0;for(let d=1;d<=t.getDate();d++)if(isBizDay(new Date(t.getFullYear(),t.getMonth(),d)))n++;return n;}
 function monthProjectionInfo(year,month,curValue){
-  if(!_lastDailyDate) return{isCurrent:false,proy:curValue,daysElapsed:null,daysInMonth:null};
+  const no={isCurrent:false,proy:curValue,daysElapsed:null,daysInMonth:null};
+  if(!_lastDailyDate) return no;
   const d=new Date(_lastDailyDate+'T00:00:00');
-  const lastY=d.getFullYear(), lastM=d.getMonth()+1;
-  if(year!==lastY || month!==lastM) return{isCurrent:false,proy:curValue,daysElapsed:null,daysInMonth:null};
-  const daysElapsed=d.getDate();
-  const daysInMonth=new Date(year,month,0).getDate();
-  if(daysElapsed<=0) return{isCurrent:true,daysElapsed,daysInMonth,proy:curValue};
-  return{isCurrent:true,daysElapsed,daysInMonth,proy:NaN};
+  if(year!==d.getFullYear()||month!==d.getMonth()+1) return no;
+  const daysInMonth=bizDaysInMonth(year,month), daysElapsed=bizDaysElapsed(_lastDailyDate);
+  if(daysElapsed<=0||daysElapsed>=daysInMonth) return no;
+  return{isCurrent:true,daysElapsed,daysInMonth,proy:Number(curValue)/daysElapsed*daysInMonth};
 }
 
 // ── PILL "ÚLTIMO DÍA CARGADO" ────────────────────────────────────────────────
@@ -2600,7 +2649,7 @@ function updatePills(){
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════════════════════
 const TITLES={resumen:'Resumen',historico:'Evolución',flotas:'Clientes',kam:'KAM',
-               hermes:'Hermes',neumaticos:'Neumáticos',presentacion:'Presentación',ejecutivo:'Análisis por fechas',upload:'Cargar archivos',periodos:'Períodos'};
+               hermes:'Hermes',neumaticos:'Neumáticos',presentacion:'Presentación',ejecutivo:'Ejecutivo',upload:'Cargar archivos',periodos:'Períodos'};
 
 // ── Resumen: EQ vs VC ahora siempre visible, sin pestaña (ver refreshResumen) ──
 
@@ -3311,7 +3360,7 @@ function viewBack(){
   if(_viewHistory.length>1){
     _viewHistory.pop();
     const prev=_viewHistory[_viewHistory.length-1]||'resumen';
-    const map={presentacion:'nav-resumen',ejecutivo:'nav-resumen',resumen:'nav-resumen',flotas:'nav-clientes',kam:'nav-equipo',hermes:'nav-hermes',neumaticos:'nav-neumaticos',upload:'nav-upload',periodos:'nav-periodos',historico:'nav-resumen'};
+    const map={presentacion:'nav-resumen',ejecutivo:'nav-ejecutivo',resumen:'nav-resumen',flotas:'nav-clientes',kam:'nav-equipo',hermes:'nav-hermes',neumaticos:'nav-neumaticos',upload:'nav-upload',periodos:'nav-periodos',historico:'nav-resumen'};
     const el=document.getElementById(map[prev])||document.getElementById('nav-resumen');
     nav(prev,el,true);
   }else{
@@ -3511,10 +3560,6 @@ async function refreshResumen(){
   const prevYearFullRows=prevYear ? await fetchYearFullRows(prevYear) : [];
   if(request!==summaryRefreshRequest)return;
   const P2Full=aggregate(prevYearFullRows);
-  const proy=annualizeYTD(A.totNS,kpiMonths,P2.totNS,P2Full.totNS,{year:kpiYear});
-  const eqProy=annualizeYTD(A.eqNS,kpiMonths,P2.eqNS,P2Full.eqNS,{year:kpiYear,canal:'EQ'});
-  const vcProy=annualizeYTD(A.vcNS,kpiMonths,P2.vcNS,P2Full.vcNS,{year:kpiYear,canal:'VC'});
-  const cob=proy/objAnnual(null);
   const latestMonth=Math.max(...kpiMonths);
   const mtdRows=kpiRows.filter(r=>r.month===latestMonth);
   const mtdNS=mtdRows.reduce((s,r)=>s+r.ns,0);
@@ -3533,6 +3578,14 @@ async function refreshResumen(){
   // (regla de tres sobre los días ya cargados) para una comparación justa.
   const mtdProj=monthProjectionInfo(kpiYear,latestMonth,mtdNS);
   const mtdProyVarV=(mtdProj.isCurrent&&mtdPrevNS>0)?(mtdProj.proy-mtdPrevNS)/mtdPrevNS:null;
+  // v101: el forecast anual parte del mes en curso llevado a su cierre
+  // estimado (si no, un mes a medias hunde la previsión del año).
+  const mtdFactor=(mtdProj.isCurrent&&mtdNS>0)?mtdProj.proy/mtdNS:1;
+  const mtdEqNS=mtdRows.filter(r=>r.canal==='EQ').reduce((s,r)=>s+r.ns,0), mtdVcNS=mtdNS-mtdEqNS;
+  const proy=annualizeYTD(A.totNS+mtdNS*(mtdFactor-1),kpiMonths,P2.totNS,P2Full.totNS,{year:kpiYear});
+  const eqProy=annualizeYTD(A.eqNS+mtdEqNS*(mtdFactor-1),kpiMonths,P2.eqNS,P2Full.eqNS,{year:kpiYear,canal:'EQ'});
+  const vcProy=annualizeYTD(A.vcNS+mtdVcNS*(mtdFactor-1),kpiMonths,P2.vcNS,P2Full.vcNS,{year:kpiYear,canal:'VC'});
+  const cob=proy/objAnnual(null);
   document.getElementById('kpis-r').innerHTML=[
     {cls:'k-tot',l:`NS YTD ${kpiYear} (${nM}m)`,v:fmtM(A.totNS),
      s:varTotKpi!==null?`${pyLabel}${fmtM(P2.totNS)} <b class="${varCls(varTotKpi)}">${varStr(varTotKpi)}</b>`:`Obj YTD: ${(A.totNS-obYTD)>=0?'+':''}${fmtM(A.totNS-obYTD)}`,sc:varCls(varTotKpi)||''},
@@ -3545,7 +3598,7 @@ async function refreshResumen(){
     {cls:'k-py', l:'Proyección FY',v:fmtM(proy),s:`${sem(cob)} Cobertura ${fmtP(cob)} vs objetivo anual`,sc:!Number.isFinite(cob)?'':cob>=1?'up':'dn'},
     {cls:'k-tot',l:`MTD ${MN[latestMonth-1]} ${kpiYear}`,v:fmtM(mtdNS),
      s:mtdProj.isCurrent&&mtdProyVarV!==null
-       ?`Est. cierre ${fmtM(mtdProj.proy)} (${mtdProj.daysElapsed}/${mtdProj.daysInMonth}d) · <b class="${varCls(mtdProyVarV)}">${varStr(mtdProyVarV)}</b> vs PY`
+       ?`Est. cierre ${fmtM(mtdProj.proy)} (${mtdProj.daysElapsed}/${mtdProj.daysInMonth} días hábiles) · <b class="${varCls(mtdProyVarV)}">${varStr(mtdProyVarV)}</b> vs PY`
        :mtdVarV!==null?`${pyLabel}${fmtM(mtdPrevNS)} <b class="${varCls(mtdVarV)}">${varStr(mtdVarV)}</b>`:`GM ${fmtM(mtdGM)} · ${fmtP(mtdGM/mtdNS)}`,
      sc:mtdProj.isCurrent&&mtdProyVarV!==null?(varCls(mtdProyVarV)||''):(varCls(mtdVarV)||'')},
   ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.l}</div>
@@ -3564,6 +3617,9 @@ async function refreshResumen(){
       <div class="obj-sub">YTD: ${fmtM(x.real)} / Obj ${fmtM(x.obj)}<br>${pyTxt}<br>Proy: ${fmtM(x.proy)} · Gap FY ${(x.proy-x.fy)>=0?'+':''}${fmtM(x.proy-x.fy)}</div></div>`;
   }).join('');
 
+
+  renderMonthRadar({year:kpiYear,month:latestMonth,mtdRows,mtdPrevRows,mtdProj,factor:mtdFactor,
+    ytd:A.totNS,ytdPY:P2.totNS,proy,objFY:objAnnual(null),objMonth:objYTD([latestMonth])});
 
   // V24: cockpit de decisión. Primero gap/impacto; los KPI descriptivos quedan en segundo nivel.
   const totalGmPct=A.totNS>0?A.totGM/A.totNS:0;
@@ -4530,7 +4586,7 @@ function getCurrentMonthInfo(){
 function execEstimateBanner(mesTxt,curNS,proyNS,prevNS,daysElapsed,daysInMonth){
   const varV=(prevNS>0)?(proyNS-prevNS)/prevNS:null;
   return `<div class="exec-estimate-banner">
-    <div class="eeb-title">📈 Estimación de cierre — ${mesTxt} (mes en curso, día ${daysElapsed} de ${daysInMonth})</div>
+    <div class="eeb-title">📈 Estimación de cierre — ${mesTxt} (día hábil ${daysElapsed} de ${daysInMonth})</div>
     <div class="eeb-val">${fmtM(proyNS)}</div>
     <div class="eeb-sub">Real acumulado hasta hoy: <b>${fmtM(curNS)}</b>${varV!==null?` · <b class="${varCls(varV)}">${varStr(varV)}</b> vs mismo mes año anterior (sobre la estimación, no sobre el parcial)`:' · sin mismo mes del año anterior para comparar'}</div>
   </div>`;
@@ -5642,10 +5698,95 @@ function execSummaryToPlainText(root){
   return lines.join('\n');
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// v101 · RADAR DEL MES: cierre estimado del mes en curso, por canal y por
+// cliente, contra el mismo mes del año anterior. Dice desde el primer día
+// hábil qué clientes van a hundir o a empujar el mes y cuánto.
+// ══════════════════════════════════════════════════════════════════════════
+let _radar=null;
+function renderMonthRadar(c){
+  const el=document.getElementById('month-radar'); if(!el) return;
+  const byFleet={},ch={EQ:{cur:0,py:0},VC:{cur:0,py:0}};
+  (c.mtdRows||[]).forEach(r=>{const f=byFleet[r.fleet_norm]||(byFleet[r.fleet_norm]={name:r.fleet_norm,cur:0,py:0});f.cur+=r.ns;if(ch[r.canal])ch[r.canal].cur+=r.ns;});
+  (c.mtdPrevRows||[]).forEach(r=>{const f=byFleet[r.fleet_norm]||(byFleet[r.fleet_norm]={name:r.fleet_norm,cur:0,py:0});f.py+=r.ns;if(ch[r.canal])ch[r.canal].py+=r.ns;});
+  const k=c.factor||1, live=!!c.mtdProj?.isCurrent;
+  const fleets=Object.values(byFleet).map(f=>({...f,est:f.cur*k,delta:f.cur*k-f.py,kam:(S.fleetKam&&S.fleetKam[f.name])||''})).filter(f=>f.est>0||f.py>0);
+  const cur=fleets.reduce((a,f)=>a+f.cur,0), est=cur*k, py=fleets.reduce((a,f)=>a+f.py,0);
+  const v=py>0?(est-py)/py:null, objM=Number.isFinite(c.objMonth)&&c.objMonth>0?c.objMonth:null, covM=objM?est/objM:null;
+  const risk=fleets.filter(f=>f.delta<0).sort((a,b)=>a.delta-b.delta).slice(0,5);
+  const push=fleets.filter(f=>f.delta>0).sort((a,b)=>b.delta-a.delta).slice(0,5);
+  const mes=`${MN[c.month-1]} ${c.year}`;
+  _radar={...c,mes,cur,est,py,v,objM,covM,live,risk,push,ch:Object.fromEntries(Object.entries(ch).map(([n,x])=>[n,{est:x.cur*k,py:x.py,v:x.py>0?(x.cur*k-x.py)/x.py:null}]))};
+  if(!fleets.length){el.innerHTML='<div class="no-data">Sin ventas cargadas para este mes.</div>';return;}
+  const max=Math.max(est,py,objM||0)*1.05||1, pct=x=>Math.max(0,Math.min(100,x/max*100));
+  const sgn=x=>`${x>=0?'+':'−'}${fmtM(Math.abs(x))}`;
+  const row=f=>`<div class="radar-row" onclick="openFleetFromResumen(${escHtml(JSON.stringify(f.name))})"><div><b>${escHtml(f.name)}</b><small>${f.kam?escHtml(f.kam)+' · ':''}${live?'cierre est. ':''}${fmtM(f.est)} · PY ${fmtM(f.py)}</small></div><div class="d ${f.delta>=0?'up':'dn'}">${sgn(f.delta)}</div></div>`;
+  const chTxt=n=>{const x=_radar.ch[n];return `<div><span class="badge ${n}">${n}</span> <b>${fmtM(x.est)}</b> <span class="${varCls(x.v)}">${varStr(x.v)}</span> <span class="muted">vs PY ${fmtM(x.py)}</span></div>`;};
+  el.innerHTML=`<div class="radar-card">
+    <div class="radar-head">
+      <div><div class="radar-eyebrow">${live?`Cierre estimado · ${mes} · día hábil ${c.mtdProj.daysElapsed} de ${c.mtdProj.daysInMonth}`:`Resultado · ${mes}`}</div>
+        <div class="radar-big">${fmtM(est)}</div>
+        <div class="radar-sub"><b class="${varCls(v)}">${varStr(v)}</b> vs ${MN[c.month-1]} ${c.year-1} (${fmtM(py)})${covM?` · <b>${fmtP(covM)}</b> del objetivo del mes`:''}${live?` · real hasta hoy ${fmtM(cur)}`:''}</div></div>
+      <div class="radar-ch">${chTxt('EQ')}${chTxt('VC')}</div>
+      <div><button class="btn primary" onclick="sendRadarWhatsApp()">Brief por WhatsApp</button></div>
+    </div>
+    <div class="radar-bar">
+      <div class="rb-real" style="width:${pct(cur)}%"></div>
+      ${live?`<div class="rb-est" style="left:${pct(cur)}%;width:${pct(est)-pct(cur)}%"></div>`:''}
+      ${py>0?`<div class="rb-mark" style="left:${pct(py)}%;background:var(--dg)"><span>PY ${fmtM(py)}</span></div>`:''}
+      ${objM?`<div class="rb-mark" style="left:${pct(objM)}%;background:var(--red)"><span style="color:var(--red)">Obj ${fmtM(objM)}</span></div>`:''}
+    </div>
+    <div class="radar-cols">
+      <div class="radar-col"><h4>🔻 Ponen en riesgo el mes</h4>${risk.map(row).join('')||'<div class="muted">Ningún cliente por debajo del año anterior.</div>'}</div>
+      <div class="radar-col"><h4>🔺 Empujan el mes</h4>${push.map(row).join('')||'<div class="muted">Ningún cliente por encima del año anterior.</div>'}</div>
+    </div>
+  </div>`;
+}
+function radarBriefText(){
+  const r=_radar; if(!r) return '';
+  const sgn=x=>`${x>=0?'+':'−'}${fmtM(Math.abs(x))}`, ch=n=>`${n} ${fmtM(r.ch[n].est)} (${varStr(r.ch[n].v)})`;
+  const day=_lastDailyDate?fmtDateEs(_lastDailyDate).slice(0,5):'';
+  const ytdV=r.ytdPY>0?(r.ytd-r.ytdPY)/r.ytdPY:null, cobFY=Number.isFinite(r.objFY)&&r.objFY>0?r.proy/r.objFY:null;
+  const L=[`*Flotas First Stop · ${day}*`,''];
+  L.push(`📈 *${r.live?'Cierre estimado':'Cierre'} ${r.mes}:* ${fmtM(r.est)} (${varStr(r.v)} vs PY${r.covM?` · ${fmtP(r.covM)} obj`:''})`);
+  L.push(`     ${ch('EQ')} · ${ch('VC')}`);
+  L.push(`💶 *YTD ${r.year}:* ${fmtM(r.ytd)} (${varStr(ytdV)} vs PY)`);
+  if(Number.isFinite(r.proy)) L.push(`🎯 *Forecast FY:* ${fmtM(r.proy)}${cobFY?` · ${fmtP(cobFY)} obj`:''}`);
+  if(r.risk.length){L.push('');L.push(`🔻 *Riesgo:* ${r.risk.slice(0,3).map(f=>`${f.name} ${sgn(f.delta)}`).join(' · ')}`);}
+  if(r.push.length){L.push(`🔺 *Empujan:* ${r.push.slice(0,3).map(f=>`${f.name} ${sgn(f.delta)}`).join(' · ')}`);}
+  return L.join('\n');
+}
+function shareWhatsApp(text){
+  if(!text) return;
+  try{navigator.clipboard.writeText(text);}catch(e){}
+  if(navigator.share&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){navigator.share({text}).catch(()=>{});return;}
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+function sendRadarWhatsApp(){shareWhatsApp(radarBriefText());}
+// Informe en formato WhatsApp: solo datos (sin fuentes, filtros ni avisos).
+function execSummaryToWhatsApp(root){
+  const t=x=>(x?.textContent||'').replace(/\s+/g,' ').trim();
+  const L=[];
+  const title=t(root.querySelector('.exec-title')), period=t(root.querySelector('.exec-period'));
+  const per=period.replace(/\s*Generado el.*$/i,'').trim();
+  if(title) L.push(`*${title}*`); if(per&&per!==title) L.push(per);
+  const banner=root.querySelector('.exec-estimate-banner');
+  if(banner){const vb=banner.querySelector('.eeb-sub b.up,.eeb-sub b.dn,.eeb-sub b:nth-of-type(2)');L.push('');L.push(`📈 *Cierre estimado:* ${t(banner.querySelector('.eeb-val'))}${vb?` (${t(vb)} vs PY)`:''}`);}
+  const kpis=[...root.querySelectorAll('.exec-kpi')];
+  if(kpis.length){L.push('');kpis.forEach(k=>{const sub=t(k.querySelector('.exec-kpi-sub'));const keep=sub&&sub.length<=60&&/[%€]|\d/.test(sub)&&!/^(sin|no)\b/i.test(sub);L.push(`▪️ ${t(k.querySelector('.exec-kpi-lbl'))}: *${t(k.querySelector('.exec-kpi-val'))}*${keep?` · ${sub}`:''}`);});}
+  root.querySelectorAll('.exec-movers .exec-mover-col').forEach(col=>{
+    const rows=[...col.querySelectorAll('.exec-mover-row')].slice(0,5).map(r=>{const sp=r.querySelectorAll('span');return `${t(sp[0])} ${t(sp[1])}`;});
+    if(rows.length){L.push('');L.push(`*${t(col.querySelector('h4'))}*`);rows.forEach(x=>L.push(`  ${x}`));}
+  });
+  return L.join('\n');
+}
+function sendExecWhatsApp(){const c=document.getElementById('exec-summary-content');if(c)shareWhatsApp(execSummaryToWhatsApp(c));}
+
 function copyExecutiveSummary(btn){
   const content=document.getElementById('exec-summary-content');
   if(!content) return;
-  const text=execSummaryToPlainText(content);
+  const text=execSummaryToWhatsApp(content);
   navigator.clipboard.writeText(text).then(()=>{
     if(btn){const old=btn.textContent;btn.textContent='✓ Copiado';setTimeout(()=>{btn.textContent=old;},1500);}
   }).catch(()=>alert('No se pudo copiar automáticamente. Selecciona el texto manualmente.'));
@@ -8129,6 +8270,10 @@ function importNumber(value,label,client,integer=false){
   if(!Number.isFinite(n)||Math.abs(n)>1e12||(integer&&(!Number.isSafeInteger(n)||n<0)))throw new Error(`${client}: ${escHtml(label)} no válido.`);
   return n;
 }
+const OB26_DEFAULT={
+  EQ:[477297,510235,539549,484929,551072,540714,535685,407425,475973,479591,468306,375629],
+  VC:[528416,531065,541505,571165,617140,618798,654733,556791,533621,597447,595403,517088]
+};
 async function loadSharedConfig(){
   const request=++sharedConfigRequest;
   sharedConfig.ready=false;
@@ -8141,6 +8286,12 @@ async function loadSharedConfig(){
       sbSelect('fleet_sales_imports','select=id,snap_date,kinds,row_count,created_at&order=created_at.desc&limit=20')]);
     if(request!==sharedConfigRequest)return;
     sharedConfig.targets=budgets.flatMap(b=>b.months.map(r=>({...r,year:Number(b.year)})));
+    // v101: si 2026 aún no tiene presupuesto guardado, se usan los objetivos
+    // OB26 de siempre. Administración › Objetivos los muestra precargados:
+    // al pulsar Guardar pasan a la base de datos y dejan de ser provisionales.
+    if(!sharedConfig.targets.some(r=>r.year===2026)){
+      Object.entries(OB26_DEFAULT).forEach(([canal,arr])=>arr.forEach((v,i)=>sharedConfig.targets.push({year:2026,month:i+1,canal,ns_target:v})));
+    }
     sharedConfig.budgetVersions=Object.fromEntries(budgets.map(b=>[b.year,b.version]));
     sharedConfig.closures=closures;sharedConfig.clients=clients;
     const byId=Object.fromEntries(clients.map(c=>[c.id,c.canonical_name]));

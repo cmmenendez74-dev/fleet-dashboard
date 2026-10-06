@@ -800,6 +800,39 @@ body,.main{background:var(--app-bg)}
 .radar-row small{display:block;color:var(--muted);font-size:10.5px}
 .radar-row .d{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
 @media(max-width:860px){.radar-head{grid-template-columns:1fr}.radar-cols{grid-template-columns:1fr}.radar-col+.radar-col{border-left:none;border-top:1px solid var(--border)}}
+
+/* --- v102: Resumen en tres niveles y Ficha 360 --- */
+.rs-period{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin:.2rem 0 .9rem}
+.rs-period-label{font-size:15px;font-weight:700}
+.rs-filter summary{cursor:pointer;font-size:12px;color:var(--bl);list-style:none}
+.rs-filter summary::-webkit-details-marker{display:none}
+.rs-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem;margin-bottom:.9rem}
+.rs-tile{background:#fff;border:1px solid var(--border);border-radius:14px;padding:1rem 1.15rem}
+.rs-tile .t-lbl{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:.4rem}
+.rs-tile .t-val{font-size:26px;font-weight:800;letter-spacing:-.6px;margin:.3rem 0 .2rem;font-variant-numeric:tabular-nums}
+.rs-tile .t-sub{font-size:12px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--border)}
+.dot.g{background:#2E7D32}.dot.a{background:#F9A825}.dot.r{background:var(--red)}
+.rs-act .card-hd{display:flex;justify-content:space-between;align-items:center}
+.rs-act .radar-card{border:none;border-radius:0}
+.rs-detail{margin-top:.9rem}
+.rs-detail>summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--bl);padding:.6rem 0}
+.radar-meta{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:.8rem 1.3rem;border-bottom:1px solid var(--border);font-size:12px}
+.radar-meta .chs{display:flex;gap:1.2rem;flex-wrap:wrap}
+.radar-bar .rb-mark span.top{top:-19px}
+.f360{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem;margin:.85rem 0}
+.f360-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem}
+.f360-card h4{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.f360-big{font-size:22px;font-weight:800;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+.f360-row{display:flex;justify-content:space-between;gap:.6rem;font-size:12px;padding:.22rem 0;border-bottom:1px solid var(--lg)}
+.f360-row:last-child{border-bottom:none}
+.f360-row b{font-variant-numeric:tabular-nums}
+.f360-stage{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:.4rem 0 .5rem;background:var(--bg2)}
+.f360-stage div{height:100%}
+.f360-head{display:flex;justify-content:space-between;align-items:center;margin-top:.6rem}
+.f360-head h3{font-size:13px}
+@media(max-width:1100px){.rs-tiles,.f360{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.rs-tiles,.f360{grid-template-columns:1fr}}
 </style>
 
 
@@ -1151,22 +1184,31 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
         <span class="chip" id="rs-tab-evol" onclick="goResumenSub('evol')">Evolución</span>
         <span class="chip" id="rs-tab-report" onclick="goResumenSub('report')">Presentación</span>
       </div>
-      <div class="page-title">
-        <div><div class="section-eyebrow">Cockpit ejecutivo</div><h1>Resumen</h1><p>Qué está pasando, qué lo explica y dónde merece la pena actuar.</p></div>
-      </div>
-      <details style="margin:.4rem 0"><summary style="cursor:pointer;color:var(--muted)">Qué significan las cifras</summary><p class="muted" style="padding:.5rem 0">NS: venta neta · GM €: margen bruto · GM%: margen sobre venta neta · PY: año anterior · Forecast FY: previsión anual estimada. La comparativa comercial mide el período indicado; el objetivo procede del presupuesto compartido del año seleccionado. Una previsión requiere meses cerrados y un año anterior completo confirmado. El cierre de meses se revisa en Administración.</p></details>
       <div id="summary-source-context" class="action-message" style="display:none"></div>
-      <div class="filter-bar" style="flex-wrap:wrap">
-        <span class="filter-label">Año</span><div class="chip-group" id="yr-chips"></div>
-        <span class="filter-label">Mes</span><div class="chip-group" id="mo-chips"></div>
+      <div class="rs-period">
+        <span class="rs-period-label" id="rs-period-label">—</span>
+        <details class="rs-filter"><summary>Cambiar período</summary>
+          <div class="filter-bar" style="flex-wrap:wrap;margin:.5rem 0 0">
+            <span class="filter-label">Año</span><div class="chip-group" id="yr-chips"></div>
+            <span class="filter-label">Mes</span><div class="chip-group" id="mo-chips"></div>
+          </div>
+        </details>
       </div>
 
-      <div class="cockpit-section-title">Panel ejecutivo</div>
-      <div class="kpi-row" id="kpis-r"></div>
-      <div class="obj-grid" id="objective-cards"></div>
+      <div class="rs-tiles" id="rs-tiles"></div>
 
-      <div class="cockpit-section-title">Radar del mes</div>
-      <div id="month-radar" style="margin-bottom:.9rem"></div>
+      <div class="card rs-act">
+        <div class="card-hd">Dónde actuar
+          <span class="chip-group"><span class="chip on" id="rs-act-tab-mes" onclick="setActTab('mes')">Este mes</span><span class="chip" id="rs-act-tab-ano" onclick="setActTab('ano')">En el año</span></span>
+        </div>
+        <div id="month-radar"></div>
+        <div id="year-movers" style="display:none"></div>
+      </div>
+
+      <details class="rs-detail" ontoggle="if(this.open)Object.values(charts).forEach(c=>{try{c.resize()}catch(e){}})">
+      <summary>Ver detalle · objetivos, canales y evolución</summary>
+      <div class="kpi-row" id="kpis-r" style="margin-top:.8rem"></div>
+      <div class="obj-grid" id="objective-cards"></div>
 
       <div class="cockpit-section-title">1 · ¿Estamos cumpliendo?</div>
       <div class="business-action-grid" id="business-action-grid"></div>
@@ -1197,6 +1239,8 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
           <div class="card-bd"><div id="cockpit-drivers-up"></div></div></div>
       </div>
       <div style="display:none"><div id="cockpit-kpis"></div><div id="cockpit-attention"></div><div id="cockpit-drivers-down"></div></div>
+
+      </details>
 
       <div class="summary-footer-nav">
         <div class="copy"><b>¿Necesitas el detalle?</b><br>El detalle y las comparativas completas están en Clientes. Aquí solo queda la lectura necesaria para decidir.</div>
@@ -1414,7 +1458,7 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
             </button>
             <div class="client-detail-title">
               <h2 id="fleet-detail-name">Cliente</h2>
-              <p>Ficha ejecutiva · comportamiento comercial y evolución</p>
+              <p>Ficha 360 · negocio, servicio, parque y facturación</p>
             </div>
           </div>
           <button class="fleet-export-btn" onclick="exportFleetDetail()">
@@ -1423,7 +1467,8 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
           </button>
         </div>
         <div class="client-context" id="fleet-detail-context"></div>
-        <div class="client-detail-kpis" id="fleet-detail-kpis"></div>
+        <div class="client-detail-kpis" id="fleet-detail-kpis" style="display:none"></div>
+        <div id="fleet-360"></div>
 
         <div class="client-detail-grid">
           <div class="card">
@@ -1762,7 +1807,7 @@ document.addEventListener('DOMContentLoaded',function(){var f=document.getElemen
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION='v101'; // Numeración unificada con la serie de producción (GitHub)
+const APP_VERSION='v102'; // Numeración unificada con la serie de producción (GitHub)
 document.addEventListener('DOMContentLoaded',()=>{const v=document.getElementById('app-version');if(v)v.textContent='Versión '+APP_VERSION;});
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG & SUPABASE
@@ -2421,6 +2466,8 @@ function monthProjectionInfo(year,month,curValue){
   if(year!==d.getFullYear()||month!==d.getMonth()+1) return no;
   const daysInMonth=bizDaysInMonth(year,month), daysElapsed=bizDaysElapsed(_lastDailyDate);
   if(daysElapsed<=0||daysElapsed>=daysInMonth) return no;
+  const c=_monthEstCache;
+  if(c&&c.year===year&&c.month===month&&Math.abs(c.cur-Number(curValue))<1) return{isCurrent:true,daysElapsed,daysInMonth,proy:c.est};
   return{isCurrent:true,daysElapsed,daysInMonth,proy:Number(curValue)/daysElapsed*daysInMonth};
 }
 
@@ -3519,8 +3566,14 @@ async function refreshResumen(){
   // Gráficos: pueden usar todos los meses seleccionados.
   // KPIs: usan únicamente meses con actividad REAL del último año.
   const kpiYear=Math.max(...selectedYears);
-  const kpiMonths=businessMonths(rows,kpiYear,selectedMonths);
-  if(!kpiMonths.length){clearSummaryView('Sin actividad disponible para los meses y el año seleccionados.');return;}
+  const kpiMonthsAll=businessMonths(rows,kpiYear,selectedMonths);
+  if(!kpiMonthsAll.length){clearSummaryView('Sin actividad disponible para los meses y el año seleccionados.');return;}
+  // v102: el mes en curso (a medias) NO entra en el acumulado: compararlo con
+  // el mes completo del año anterior y con su objetivo completo hundía el
+  // resultado (p. ej. -12% en lugar de -2,5%). Va aparte, con su cierre estimado.
+  const latestMonth=Math.max(...kpiMonthsAll);
+  const partialMonth=(kpiMonthsAll.length>1&&monthProjectionInfo(kpiYear,latestMonth,1).isCurrent)?latestMonth:null;
+  const kpiMonths=partialMonth?kpiMonthsAll.filter(m=>m!==partialMonth):kpiMonthsAll;
   const kpiMonthSet=new Set(kpiMonths);
   const kpiRows=rows.filter(r=>r.year===kpiYear&&kpiMonthSet.has(Number(r.month)));
 
@@ -3560,8 +3613,7 @@ async function refreshResumen(){
   const prevYearFullRows=prevYear ? await fetchYearFullRows(prevYear) : [];
   if(request!==summaryRefreshRequest)return;
   const P2Full=aggregate(prevYearFullRows);
-  const latestMonth=Math.max(...kpiMonths);
-  const mtdRows=kpiRows.filter(r=>r.month===latestMonth);
+  const mtdRows=rows.filter(r=>r.year===kpiYear&&r.month===latestMonth&&(r.ns||r.gm));
   const mtdNS=mtdRows.reduce((s,r)=>s+r.ns,0);
   const mtdGM=mtdRows.reduce((s,r)=>s+r.gm,0);
 
@@ -3577,14 +3629,20 @@ async function refreshResumen(){
   // muy a la baja de forma artificial — se añade una estimación de cierre
   // (regla de tres sobre los días ya cargados) para una comparación justa.
   const mtdProj=monthProjectionInfo(kpiYear,latestMonth,mtdNS);
-  const mtdProyVarV=(mtdProj.isCurrent&&mtdPrevNS>0)?(mtdProj.proy-mtdPrevNS)/mtdPrevNS:null;
-  // v101: el forecast anual parte del mes en curso llevado a su cierre
-  // estimado (si no, un mes a medias hunde la previsión del año).
-  const mtdFactor=(mtdProj.isCurrent&&mtdNS>0)?mtdProj.proy/mtdNS:1;
-  const mtdEqNS=mtdRows.filter(r=>r.canal==='EQ').reduce((s,r)=>s+r.ns,0), mtdVcNS=mtdNS-mtdEqNS;
-  const proy=annualizeYTD(A.totNS+mtdNS*(mtdFactor-1),kpiMonths,P2.totNS,P2Full.totNS,{year:kpiYear});
-  const eqProy=annualizeYTD(A.eqNS+mtdEqNS*(mtdFactor-1),kpiMonths,P2.eqNS,P2Full.eqNS,{year:kpiYear,canal:'EQ'});
-  const vcProy=annualizeYTD(A.vcNS+mtdVcNS*(mtdFactor-1),kpiMonths,P2.vcNS,P2Full.vcNS,{year:kpiYear,canal:'VC'});
+  let mtdProyVarV=(mtdProj.isCurrent&&mtdPrevNS>0)?(mtdProj.proy-mtdPrevNS)/mtdPrevNS:null;
+  // v102: cierre estimado del mes, cliente a cliente, combinando el ritmo
+  // del mes con el patrón del año anterior (ajustado por la tendencia del
+  // cliente). Los primeros días pesa más el año anterior; al avanzar el mes,
+  // el ritmo real. Así un cliente que aún no ha facturado no "cierra en 0".
+  const monthEst=estimateMonthClose(mtdRows,mtdPrevRows,mtdProj,A.byFleet,P2.byFleet);
+  _monthEstCache=mtdProj.isCurrent?{year:kpiYear,month:latestMonth,cur:mtdNS,est:monthEst.est}:null;
+  if(mtdProj.isCurrent){mtdProj.proy=monthEst.est;mtdProyVarV=mtdPrevNS>0?(monthEst.est-mtdPrevNS)/mtdPrevNS:null;}
+  const addTot=partialMonth?monthEst.est:0, addEq=partialMonth?monthEst.ch.EQ.est:0, addVc=partialMonth?monthEst.ch.VC.est:0;
+  const pyTot=partialMonth?mtdPrevNS:0, pyEq=partialMonth?monthEst.ch.EQ.py:0, pyVc=partialMonth?monthEst.ch.VC.py:0;
+  const fcMonths=partialMonth?kpiMonthsAll:kpiMonths;
+  const proy=annualizeYTD(A.totNS+addTot,fcMonths,P2.totNS+pyTot,P2Full.totNS,{year:kpiYear});
+  const eqProy=annualizeYTD(A.eqNS+addEq,fcMonths,P2.eqNS+pyEq,P2Full.eqNS,{year:kpiYear,canal:'EQ'});
+  const vcProy=annualizeYTD(A.vcNS+addVc,fcMonths,P2.vcNS+pyVc,P2Full.vcNS,{year:kpiYear,canal:'VC'});
   const cob=proy/objAnnual(null);
   document.getElementById('kpis-r').innerHTML=[
     {cls:'k-tot',l:`NS YTD ${kpiYear} (${nM}m)`,v:fmtM(A.totNS),
@@ -3618,8 +3676,10 @@ async function refreshResumen(){
   }).join('');
 
 
-  renderMonthRadar({year:kpiYear,month:latestMonth,mtdRows,mtdPrevRows,mtdProj,factor:mtdFactor,
-    ytd:A.totNS,ytdPY:P2.totNS,proy,objFY:objAnnual(null),objMonth:objYTD([latestMonth])});
+  const objMonth=objYTD([latestMonth]);
+  renderMonthRadar({year:kpiYear,month:latestMonth,est:monthEst,mtdProj,
+    ytd:A.totNS,ytdPY:P2.totNS,proy,objFY:objAnnual(null),objMonth,ytdMonths:kpiMonths});
+  renderSummaryTiles({kpiYear,kpiMonths,partialMonth,latestMonth,monthEst,mtdProj,objMonth,A,P2,obYTD,proy,cob,objFY:objAnnual(null)});
 
   // V24: cockpit de decisión. Primero gap/impacto; los KPI descriptivos quedan en segundo nivel.
   const totalGmPct=A.totNS>0?A.totGM/A.totNS:0;
@@ -3700,15 +3760,18 @@ async function refreshResumen(){
       const gp=f.ns>0?f.gm/f.ns:null;
       const canals=f.canals?[...f.canals].sort().join('+'):'—';
       const kam=(S.fleetKam&&S.fleetKam[x.name])||'Sin asignar';
-      let tag='blue',action='Monitorizar';
-      if(x.cur===0 && x.prev>0){tag='red';action='Recuperar actividad';}
-      else if(x.prev===0 && x.cur>0){tag='green';action='Validar alta / base PY';}
-      else if(delta<=-10000 || (x.varV!==null&&x.varV<=-0.15)){tag='red';action='Plan de recuperación';}
+      let tag='blue',action='Estable';
+      if(x.cur===0 && x.prev>0){tag='red';action='Sin actividad';}
+      else if(x.prev===0 && x.cur>0){tag='green';action='Cliente nuevo';}
+      else if(x.varV!==null&&x.varV<=-0.40){tag='red';action='Caída fuerte';}
+      else if(delta<=-10000){tag='red';action='Caída relevante';}
       else if(delta<0){tag='amber';action='Revisar tendencia';}
-      else if(delta>=10000){tag='green';action='Proteger crecimiento';}
+      else if(delta>=10000){tag='green';action='Crece';}
+      if(gp!==null&&gp<0.12&&delta>=0){tag='amber';action='Margen bajo';}
       return {...x,delta,gp,canals,kam,tag,action};
     }).sort((a,b)=>a.delta-b.delta).slice(0,10);
-    actionTb.innerHTML=actionRows.length?actionRows.map(x=>`<tr class="tr-link" onclick="openFleetFromResumen('${x.name.replace(/'/g,"\'")}')"><td><span class="client-main">${x.name}</span><span class="client-sub">Impacto absoluto sobre el resultado</span></td><td>${x.kam}</td><td><span class="badge ${x.canals.includes('+')?'both':x.canals}">${x.canals}</span></td><td class="r">${fmtM(x.cur)}</td><td class="r ${x.delta>=0?'up':'dn'}"><b>${x.delta>=0?'+':''}${fmtM(x.delta)}</b></td><td class="r ${varCls(x.varV)}">${varStr(x.varV)}</td><td class="r">${x.gp===null?'—':fmtP(x.gp)}</td><td><span class="action-tag ${x.tag}">${x.action}</span></td></tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin comparación disponible para el período seleccionado.</td></tr>`;
+    renderYearMovers(varRows);
+    actionTb.innerHTML=actionRows.length?actionRows.map(x=>`<tr class="tr-link" onclick="openFleetFromResumen('${x.name.replace(/'/g,"\'")}')"><td><span class="client-main">${x.name}</span><span class="client-sub">PY ${fmtM(x.prev)}</span></td><td>${x.kam}</td><td><span class="badge ${x.canals.includes('+')?'both':x.canals}">${x.canals}</span></td><td class="r">${fmtM(x.cur)}</td><td class="r ${x.delta>=0?'up':'dn'}"><b>${x.delta>=0?'+':''}${fmtM(x.delta)}</b></td><td class="r ${varCls(x.varV)}">${varStr(x.varV)}</td><td class="r">${x.gp===null?'—':fmtP(x.gp)}</td><td><span class="action-tag ${x.tag}">${x.action}</span></td></tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin comparación disponible para el período seleccionado.</td></tr>`;
   }
 
   const attention=document.getElementById('cockpit-attention');
@@ -4307,6 +4370,7 @@ async function showFleetHist(fleet){
   const rows=await sbSelect('fleet_data',
     `select=year,month,canal,ns,gm&fleet_norm=eq.${encodeURIComponent(fleet)}&order=year,month&limit=10000`);
   _currentDetailRows=rows;
+  renderFicha360(fleet,rows);
 
   // Interactividad (28/07/2026): la ficha de flota respeta ahora los filtros
   // de AÑOS y CANAL de la barra superior de "Por flota" — antes se ignoraban
@@ -5704,44 +5768,99 @@ function execSummaryToPlainText(root){
 // cliente, contra el mismo mes del año anterior. Dice desde el primer día
 // hábil qué clientes van a hundir o a empujar el mes y cuánto.
 // ══════════════════════════════════════════════════════════════════════════
-let _radar=null;
+let _radar=null, _monthEstCache=null;
+function estimateMonthClose(mtdRows,mtdPrevRows,proj,ytdByFleet,pyByFleet){
+  const w=proj?.isCurrent?proj.daysElapsed/proj.daysInMonth:1;
+  const key={};
+  const get=(f,c)=>key[f+'|'+c]||(key[f+'|'+c]={name:f,canal:c,cur:0,py:0});
+  (mtdRows||[]).forEach(r=>{get(r.fleet_norm,r.canal).cur+=Number(r.ns)||0;});
+  (mtdPrevRows||[]).forEach(r=>{get(r.fleet_norm,r.canal).py+=Number(r.ns)||0;});
+  const byFleet={}, ch={EQ:{cur:0,py:0,est:0},VC:{cur:0,py:0,est:0}};
+  Object.values(key).forEach(x=>{
+    const a=ytdByFleet?.[x.name]?.ns, b=pyByFleet?.[x.name]?.ns;
+    const g=(a>0&&b>0)?Math.min(1.5,Math.max(0.5,a/b)):1;
+    let est=x.cur;
+    if(w<1){
+      const linRem=w>0?x.cur*(1-w)/w:0;
+      const pyRem=x.py>0?x.py*g*(1-w):linRem;
+      est=x.cur+w*linRem+(1-w)*pyRem;
+    }
+    const f=byFleet[x.name]||(byFleet[x.name]={name:x.name,cur:0,py:0,est:0});
+    f.cur+=x.cur;f.py+=x.py;f.est+=est;
+    if(ch[x.canal]){ch[x.canal].cur+=x.cur;ch[x.canal].py+=x.py;ch[x.canal].est+=est;}
+  });
+  const fleets=Object.values(byFleet).filter(f=>f.est>0||f.py>0).map(f=>({...f,delta:f.est-f.py,kam:(S.fleetKam&&S.fleetKam[f.name])||''}));
+  const cur=fleets.reduce((s,f)=>s+f.cur,0), est=fleets.reduce((s,f)=>s+f.est,0), py=fleets.reduce((s,f)=>s+f.py,0);
+  return{w,fleets,cur,est,py,ch};
+}
+function setActTab(t){
+  document.getElementById('rs-act-tab-mes')?.classList.toggle('on',t==='mes');
+  document.getElementById('rs-act-tab-ano')?.classList.toggle('on',t==='ano');
+  document.getElementById('month-radar').style.display=t==='mes'?'':'none';
+  document.getElementById('year-movers').style.display=t==='ano'?'':'none';
+}
+function moverRow(f,sub){const sgn=x=>`${x>=0?'+':'−'}${fmtM(Math.abs(x))}`;return `<div class="radar-row" onclick="openFleetFromResumen(${escHtml(JSON.stringify(f.name))})"><div><b>${escHtml(f.name)}</b><small>${f.kam?escHtml(f.kam)+' · ':''}${sub}</small></div><div class="d ${f.delta>=0?'up':'dn'}">${sgn(f.delta)}</div></div>`;}
 function renderMonthRadar(c){
   const el=document.getElementById('month-radar'); if(!el) return;
-  const byFleet={},ch={EQ:{cur:0,py:0},VC:{cur:0,py:0}};
-  (c.mtdRows||[]).forEach(r=>{const f=byFleet[r.fleet_norm]||(byFleet[r.fleet_norm]={name:r.fleet_norm,cur:0,py:0});f.cur+=r.ns;if(ch[r.canal])ch[r.canal].cur+=r.ns;});
-  (c.mtdPrevRows||[]).forEach(r=>{const f=byFleet[r.fleet_norm]||(byFleet[r.fleet_norm]={name:r.fleet_norm,cur:0,py:0});f.py+=r.ns;if(ch[r.canal])ch[r.canal].py+=r.ns;});
-  const k=c.factor||1, live=!!c.mtdProj?.isCurrent;
-  const fleets=Object.values(byFleet).map(f=>({...f,est:f.cur*k,delta:f.cur*k-f.py,kam:(S.fleetKam&&S.fleetKam[f.name])||''})).filter(f=>f.est>0||f.py>0);
-  const cur=fleets.reduce((a,f)=>a+f.cur,0), est=cur*k, py=fleets.reduce((a,f)=>a+f.py,0);
-  const v=py>0?(est-py)/py:null, objM=Number.isFinite(c.objMonth)&&c.objMonth>0?c.objMonth:null, covM=objM?est/objM:null;
-  const risk=fleets.filter(f=>f.delta<0).sort((a,b)=>a.delta-b.delta).slice(0,5);
-  const push=fleets.filter(f=>f.delta>0).sort((a,b)=>b.delta-a.delta).slice(0,5);
-  const mes=`${MN[c.month-1]} ${c.year}`;
-  _radar={...c,mes,cur,est,py,v,objM,covM,live,risk,push,ch:Object.fromEntries(Object.entries(ch).map(([n,x])=>[n,{est:x.cur*k,py:x.py,v:x.py>0?(x.cur*k-x.py)/x.py:null}]))};
-  if(!fleets.length){el.innerHTML='<div class="no-data">Sin ventas cargadas para este mes.</div>';return;}
-  const max=Math.max(est,py,objM||0)*1.05||1, pct=x=>Math.max(0,Math.min(100,x/max*100));
-  const sgn=x=>`${x>=0?'+':'−'}${fmtM(Math.abs(x))}`;
-  const row=f=>`<div class="radar-row" onclick="openFleetFromResumen(${escHtml(JSON.stringify(f.name))})"><div><b>${escHtml(f.name)}</b><small>${f.kam?escHtml(f.kam)+' · ':''}${live?'cierre est. ':''}${fmtM(f.est)} · PY ${fmtM(f.py)}</small></div><div class="d ${f.delta>=0?'up':'dn'}">${sgn(f.delta)}</div></div>`;
-  const chTxt=n=>{const x=_radar.ch[n];return `<div><span class="badge ${n}">${n}</span> <b>${fmtM(x.est)}</b> <span class="${varCls(x.v)}">${varStr(x.v)}</span> <span class="muted">vs PY ${fmtM(x.py)}</span></div>`;};
+  const E=c.est, live=!!c.mtdProj?.isCurrent, mes=`${MN[c.month-1]} ${c.year}`;
+  const v=E.py>0?(E.est-E.py)/E.py:null, objM=Number.isFinite(c.objMonth)&&c.objMonth>0?c.objMonth:null, covM=objM?E.est/objM:null;
+  const risk=E.fleets.filter(f=>f.delta<0).sort((a,b)=>a.delta-b.delta).slice(0,5);
+  const push=E.fleets.filter(f=>f.delta>0).sort((a,b)=>b.delta-a.delta).slice(0,5);
+  const chv=n=>{const x=E.ch[n];return{est:x.est,py:x.py,v:x.py>0?(x.est-x.py)/x.py:null};};
+  _radar={...c,mes,fleetsEst:E.fleets,cur:E.cur,est:E.est,py:E.py,v,objM,covM,live,risk,push,ch:{EQ:chv('EQ'),VC:chv('VC')}};
+  if(!E.fleets.length){el.innerHTML='<div class="no-data">Sin ventas cargadas para este mes.</div>';return;}
+  const max=Math.max(E.est,E.py,objM||0)*1.05||1, pct=x=>Math.max(0,Math.min(100,x/max*100));
+  const chTxt=n=>{const x=_radar.ch[n];return `<span><span class="badge ${n}">${n}</span> <b>${fmtM(x.est)}</b> <span class="${varCls(x.v)}">${varStr(x.v)}</span></span>`;};
   el.innerHTML=`<div class="radar-card">
-    <div class="radar-head">
-      <div><div class="radar-eyebrow">${live?`Cierre estimado · ${mes} · día hábil ${c.mtdProj.daysElapsed} de ${c.mtdProj.daysInMonth}`:`Resultado · ${mes}`}</div>
-        <div class="radar-big">${fmtM(est)}</div>
-        <div class="radar-sub"><b class="${varCls(v)}">${varStr(v)}</b> vs ${MN[c.month-1]} ${c.year-1} (${fmtM(py)})${covM?` · <b>${fmtP(covM)}</b> del objetivo del mes`:''}${live?` · real hasta hoy ${fmtM(cur)}`:''}</div></div>
-      <div class="radar-ch">${chTxt('EQ')}${chTxt('VC')}</div>
-      <div><button class="btn primary" onclick="sendRadarWhatsApp()">Brief por WhatsApp</button></div>
+    <div class="radar-meta">
+      <div class="chs"><span class="muted">${live?`${mes} · cierre estimado · día hábil ${c.mtdProj.daysElapsed} de ${c.mtdProj.daysInMonth}`:`${mes} · cerrado`}</span>${chTxt('EQ')}${chTxt('VC')}</div>
+      <button class="btn primary sm" onclick="sendRadarWhatsApp()">Brief por WhatsApp</button>
     </div>
-    <div class="radar-bar">
-      <div class="rb-real" style="width:${pct(cur)}%"></div>
-      ${live?`<div class="rb-est" style="left:${pct(cur)}%;width:${pct(est)-pct(cur)}%"></div>`:''}
-      ${py>0?`<div class="rb-mark" style="left:${pct(py)}%;background:var(--dg)"><span>PY ${fmtM(py)}</span></div>`:''}
-      ${objM?`<div class="rb-mark" style="left:${pct(objM)}%;background:var(--red)"><span style="color:var(--red)">Obj ${fmtM(objM)}</span></div>`:''}
+    <div class="radar-bar" style="margin-top:1.6rem">
+      <div class="rb-real" style="width:${pct(E.cur)}%"></div>
+      ${live?`<div class="rb-est" style="left:${pct(E.cur)}%;width:${pct(E.est)-pct(E.cur)}%"></div>`:''}
+      ${E.py>0?`<div class="rb-mark" style="left:${pct(E.py)}%;background:var(--dg)"><span>PY ${fmtM(E.py)}</span></div>`:''}
+      ${objM?`<div class="rb-mark" style="left:${pct(objM)}%;background:var(--red)"><span class="top" style="color:var(--red)">Obj ${fmtM(objM)}</span></div>`:''}
     </div>
     <div class="radar-cols">
-      <div class="radar-col"><h4>🔻 Ponen en riesgo el mes</h4>${risk.map(row).join('')||'<div class="muted">Ningún cliente por debajo del año anterior.</div>'}</div>
-      <div class="radar-col"><h4>🔺 Empujan el mes</h4>${push.map(row).join('')||'<div class="muted">Ningún cliente por encima del año anterior.</div>'}</div>
+      <div class="radar-col"><h4>🔻 Restan al mes</h4>${risk.map(f=>moverRow(f,`${live?'cierre est. ':''}${fmtM(f.est)} · PY ${fmtM(f.py)}`)).join('')||'<div class="muted">Ningún cliente por debajo del año anterior.</div>'}</div>
+      <div class="radar-col"><h4>🔺 Suman al mes</h4>${push.map(f=>moverRow(f,`${live?'cierre est. ':''}${fmtM(f.est)} · PY ${fmtM(f.py)}`)).join('')||'<div class="muted">Ningún cliente por encima del año anterior.</div>'}</div>
     </div>
   </div>`;
+}
+function renderYearMovers(varRows){
+  const el=document.getElementById('year-movers'); if(!el) return;
+  const rows=(varRows||[]).map(x=>({name:x.name,cur:x.cur,prev:x.prev,delta:x.cur-x.prev,kam:(S.fleetKam&&S.fleetKam[x.name])||''}));
+  const down=rows.filter(x=>x.delta<0).sort((a,b)=>a.delta-b.delta).slice(0,5);
+  const up=rows.filter(x=>x.delta>0).sort((a,b)=>b.delta-a.delta).slice(0,5);
+  const sub=x=>`${fmtM(x.cur)} · PY ${fmtM(x.prev)}${x.prev>0?` · ${varStr((x.cur-x.prev)/x.prev)}`:''}`;
+  el.innerHTML=`<div class="radar-cols" style="border-top:none">
+    <div class="radar-col"><h4>🔻 Restan en el año</h4>${down.map(x=>moverRow(x,sub(x))).join('')||'<div class="muted">Sin caídas.</div>'}</div>
+    <div class="radar-col"><h4>🔺 Suman en el año</h4>${up.map(x=>moverRow(x,sub(x))).join('')||'<div class="muted">Sin subidas.</div>'}</div></div>`;
+}
+function renderSummaryTiles(c){
+  const el=document.getElementById('rs-tiles'); if(!el) return;
+  const dot=(v,warn=-0.05)=>`<span class="dot ${!Number.isFinite(v)?'':v>=0?'g':v>=warn?'a':'r'}"></span>`;
+  const covDot=v=>dot(Number.isFinite(v)?v-1:NaN);
+  const mRange=c.kpiMonths.length?`${MN[Math.min(...c.kpiMonths)-1]}–${MN[Math.max(...c.kpiMonths)-1]}`:'';
+  const ytdV=c.P2.totNS>0?(c.A.totNS-c.P2.totNS)/c.P2.totNS:null, ytdCov=c.obYTD>0?c.A.totNS/c.obYTD:NaN;
+  const E=c.monthEst, live=!!c.mtdProj?.isCurrent;
+  const mV=E.py>0?(E.est-E.py)/E.py:null, mCov=Number.isFinite(c.objMonth)&&c.objMonth>0?E.est/c.objMonth:NaN;
+  const gm=c.A.totNS>0?c.A.totGM/c.A.totNS:NaN, gmPy=c.P2.totNS>0?c.P2.totGM/c.P2.totNS:NaN, pp=(gm-gmPy)*100;
+  const gap=c.proy-c.objFY;
+  const tiles=[
+    {l:`${MN[c.latestMonth-1]} ${c.kpiYear} · ${live?'cierre estimado':'mes'}`,d:Number.isFinite(mCov)?covDot(mCov):dot(mV),v:fmtM(live?E.est:E.cur),
+     s:`${varStr(mV)} vs PY${Number.isFinite(mCov)?` · ${fmtP(mCov)} obj`:''}`},
+    {l:`Acumulado ${mRange} ${c.kpiYear}`,d:Number.isFinite(ytdCov)?covDot(ytdCov):dot(ytdV),v:fmtM(c.A.totNS),
+     s:`${varStr(ytdV)} vs PY${Number.isFinite(ytdCov)?` · ${fmtP(ytdCov)} obj`:''}`},
+    {l:`Forecast ${c.kpiYear}`,d:covDot(c.cob),v:fmtM(c.proy),
+     s:Number.isFinite(c.cob)?`${fmtP(c.cob)} obj · gap ${gap>=0?'+':'−'}${fmtM(Math.abs(gap))}`:'Sin objetivo anual'},
+    {l:'Margen',d:dot(Number.isFinite(pp)?pp/100:NaN,-0.01),v:fmtP(gm),
+     s:Number.isFinite(pp)?`${pp>=0?'+':''}${pp.toFixed(1)} pp vs PY · ${fmtM(c.A.totGM)}`:fmtM(c.A.totGM)}
+  ];
+  el.innerHTML=tiles.map(t=>`<div class="rs-tile"><div class="t-lbl">${t.d}${t.l}</div><div class="t-val">${t.v}</div><div class="t-sub">${t.s}</div></div>`).join('');
+  const pl=document.getElementById('rs-period-label');
+  if(pl) pl.textContent=`${c.kpiYear} · acumulado ${mRange}${c.partialMonth?` + ${MN[c.partialMonth-1]} en curso`:''}`;
 }
 function radarBriefText(){
   const r=_radar; if(!r) return '';
@@ -5751,7 +5870,8 @@ function radarBriefText(){
   const L=[`*Flotas First Stop · ${day}*`,''];
   L.push(`📈 *${r.live?'Cierre estimado':'Cierre'} ${r.mes}:* ${fmtM(r.est)} (${varStr(r.v)} vs PY${r.covM?` · ${fmtP(r.covM)} obj`:''})`);
   L.push(`     ${ch('EQ')} · ${ch('VC')}`);
-  L.push(`💶 *YTD ${r.year}:* ${fmtM(r.ytd)} (${varStr(ytdV)} vs PY)`);
+  const rg=r.ytdMonths&&r.ytdMonths.length?`${MN[Math.min(...r.ytdMonths)-1]}–${MN[Math.max(...r.ytdMonths)-1]}`:'YTD';
+  L.push(`💶 *Acumulado ${rg}:* ${fmtM(r.ytd)} (${varStr(ytdV)} vs PY)`);
   if(Number.isFinite(r.proy)) L.push(`🎯 *Forecast FY:* ${fmtM(r.proy)}${cobFY?` · ${fmtP(cobFY)} obj`:''}`);
   if(r.risk.length){L.push('');L.push(`🔻 *Riesgo:* ${r.risk.slice(0,3).map(f=>`${f.name} ${sgn(f.delta)}`).join(' · ')}`);}
   if(r.push.length){L.push(`🔺 *Empujan:* ${r.push.slice(0,3).map(f=>`${f.name} ${sgn(f.delta)}`).join(' · ')}`);}
@@ -5782,6 +5902,152 @@ function execSummaryToWhatsApp(root){
   return L.join('\n');
 }
 function sendExecWhatsApp(){const c=document.getElementById('exec-summary-content');if(c)shareWhatsApp(execSummaryToWhatsApp(c));}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// v102 · FICHA 360 DEL CLIENTE: negocio, servicio (inmovilización, plazo,
+// tiempos por etapa), parque (matrículas, recurrencia, fuga, penetración) y
+// facturación EQ pendiente. Todo sale de datos ya sincronizados.
+// ══════════════════════════════════════════════════════════════════════════
+let _f360Data=null,_f360Loading=null,_f360Req=0;
+async function loadF360Data(force){
+  if(!force&&_f360Data&&Date.now()-_f360Data.t<10*60*1000) return _f360Data;
+  if(_f360Loading) return _f360Loading;
+  const since=new Date(); since.setDate(since.getDate()-365); const s=localDateStr(since);
+  _f360Loading=(async()=>{
+    const [cases,ops,prof]=await Promise.all([
+      sbSelectAll('hermes_case',`select=opr_id,client_name,provider_name,entry_at,source_exit_at,expected_exit_at,elapsed_taller_hours,elapsed_firststop_hours,elapsed_fleet_hours,correction_count&entry_at=gte.${s}&order=opr_id.asc`),
+      sbSelectAll('hermes_operations',`select=opr_id,client_name,vehicle_plate,entry_at&entry_at=gte.${s}&order=opr_id.asc`),
+      sbSelectAll('fleet_client_profile','select=client_name,fleet_size').catch(()=>[])
+    ]);
+    const nm={}; const n=x=>nm[x]!==undefined?nm[x]:(nm[x]=normName(x));
+    cases.forEach(c=>{c._n=n(c.client_name);c._in=new Date(c.entry_at).getTime();});
+    ops.forEach(o=>{o._n=n(o.client_name);o._in=new Date(o.entry_at).getTime();});
+    _f360Data={t:Date.now(),cases,ops,prof:prof||[]};_f360Loading=null;return _f360Data;
+  })().catch(e=>{_f360Loading=null;throw e;});
+  return _f360Loading;
+}
+function f360Service(list){
+  const D=864e5, closed=list.filter(c=>c.source_exit_at);
+  const stays=closed.map(c=>(new Date(c.source_exit_at)-c._in)/D).filter(x=>x>=0&&x<120);
+  const withExp=closed.filter(c=>c.expected_exit_at);
+  const onTime=withExp.filter(c=>new Date(c.source_exit_at)<=new Date(c.expected_exit_at)).length;
+  const avgH=k=>{const v=list.map(c=>Number(c[k])).filter(x=>Number.isFinite(x)&&x>=0);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+  const sorted=[...stays].sort((a,b)=>a-b);
+  return{opr:list.length,closed:closed.length,stay:stays.length?stays.reduce((a,b)=>a+b,0)/stays.length:null,
+    median:sorted.length?sorted[Math.floor(sorted.length/2)]:null,onTime:withExp.length?onTime/withExp.length:null,
+    taller:avgH('elapsed_taller_hours'),fs:avgH('elapsed_firststop_hours'),flota:avgH('elapsed_fleet_hours'),
+    corr:list.length?list.filter(c=>Number(c.correction_count)>0).length/list.length:null};
+}
+const f360d=x=>x===null||!Number.isFinite(x)?'—':`${x.toFixed(1).replace('.',',')} d`;
+const f360h=x=>x===null||!Number.isFinite(x)?'—':x>=48?f360d(x/24):`${Math.round(x)} h`;
+async function renderFicha360(fleet,monthlyRows){
+  const el=document.getElementById('fleet-360'); if(!el) return;
+  const req=++_f360Req;
+  el.innerHTML='<div class="loading-msg"><span class="spinner"></span>Preparando ficha 360…</div>';
+  try{
+    const enc=encodeURIComponent(fleet), d90=new Date(); d90.setDate(d90.getDate()-90); const s90=localDateStr(d90);
+    const [data,eqb,nav]=await Promise.all([
+      loadF360Data(),
+      sbSelectAll('hermes_eq_billing_daily',`select=fleet_norm,ns_eur,num_operaciones&fleet_norm=eq.${enc}&snap_date=gte.${s90}&order=snap_date.asc`).catch(()=>null),
+      sbSelectAll('fleet_data_daily',`select=fleet_norm,ns&canal=eq.EQ&fleet_norm=eq.${enc}&snap_date=gte.${s90}&order=snap_date.asc`).catch(()=>null)
+    ]);
+    if(req!==_f360Req) return;
+    const D=864e5, now=Date.now(), t90=now-90*D;
+    const recentAll=data.cases.filter(c=>c._in>=t90&&c._in<=now);
+    const mine=recentAll.filter(c=>c._n===fleet);
+    const S1=f360Service(mine), NET=f360Service(recentAll);
+    // Parque
+    const myOps=data.ops.filter(o=>o._n===fleet&&o.vehicle_plate&&o._in<=now);
+    const byPlate={}; myOps.forEach(o=>{const p=String(o.vehicle_plate).trim().toUpperCase();(byPlate[p]||(byPlate[p]=[])).push(o._in);});
+    const plates=Object.keys(byPlate), recentP=plates.filter(p=>byPlate[p].some(t=>t>=t90));
+    const fuga=plates.filter(p=>!byPlate[p].some(t=>t>=t90));
+    const recur=plates.filter(p=>byPlate[p].length>=2).length;
+    const size=Number((data.prof.find(p=>p.client_name===fleet)||{}).fleet_size)||null;
+    const pen=size?plates.length/size:null;
+    // Talleres principales (90 días)
+    const prov={}; mine.forEach(c=>{const k=c.provider_name||'—';const p=prov[k]||(prov[k]={name:k,n:0,st:[]});p.n++;if(c.source_exit_at){const d=(new Date(c.source_exit_at)-c._in)/D;if(d>=0&&d<120)p.st.push(d);}});
+    const topProv=Object.values(prov).sort((a,b)=>b.n-a.n).slice(0,3);
+    // Negocio: acumulado de meses cerrados vs PY + mes en curso
+    const rowsAll=monthlyRows||[], years=[...new Set(rowsAll.map(r=>r.year))].sort(), y=Math.max(...years);
+    const lastD=_lastDailyDate?new Date(_lastDailyDate+'T00:00:00'):null;
+    const partial=lastD&&lastD.getFullYear()===y?lastD.getMonth()+1:null;
+    const months=[...new Set(rowsAll.filter(r=>r.year===y&&(r.ns||r.gm)).map(r=>r.month))].filter(m=>m!==partial);
+    const sum=(yy,k)=>rowsAll.filter(r=>r.year===yy&&months.includes(r.month)).reduce((a,r)=>a+(Number(r[k])||0),0);
+    const ytd=sum(y,'ns'), ytdPy=sum(y-1,'ns'), gm=sum(y,'gm'), ytdV=ytdPy>0?(ytd-ytdPy)/ytdPy:null;
+    const rf=_radar&&_radar.live?(_radar.fleetsEst||[]).find(f=>f.name===fleet)||null:null;
+    const pyFull=rowsAll.filter(r=>r.year===y-1).reduce((a,r)=>a+(Number(r.ns)||0),0);
+    const fc=annualizeYTD(ytd+(rf?rf.est:0),partial&&rf?[...months,partial]:months,ytdPy+(rf?rf.py:0),pyFull,{year:y});
+    // Facturación EQ pendiente
+    let bill=null; if(eqb&&nav){const r=eqBillingReconciliation(eqb,nav).rows.find(x=>x.client===fleet);bill=r||{hermesEur:0,navisionEur:0,gap:0};}
+    const rng=months.length?`${MN[Math.min(...months)-1]}–${MN[Math.max(...months)-1]}`:'';
+    const cmp=(a,b,lowerBetter=true)=>a===null||b===null||!Number.isFinite(a)||!Number.isFinite(b)?'':`<span class="${(lowerBetter?a<=b:a>=b)?'up':'dn'}">red ${lowerBetter?f360d(b):fmtP(b)}</span>`;
+    const st=[['Taller',S1.taller,'var(--dg)'],['First Stop',S1.fs,'var(--red)'],['Flota (autorización)',S1.flota,'var(--bl)']];
+    const stTot=st.reduce((a,x)=>a+(x[1]||0),0)||1;
+    el.innerHTML=`<div class="f360-head"><h3>Ficha 360 · últimos 90 días</h3><button class="btn sm" onclick="sendF360WhatsApp()">Resumen de cuenta por WhatsApp</button></div>
+    <div class="f360">
+      <div class="f360-card"><h4>Negocio</h4>
+        <div class="f360-big">${fmtM(ytd)}</div><div class="muted" style="font-size:12px;margin-bottom:.4rem">Acumulado ${rng} ${y} · <b class="${varCls(ytdV)}">${varStr(ytdV)}</b> vs PY</div>
+        <div class="f360-row"><span>Margen</span><b>${ytd>0?fmtP(gm/ytd):'—'}</b></div>
+        <div class="f360-row"><span>Forecast ${y}</span><b>${Number.isFinite(fc)?fmtM(fc):'—'}</b></div>
+        ${rf?`<div class="f360-row"><span>${MN[_radar.month-1]} cierre est.</span><b class="${rf.delta>=0?'up':'dn'}">${fmtM(rf.est)}</b></div><div class="f360-row"><span>${MN[_radar.month-1]} año anterior</span><b>${fmtM(rf.py)}</b></div>`:''}
+      </div>
+      <div class="f360-card"><h4>Servicio · inmovilización</h4>
+        <div class="f360-big">${f360d(S1.stay)}</div><div class="muted" style="font-size:12px;margin-bottom:.4rem">media en taller por OPR · ${cmp(S1.stay,NET.stay)}</div>
+        <div class="f360-row"><span>Salidas en plazo</span><b>${fmtP(S1.onTime)}</b></div>
+        <div class="f360-row"><span>Con corrección</span><b>${fmtP(S1.corr)}</b></div>
+        <div class="f360-row"><span>OPR (cerradas)</span><b>${fmt(S1.opr)} (${fmt(S1.closed)})</b></div>
+      </div>
+      <div class="f360-card"><h4>Dónde se va el tiempo</h4>
+        <div class="f360-stage">${st.map(x=>`<div style="width:${(x[1]||0)/stTot*100}%;background:${x[2]}"></div>`).join('')}</div>
+        ${st.map(x=>`<div class="f360-row"><span><span class="dot" style="background:${x[2]}"></span> ${x[0]}</span><b>${f360h(x[1])}</b></div>`).join('')}
+        <div class="muted" style="font-size:11px;margin-top:.3rem">Media por OPR. La red: taller ${f360h(NET.taller)} · FS ${f360h(NET.fs)} · flota ${f360h(NET.flota)}</div>
+      </div>
+      <div class="f360-card"><h4>Parque · 12 meses</h4>
+        <div class="f360-big">${fmt(plates.length)}</div><div class="muted" style="font-size:12px;margin-bottom:.4rem">matrículas atendidas${size?` de ${fmt(size)} · <b>${fmtP(pen)}</b> penetración`:''}</div>
+        <div class="f360-row"><span>Activas últimos 90 días</span><b>${fmt(recentP.length)}</b></div>
+        <div class="f360-row"><span>Repiten (2+ visitas)</span><b>${plates.length?fmtP(recur/plates.length):'—'}</b></div>
+        <div class="f360-row"><span>Sin volver en 90 días</span><b class="${fuga.length?'dn':''}">${fmt(fuga.length)}</b></div>
+        ${isAdmin()?`<div class="f360-row"><span>Vehículos de la flota</span><span><input id="f360-size" type="number" min="0" value="${size||''}" style="width:70px"> <button class="btn sm" onclick="saveFleetSize(${escHtml(JSON.stringify(fleet))})">Guardar</button></span></div>`:''}
+      </div>
+    </div>
+    <div class="f360" style="grid-template-columns:2fr 1fr 1fr">
+      <div class="f360-card"><h4>Talleres principales · 90 días</h4>${topProv.map(p=>`<div class="f360-row"><span>${escHtml(p.name)}</span><b>${fmt(p.n)} OPR · ${f360d(p.st.length?p.st.reduce((a,b)=>a+b,0)/p.st.length:null)}</b></div>`).join('')||'<div class="muted">Sin operaciones en Hermes.</div>'}</div>
+      <div class="f360-card"><h4>Facturación EQ · 90 días</h4>${bill?`<div class="f360-row"><span>Cerrado en Hermes</span><b>${fmtM(bill.hermesEur)}</b></div><div class="f360-row"><span>Facturado Navision</span><b>${fmtM(bill.navisionEur)}</b></div><div class="f360-row"><span>Pendiente</span><b class="${bill.gap>EQ_GAP_MIN_EUR?'dn':''}">${fmtM(Math.max(0,bill.gap))}</b></div>`:'<div class="muted">No disponible.</div>'}</div>
+      <div class="f360-card"><h4>Lectura</h4><div style="font-size:12px;line-height:1.5">${f360Reading(S1,NET,fuga.length,plates.length,ytdV)}</div></div>
+    </div>`;
+    window._f360Last={fleet,fc,S1,NET,plates:plates.length,recentP:recentP.length,fuga:fuga.length,size,pen,ytd,ytdV,rng,y,gm,rf,bill};
+  }catch(e){
+    if(req!==_f360Req) return;
+    console.warn('Ficha 360',e);
+    el.innerHTML=`<div class="no-data">No se pudo preparar la ficha 360 (${escHtml(e?.message||e)}).</div>`;
+  }
+}
+function f360Reading(S1,NET,fuga,plates,ytdV){
+  const out=[];
+  if(S1.stay!==null&&NET.stay!==null) out.push(S1.stay>NET.stay*1.15?`Inmovilización <b>por encima</b> de la red (${f360d(S1.stay)} vs ${f360d(NET.stay)}).`:S1.stay<NET.stay*0.85?`Inmovilización <b>mejor</b> que la red: buen argumento comercial.`:'Inmovilización en línea con la red.');
+  if(S1.flota!==null&&S1.taller!==null&&S1.flota>S1.taller) out.push('La mayor espera es la <b>autorización del cliente</b>, no el taller.');
+  if(plates&&fuga/plates>0.3) out.push(`${fuga} matrículas no han vuelto en 90 días: revisar si van a otra red.`);
+  if(ytdV!==null&&ytdV<-0.1) out.push(`Venta ${varStr(ytdV)} vs año anterior.`);
+  return out.length?out.join('<br>'):'Sin señales relevantes.';
+}
+async function saveFleetSize(fleet){
+  const v=Number(document.getElementById('f360-size')?.value);
+  if(!Number.isFinite(v)||v<0){alert('Indica un número de vehículos válido.');return;}
+  try{await sbUpsert('fleet_client_profile',[{client_name:fleet,fleet_size:Math.round(v)}]);_f360Data=null;renderFicha360(fleet,_currentDetailRows);}
+  catch(e){alert('No se pudo guardar: '+(e?.message||e)+'. ¿Has ejecutado el SQL de la v102?');}
+}
+function sendF360WhatsApp(){
+  const x=window._f360Last; if(!x) return;
+  const L=[`*${x.fleet} · resumen de cuenta*`,''];
+  L.push(`💶 *Acumulado ${x.rng} ${x.y}:* ${fmtM(x.ytd)} (${varStr(x.ytdV)} vs PY) · margen ${x.ytd>0?fmtP(x.gm/x.ytd):'—'}`);
+  if(x.rf) L.push(`📈 *${MN[_radar.month-1]} cierre est.:* ${fmtM(x.rf.est)} (PY ${fmtM(x.rf.py)})`);
+  L.push(`🔧 *Inmovilización media:* ${f360d(x.S1.stay)} (red ${f360d(x.NET.stay)}) · en plazo ${fmtP(x.S1.onTime)}`);
+  L.push(`⏱️ Taller ${f360h(x.S1.taller)} · First Stop ${f360h(x.S1.fs)} · autorización ${f360h(x.S1.flota)}`);
+  L.push(`🚗 *Parque 12m:* ${fmt(x.plates)} matrículas${x.size?` (${fmtP(x.pen)} de ${fmt(x.size)})`:''} · ${fmt(x.fuga)} sin volver en 90 días`);
+  if(x.bill&&x.bill.gap>EQ_GAP_MIN_EUR) L.push(`🧾 Pendiente facturar EQ: ${fmtM(x.bill.gap)}`);
+  shareWhatsApp(L.join('\n'));
+}
 
 function copyExecutiveSummary(btn){
   const content=document.getElementById('exec-summary-content');
